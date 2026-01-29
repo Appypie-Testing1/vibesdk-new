@@ -76,7 +76,7 @@
 		{
 			"binding": "DB",
 			"database_name": "vibesdk-db",
-			"database_id": "c4721a2b-b96a-428a-8b2a-b3d255b307e9",
+			"database_id": "60fccd3b-21b1-44ea-bb30-a596b10d1bdc",
 			"migrations_dir": "migrations",
 			"remote": true
 		}
@@ -108,13 +108,23 @@
         "remote": true
       }
     ],
-    "kv_namespaces": [
+    /*"kv_namespaces": [
         {
             "binding": "vibesdk-production",
             "id": "a72896494bdd4991b3ab1cfec53903e2",
             "remote": true
         }
-    ],
+    ],*/
+    "env": {
+  "production": {
+    "kv_namespaces": [
+      {
+        "binding": "vibesdk-production",
+        "id": "a72896494bdd4991b3ab1cfec53903e2"
+      }
+    ]
+  }
+},
     // "placement": {
     //   "mode": "smart"
     // },
