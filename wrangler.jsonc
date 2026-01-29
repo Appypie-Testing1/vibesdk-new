@@ -58,7 +58,7 @@
 	"containers": [
 		{
 			"class_name": "UserAppSandboxService",
-			"image": "./SandboxDockerfile",
+	//		"image": "./SandboxDockerfile",
             // "image": "registry.cloudflare.com/vibesdk-production-userappsandboxservice:cfe197fc",
             "image": "registry.cloudflare.com/vibesdk-production-userappsandboxservice:0c072621",
 		// Altering max_instances value will have no effect. Please use the MAX_SANDBOX_INSTANCES var instead.
