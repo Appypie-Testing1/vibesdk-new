@@ -114,22 +114,6 @@
             "remote": true
         }
     ],
-    /*"env": {
-  "production": {
-    "vars": {
-      "APPLICATION_DOMAIN": "https://vibe.appypievibe.ai/"
-    },
-    "kv_namespaces": [
-      {
-        "binding": "vibesdk-production",
-        "id": "a72896494bdd4991b3ab1cfec53903e2"
-      }
-    ]
-  }
-},*/
-    // "placement": {
-    //   "mode": "smart"
-    // },
 	"migrations": [
 		{
 			"new_sqlite_classes": [
