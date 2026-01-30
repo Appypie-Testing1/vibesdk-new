@@ -117,6 +117,9 @@
     ],*/
     "env": {
   "production": {
+    "vars": {
+      "APPLICATION_DOMAIN": "https://vibe.appypievibe.ai/"
+    },
     "kv_namespaces": [
       {
         "binding": "vibesdk-production",
