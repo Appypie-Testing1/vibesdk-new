@@ -153,7 +153,7 @@
 	],
 	"routes": [
         {
-            "pattern": "build.cloudflare.dev",
+            "pattern": "vibe.appypievibe.ai/*",
             "custom_domain": true
         },
         {
