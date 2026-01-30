@@ -108,14 +108,14 @@
         "remote": true
       }
     ],
-    /*"kv_namespaces": [
+    "kv_namespaces": [
         {
             "binding": "vibesdk-production",
             "id": "a72896494bdd4991b3ab1cfec53903e2",
             "remote": true
         }
-    ],*/
-    "env": {
+    ],
+    /*"env": {
   "production": {
     "vars": {
       "APPLICATION_DOMAIN": "https://vibe.appypievibe.ai/"
@@ -127,7 +127,7 @@
       }
     ]
   }
-},
+},*/
     // "placement": {
     //   "mode": "smart"
     // },
