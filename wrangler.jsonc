@@ -48,13 +48,13 @@
 		"binding": "AI",
         "remote": true
 	},
-    /*"dispatch_namespaces": [
+    "dispatch_namespaces": [
         {
             "binding": "DISPATCHER",
             "namespace": "vibesdk-default-namespace",
             "remote": true
         }
-    ],*/
+    ],
 	"containers": [
 		{
 			"class_name": "UserAppSandboxService",
@@ -149,7 +149,7 @@
 	"vars": {
         "TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
         //"ALLOWED_EMAIL": "",
-        //"DISPATCH_NAMESPACE": "vibesdk-default-namespace",
+        "DISPATCH_NAMESPACE": "vibesdk-default-namespace",
         "ENABLE_READ_REPLICAS": "true",
         "CLOUDFLARE_AI_GATEWAY": "vibesdk-gateway",
         "PLATFORM_CAPABILITIES": {
