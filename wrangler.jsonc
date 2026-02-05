@@ -154,7 +154,7 @@
 	"vars": {
         "TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
         //"ALLOWED_EMAIL": "",
-        "DISPATCH_NAMESPACE": "vibesdk-default-namespace",
+        "DISPATCHER": "vibesdk-default-namespace",
         "ENABLE_READ_REPLICAS": "true",
         "CLOUDFLARE_AI_GATEWAY": "vibesdk-gateway",
         "PLATFORM_CAPABILITIES": {
