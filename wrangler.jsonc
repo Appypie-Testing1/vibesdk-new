@@ -105,7 +105,12 @@
         "binding": "TEMPLATES_BUCKET",
         "bucket_name": "vibesdk-templates",
         "remote": true
-      }
+      },
+      {
+	"binding": "R2_BUCKET",
+ 	"bucket_name": "appypievibe",
+ 	"remote": true
+  	}
     ],
     "kv_namespaces": [
         {
