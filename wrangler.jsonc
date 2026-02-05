@@ -157,7 +157,6 @@
         "DISPATCH_NAMESPACE": "vibesdk-default-namespace",
         "ENABLE_READ_REPLICAS": "true",
         "CLOUDFLARE_AI_GATEWAY": "vibesdk-gateway",
-	"R2_BUCKET":"appypievibe",
         "PLATFORM_CAPABILITIES": {
             "features": {
                 "app": {
