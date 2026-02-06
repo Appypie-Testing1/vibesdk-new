@@ -114,7 +114,7 @@
     ],
     "kv_namespaces": [
         {
-            "binding": "vibesdk-production",
+            "binding": "VIBESDK_PRODUCTION",
             "id": "a72896494bdd4991b3ab1cfec53903e2",
             "remote": true
         }
