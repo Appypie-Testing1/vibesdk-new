@@ -86,10 +86,10 @@
 				"class_name": "CodeGeneratorAgent",
 				"name": "CodeGenObject"
 			},
-            {
+           /* {
                 "class_name": "UserAppSandboxService",
                 "name": "Sandbox"
-            },
+            },*/
             {
                 "class_name": "DORateLimitStore",
                 "name": "DORateLimitStore"
