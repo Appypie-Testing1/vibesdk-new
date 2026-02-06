@@ -6,7 +6,7 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "vibesdk-production",
 	"main": "worker/index.ts",
-	"compatibility_date": "2025-08-10",
+	"compatibility_date": "2025-01-15",
 	"compatibility_flags": ["nodejs_compat"],
     "version_metadata": {
         "binding": "CF_VERSION_METADATA"
@@ -114,7 +114,7 @@
     ],
     "kv_namespaces": [
         {
-            "binding": "VIBESDK_PRODUCTION",
+            "binding": "KV",
             "id": "a72896494bdd4991b3ab1cfec53903e2",
             "remote": true
         }
