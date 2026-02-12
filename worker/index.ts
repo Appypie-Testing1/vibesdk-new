@@ -110,6 +110,12 @@ async function handleUserAppRequest(request: Request, env: Env): Promise<Respons
 	const appName = subdomain;
 	const dispatcher = env['DISPATCHER'];
 
+	// Additional safety check for dispatcher
+	if (!dispatcher || typeof dispatcher.get !== 'function') {
+		logger.warn(`Dispatcher binding is not properly configured for: ${hostname}`);
+		return new Response('This application is not currently available.', { status: 404 });
+	}
+
 	try {
 		const worker = dispatcher.get(appName);
 		const dispatcherResponse = await worker.fetch(request);
