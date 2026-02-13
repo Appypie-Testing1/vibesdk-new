@@ -115,7 +115,7 @@
     ],
     "kv_namespaces": [
         {
-            "binding": "KV",
+            "binding": "VibecoderStore",
             "id": "a72896494bdd4991b3ab1cfec53903e2",
             "remote": true
         }
