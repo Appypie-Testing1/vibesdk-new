@@ -58,7 +58,7 @@
 	"containers": [
 		{
 			"class_name": "UserAppSandboxService",
-			//"image": "./SandboxDockerfile",
+			// "image": "./SandboxDockerfile",
              "image": "registry.cloudflare.com/vibesdk-production-userappsandboxservice:727be683",
 //"image": "registry.cloudflare.com/8343ab772b62abbc01fcefe2187f7790/vibesdk-production-userappsandboxservice:727be683",            
 // Altering max_instances value will have no effect. Please use the MAX_SANDBOX_INSTANCES var instead.
@@ -115,7 +115,7 @@
     ],
     "kv_namespaces": [
         {
-            "binding": "KV",
+            "binding": "VibecoderStore",
             "id": "a72896494bdd4991b3ab1cfec53903e2",
             "remote": true
         }
@@ -155,7 +155,7 @@
 	"vars": {
         "TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
         //"ALLOWED_EMAIL": "",
-       // "DISPATCHER": "vibesdk-default-namespace",
+        "DISPATCH_NAMESPACE": "orange-build-default-namespace",
         "ENABLE_READ_REPLICAS": "true",
         "CLOUDFLARE_AI_GATEWAY": "vibesdk-gateway",
         "PLATFORM_CAPABILITIES": {
