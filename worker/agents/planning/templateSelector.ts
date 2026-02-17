@@ -1,5 +1,5 @@
 import { createSystemMessage, createUserMessage, createMultiModalUserMessage } from '../inferutils/common';
-import { TemplateInfo, TemplateDetails } from '../../services/sandbox/sandboxTypes';
+import { TemplateInfo } from '../../services/sandbox/sandboxTypes';
 import { createLogger } from '../../logger';
 import { executeInference } from '../inferutils/infer';
 import { InferenceContext } from '../inferutils/config.types';
