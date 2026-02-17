@@ -35,14 +35,12 @@ import { MainContentPanel } from './components/main-content-panel';
 import { ChatInput } from './components/chat-input';
 import { useVault } from '@/hooks/use-vault';
 import { VaultUnlockModal } from '@/components/vault';
-import { useMobileView } from '@/contexts/mobile-view-context';
 
 const isPhasicBlueprint = (blueprint?: BlueprintType | null): blueprint is PhasicBlueprint =>
 	!!blueprint && 'implementationRoadmap' in blueprint;
 
 export default function Chat() {
 	const { chatId: urlChatId } = useParams();
-	const { isMobilePreview } = useMobileView();
 
 	const [searchParams] = useSearchParams();
 	const userQuery = searchParams.get('query');
