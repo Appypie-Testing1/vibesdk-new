@@ -1,5 +1,5 @@
 import { createSystemMessage, createUserMessage, createMultiModalUserMessage } from '../inferutils/common';
-import { TemplateInfo } from '../../services/sandbox/sandboxTypes';
+import { TemplateInfo, TemplateDetails } from '../../services/sandbox/sandboxTypes';
 import { createLogger } from '../../logger';
 import { executeInference } from '../inferutils/infer';
 import { InferenceContext } from '../inferutils/config.types';
@@ -303,20 +303,12 @@ ENTROPY SEED: ${generateSecureToken(64)} - for unique results`;
         }
         // Fallback to enhanced template with database, routing, and API
         logger.info('Falling back to enhanced template due to selection error');
-        const enhancedOptions: EnhancedTemplateOptions = {
-            includeDatabase: actualProjectType === 'app',
-            includeRouting: actualProjectType === 'app',
-            includeApi: actualProjectType === 'app',
-            appName: 'Generated App',
-            description: 'An application generated from your prompt'
-        };
-        
         return { 
             selectedTemplateName: 'enhanced-fullstack', 
             reasoning: "Using enhanced full-stack template with database, routing, and API for better functionality.", 
-            useCase: 'fullstack-app', 
-            complexity: 'medium', 
-            styleSelection: 'modern', 
+            useCase: 'General', 
+            complexity: 'moderate', 
+            styleSelection: 'Minimalist Design', 
             projectType: actualProjectType 
         };
     }
