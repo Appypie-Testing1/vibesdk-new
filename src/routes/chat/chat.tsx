@@ -133,7 +133,7 @@ export default function Chat() {
 		isGenerating,
 		handleStopGeneration,
 		handleResumeGeneration,
-		handleDeployToCloudflare,
+		handleDeployToSnappy,
 		// Preview refresh control
 		shouldRefreshPreview,
 		// Preview deployment state
@@ -758,7 +758,7 @@ export default function Chat() {
 									}}
 									chatId={chatId}
 									isDeploying={isDeploying}
-									handleDeployToCloudflare={handleDeployToCloudflare}
+									handleDeployToSnappy={handleDeployToSnappy}
 									runtimeErrorCount={runtimeErrorCount}
 									staticIssueCount={staticIssueCount}
 									isDebugging={isDebugging}
@@ -790,7 +790,7 @@ export default function Chat() {
 											isGeneratingBlueprint
 										}
 										isPaused={isGenerationPaused}
-										onDeploy={handleDeployToCloudflare}
+										onDeploy={handleDeployToSnappy}
 										onStopGeneration={handleStopGeneration}
 										onResumeGeneration={
 											handleResumeGeneration

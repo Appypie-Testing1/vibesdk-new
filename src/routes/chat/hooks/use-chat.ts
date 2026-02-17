@@ -676,7 +676,7 @@ export function useChat({
 		sendWebSocketMessage(websocket, 'resume_generation');
 	}, [websocket]);
 
-	const handleDeployToCloudflare = useCallback(async (instanceId: string) => {
+	const handleDeployToSnappy = useCallback(async (instanceId: string) => {
 		try {
 			// Send deployment command via WebSocket instead of HTTP request
 			if (sendWebSocketMessage(websocket, 'deploy', { instanceId })) {
@@ -759,7 +759,7 @@ export function useChat({
 		isGenerating,
 		handleStopGeneration,
 		handleResumeGeneration,
-		handleDeployToCloudflare,
+		handleDeployToSnappy,
 		// Preview refresh control
 		shouldRefreshPreview,
 		// Preview deployment state
