@@ -300,16 +300,8 @@ ENTROPY SEED: ${generateSecureToken(64)} - for unique results`;
         if (retryCount > 0) {
             return selectTemplate({ env, query, projectType, availableTemplates, inferenceContext, images }, retryCount - 1);
         }
-        // Fallback to scratch template (which will be enhanced)
-        logger.info('Falling back to scratch template due to selection error');
-        return { 
-            selectedTemplateName: 'scratch', 
-            reasoning: "Using scratch template with enhanced scaffolding for better functionality.", 
-            useCase: 'General', 
-            complexity: 'moderate', 
-            styleSelection: 'Minimalist Design', 
-            projectType: actualProjectType 
-        };
+        // Fallback to no template selection in case of error
+        return { selectedTemplateName: null, reasoning: "An error occurred during the template selection process.", useCase: null, complexity: null, styleSelection: null, projectType: actualProjectType };
     }
 }
 
