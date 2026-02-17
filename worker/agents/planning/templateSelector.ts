@@ -8,6 +8,7 @@ import { TemplateSelection, TemplateSelectionSchema, ProjectTypePredictionSchema
 import { generateSecureToken } from 'worker/utils/cryptoUtils';
 import type { ImageAttachment } from '../../types/image-attachment';
 import { ProjectType } from '../core/types';
+import { createEnhancedTemplate, type EnhancedTemplateOptions } from '../utils/enhancedTemplateBuilder';
 
 const logger = createLogger('TemplateSelector');
 interface SelectTemplateArgs {
@@ -300,7 +301,38 @@ ENTROPY SEED: ${generateSecureToken(64)} - for unique results`;
         if (retryCount > 0) {
             return selectTemplate({ env, query, projectType, availableTemplates, inferenceContext, images }, retryCount - 1);
         }
-        // Fallback to no template selection in case of error
-        return { selectedTemplateName: null, reasoning: "An error occurred during the template selection process.", useCase: null, complexity: null, styleSelection: null, projectType: actualProjectType };
+        // Fallback to enhanced template with database, routing, and API
+        logger.info('Falling back to enhanced template due to selection error');
+        const enhancedOptions: EnhancedTemplateOptions = {
+            includeDatabase: actualProjectType === 'app',
+            includeRouting: actualProjectType === 'app',
+            includeApi: actualProjectType === 'app',
+            appName: 'Generated App',
+            description: 'An application generated from your prompt'
+        };
+        
+        return { 
+            selectedTemplateName: 'enhanced-fullstack', 
+            reasoning: "Using enhanced full-stack template with database, routing, and API for better functionality.", 
+            useCase: 'fullstack-app', 
+            complexity: 'medium', 
+            styleSelection: 'modern', 
+            projectType: actualProjectType 
+        };
     }
+}
+
+/**
+ * Create enhanced template when no suitable template is found
+ */
+export function createFallbackEnhancedTemplate(query: string, projectType: ProjectType): TemplateDetails {
+    const options: EnhancedTemplateOptions = {
+        includeDatabase: projectType === 'app',
+        includeRouting: projectType === 'app',
+        includeApi: projectType === 'app',
+        appName: 'Generated App',
+        description: `Application generated from: ${query.substring(0, 100)}${query.length > 100 ? '...' : ''}`
+    };
+    
+    return createEnhancedTemplate(options);
 }
