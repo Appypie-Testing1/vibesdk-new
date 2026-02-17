@@ -1,6 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
-import { CloudflareLogo } from './icons/logos';
+import { AppyPieLogo } from './icons/logos';
 import { Link } from 'react-router';
 
 export function Header({
@@ -16,9 +16,13 @@ export function Header({
 		>
 			<h1 className="flex items-center gap-2 mx-4">
 				<Link to="/">
-					<CloudflareLogo
-						className="h-4 text-bg-bright-dim"
-						aria-label="Cloudflare v1"
+					<AppyPieLogo
+						className="h-8 text-bg-bright-dim"
+						aria-label="AppyPie"
+						style={{
+							width: '100px',
+							height: '25px',
+						}}
 					/>
 				</Link>
 			</h1>
