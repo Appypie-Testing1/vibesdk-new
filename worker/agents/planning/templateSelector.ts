@@ -8,7 +8,6 @@ import { TemplateSelection, TemplateSelectionSchema, ProjectTypePredictionSchema
 import { generateSecureToken } from 'worker/utils/cryptoUtils';
 import type { ImageAttachment } from '../../types/image-attachment';
 import { ProjectType } from '../core/types';
-import { createEnhancedTemplate, type EnhancedTemplateOptions } from '../utils/enhancedTemplateBuilder';
 
 const logger = createLogger('TemplateSelector');
 interface SelectTemplateArgs {
@@ -301,11 +300,11 @@ ENTROPY SEED: ${generateSecureToken(64)} - for unique results`;
         if (retryCount > 0) {
             return selectTemplate({ env, query, projectType, availableTemplates, inferenceContext, images }, retryCount - 1);
         }
-        // Fallback to enhanced template with database, routing, and API
-        logger.info('Falling back to enhanced template due to selection error');
+        // Fallback to scratch template (which will be enhanced)
+        logger.info('Falling back to scratch template due to selection error');
         return { 
-            selectedTemplateName: 'enhanced-fullstack', 
-            reasoning: "Using enhanced full-stack template with database, routing, and API for better functionality.", 
+            selectedTemplateName: 'scratch', 
+            reasoning: "Using scratch template with enhanced scaffolding for better functionality.", 
             useCase: 'General', 
             complexity: 'moderate', 
             styleSelection: 'Minimalist Design', 
@@ -314,17 +313,3 @@ ENTROPY SEED: ${generateSecureToken(64)} - for unique results`;
     }
 }
 
-/**
- * Create enhanced template when no suitable template is found
- */
-export function createFallbackEnhancedTemplate(query: string, projectType: ProjectType): TemplateDetails {
-    const options: EnhancedTemplateOptions = {
-        includeDatabase: projectType === 'app',
-        includeRouting: projectType === 'app',
-        includeApi: projectType === 'app',
-        appName: 'Generated App',
-        description: `Application generated from: ${query.substring(0, 100)}${query.length > 100 ? '...' : ''}`
-    };
-    
-    return createEnhancedTemplate(options);
-}
