@@ -427,3 +427,40 @@ body.mobile-preview * {
 .dark .mobile-phone-screen {
   background: #0a0a0a;
 }
+
+/* Hide scrollbar for mobile preview */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+/* Enhanced mobile preview styling */
+body.mobile-preview iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+/* Mobile preview content scaling */
+.mobile-preview-wrapper iframe {
+  transform-origin: top left;
+}
+
+/* Smooth transitions for mobile preview */
+.mobile-preview-wrapper {
+  transition: all 0.3s ease-in-out;
+}
+
+/* Better mobile frame shadows */
+.mobile-phone-frame {
+  box-shadow: 
+    0 0 0 1px rgba(0, 0, 0, 0.1),
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06),
+    0 20px 25px -5px rgba(0, 0, 0, 0.15);
+}
