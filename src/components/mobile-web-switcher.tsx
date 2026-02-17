@@ -40,33 +40,41 @@ export function MobileWebSwitcher({ viewMode, onViewModeChange, className }: Mob
   };
 
   return (
-    <div className={cn("flex items-center gap-0.5 p-0.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm", className)}>
+    <div className={cn("relative flex items-center bg-gray-100 dark:bg-gray-800 rounded-full p-1 shadow-inner", className)}>
+      {/* Sliding indicator */}
+      <div 
+        className={cn(
+          "absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white dark:bg-gray-700 rounded-full shadow-sm transition-all duration-300 ease-out",
+          viewMode === 'web' ? 'left-1' : 'left-[calc(50%+1px)]'
+        )}
+      />
+      
       <button
         onClick={() => handleModeChange('web')}
         className={cn(
-          "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+          "relative z-10 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 min-w-0",
           viewMode === 'web'
-            ? "bg-blue-500 text-white shadow-md"
-            : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+            ? "text-gray-900 dark:text-white"
+            : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
         )}
         title="Web view"
       >
-        <Monitor className="w-4 h-4" />
-        <span className="hidden sm:inline">Web</span>
+        <Monitor className="w-4 h-4 flex-shrink-0" />
+        <span className="hidden sm:inline truncate">Web</span>
       </button>
       
       <button
         onClick={() => handleModeChange('mobile')}
         className={cn(
-          "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+          "relative z-10 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 min-w-0",
           viewMode === 'mobile'
-            ? "bg-blue-500 text-white shadow-md"
-            : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+            ? "text-gray-900 dark:text-white"
+            : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
         )}
         title="Mobile view"
       >
-        <Smartphone className="w-4 h-4" />
-        <span className="hidden sm:inline">Mobile</span>
+        <Smartphone className="w-4 h-4 flex-shrink-0" />
+        <span className="hidden sm:inline truncate">Mobile</span>
       </button>
     </div>
   );

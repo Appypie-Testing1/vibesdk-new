@@ -464,3 +464,30 @@ body.mobile-preview iframe {
     0 2px 4px -1px rgba(0, 0, 0, 0.06),
     0 20px 25px -5px rgba(0, 0, 0, 0.15);
 }
+
+/* Modern toggle animations */
+.mobile-web-switcher {
+  backdrop-filter: blur(10px);
+}
+
+.mobile-web-switcher .sliding-indicator {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Enhanced mobile preview transitions */
+.mobile-preview-wrapper {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth hover effects */
+.mobile-web-switcher button {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Dynamic island glow effect */
+.dynamic-island {
+  box-shadow: 
+    0 0 0 1px rgba(0, 0, 0, 0.2),
+    0 4px 6px -1px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
