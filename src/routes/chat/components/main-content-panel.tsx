@@ -12,6 +12,7 @@ import { ViewHeader } from './view-header';
 import { PreviewHeaderActions } from './preview-header-actions';
 import { EditorHeaderActions } from './editor-header-actions';
 import { Copy } from './copy';
+import { MobilePreviewWrapper } from '@/components/mobile-preview-wrapper';
 import { featureRegistry } from '@/features';
 import type { FileType, BlueprintType, BehaviorType, ModelConfigsInfo, TemplateDetails, ProjectType } from '@/api-types';
 import type { ContentDetectionResult } from '../utils/content-detector';
@@ -172,46 +173,50 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		const FeaturePreviewComponent = featureRegistry.getLazyPreviewComponent(projectType);
 
 		// Fallback to default PreviewIframe if no feature-specific component
-		const previewContent = FeaturePreviewComponent ? (
-			<Suspense
-				fallback={
-					<div className="flex-1 w-full h-full flex items-center justify-center bg-bg-3">
-						<RefreshCw className="size-6 text-accent animate-spin" />
-					</div>
-				}
-			>
-				<FeaturePreviewComponent
-					projectType={projectType}
-					behaviorType={behaviorType ?? 'phasic'}
-					previewUrl={previewUrl}
-					websocket={websocket}
-					files={allFiles}
-					activeFile={activeFile}
-					currentView={view}
-					onViewChange={(v) => onViewChange(v as 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation')}
-					templateDetails={templateDetails}
-					modelConfigs={modelConfigs}
-					blueprint={blueprint}
-					previewRef={previewRef}
-					editorRef={editorRef}
-					shouldRefreshPreview={shouldRefreshPreview}
-					manualRefreshTrigger={manualRefreshTrigger}
-					onManualRefresh={onManualRefresh}
-					featureState={featureState}
-					setFeatureState={setFeatureState}
-					className="flex-1 w-full h-full border-0"
-				/>
-			</Suspense>
-		) : (
-			<PreviewIframe
-				src={previewUrl}
-				ref={previewRef}
-				className="flex-1 w-full h-full border-0"
-				title="Preview"
-				shouldRefreshPreview={shouldRefreshPreview}
-				manualRefreshTrigger={manualRefreshTrigger}
-				webSocket={websocket}
-			/>
+		const previewContent = (
+			<MobilePreviewWrapper>
+				{FeaturePreviewComponent ? (
+					<Suspense
+						fallback={
+							<div className="flex-1 w-full h-full flex items-center justify-center bg-bg-3">
+								<RefreshCw className="size-6 text-accent animate-spin" />
+							</div>
+						}
+					>
+						<FeaturePreviewComponent
+							projectType={projectType}
+							behaviorType={behaviorType ?? 'phasic'}
+							previewUrl={previewUrl}
+							websocket={websocket}
+							files={allFiles}
+							activeFile={activeFile}
+							currentView={view}
+							onViewChange={(v) => onViewChange(v as 'preview' | 'editor' | 'docs' | 'blueprint' | 'presentation')}
+							templateDetails={templateDetails}
+							modelConfigs={modelConfigs}
+							blueprint={blueprint}
+							previewRef={previewRef}
+							editorRef={editorRef}
+							shouldRefreshPreview={shouldRefreshPreview}
+							manualRefreshTrigger={manualRefreshTrigger}
+							onManualRefresh={onManualRefresh}
+							featureState={featureState}
+							setFeatureState={setFeatureState}
+							className="flex-1 w-full h-full border-0"
+						/>
+					</Suspense>
+				) : (
+					<PreviewIframe
+						src={previewUrl}
+						ref={previewRef}
+						className="flex-1 w-full h-full border-0"
+						title="Preview"
+						shouldRefreshPreview={shouldRefreshPreview}
+						manualRefreshTrigger={manualRefreshTrigger}
+						webSocket={websocket}
+					/>
+				)}
+			</MobilePreviewWrapper>
 		);
 
 		// Get lazy-loaded header actions component from feature registry

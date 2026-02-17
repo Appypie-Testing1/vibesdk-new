@@ -398,3 +398,32 @@ scrollbar-width: none; /* Firefox */
 .no-scrollbar::-webkit-scrollbar {
 display: none; /* Chrome, Safari, Opera */
 }
+
+/* Mobile preview styles */
+body.mobile-preview {
+  overflow: hidden;
+}
+
+body.mobile-preview * {
+  box-sizing: border-box;
+}
+
+/* Phone frame styling */
+.mobile-phone-frame {
+  position: relative;
+  background: #1a1a1a;
+  border-radius: 2.5rem;
+  padding: 8px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.mobile-phone-screen {
+  background: white;
+  border-radius: 2rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.dark .mobile-phone-screen {
+  background: #0a0a0a;
+}

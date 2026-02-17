@@ -35,12 +35,14 @@ import { MainContentPanel } from './components/main-content-panel';
 import { ChatInput } from './components/chat-input';
 import { useVault } from '@/hooks/use-vault';
 import { VaultUnlockModal } from '@/components/vault';
+import { useMobileView } from '@/contexts/mobile-view-context';
 
 const isPhasicBlueprint = (blueprint?: BlueprintType | null): blueprint is PhasicBlueprint =>
 	!!blueprint && 'implementationRoadmap' in blueprint;
 
 export default function Chat() {
 	const { chatId: urlChatId } = useParams();
+	const { isMobilePreview } = useMobileView();
 
 	const [searchParams] = useSearchParams();
 	const userQuery = searchParams.get('query');
@@ -648,10 +650,12 @@ export default function Chat() {
 	return (
 		<div className="size-full flex flex-col min-h-0 text-text-primary">
 			<div className="flex-1 flex min-h-0 overflow-hidden justify-center">
-				<motion.div
-					layout="position"
-					className="flex-1 shrink-0 flex flex-col basis-0 max-w-lg relative z-10 h-full min-h-0"
-				>
+				{/* Hide chat panel in preview mode to focus on preview */}
+				{view !== 'preview' && (
+					<motion.div
+						layout="position"
+						className="flex-1 shrink-0 flex flex-col basis-0 max-w-lg relative z-10 h-full min-h-0"
+					>
 					<div 
 					className={clsx(
 						'flex-1 overflow-y-auto min-h-0 chat-messages-scroll',
@@ -848,6 +852,7 @@ export default function Chat() {
 					imageInputRef={imageInputRef}
 				/>
 				</motion.div>
+				)}
 
 				<AnimatePresence mode="wait">
 					{showMainView && (
@@ -856,7 +861,10 @@ export default function Chat() {
 							initial={{ opacity: 0 }}
 							animate={{ opacity: 1 }}
 							exit={{ opacity: 0 }}
-							className="flex-1 flex shrink-0 basis-0 p-4 pl-0 ml-2 z-30 min-h-0"
+							className={clsx(
+							"flex-1 flex shrink-0 basis-0 p-4 z-30 min-h-0",
+							view === 'preview' ? 'pl-4 ml-0' : 'pl-0 ml-2'
+						)}
 						>
 							<MainContentPanel
 								view={view}
