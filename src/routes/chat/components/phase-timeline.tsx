@@ -544,7 +544,7 @@ export function PhaseTimeline({
                                             <Zap className="w-3 h-3" />
                                         )}
                                         <span className="hidden sm:inline">{isDeploying ? 'Deploying...' : 'Deploy'}</span>
-                                    </button>
+                                    </Button>
                                 )}
                             </motion.div>
 
