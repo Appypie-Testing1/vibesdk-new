@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { PhaseTimelineItem } from '../hooks/use-chat';
 import type { FileType } from '@/api-types';
 import { ThinkingIndicator } from './thinking-indicator';
+import { Button } from '../../../components/primitives/button';
 
 import type { ProjectStage } from '../utils/project-stage-helpers';
 
