@@ -144,8 +144,8 @@
 	"routes": [
         {
             //"pattern": "vibe.appypievibe.ai/*",
-	    "pattern": "vibesnappy.appypie.com/*,
-	    "zone_name": "appypie.com",
+	    "pattern": "vibesnappy.appypie.com/*",
+	    //"zone_name": "appypie.com",
             "custom_domain": true
         },
         {
