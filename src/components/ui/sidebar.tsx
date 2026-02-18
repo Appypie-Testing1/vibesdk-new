@@ -168,7 +168,7 @@ function Sidebar({
   if (collapsible === "none") {
     return (
       <div
-        data-slot="sidebar" style="display:none;"
+        data-slot="sidebar" style={{ display: 'none' }}
         className={cn(
           "text-sidebar-foreground flex h-full w-(--sidebar-width) flex-col",
           className
