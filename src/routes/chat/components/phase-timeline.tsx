@@ -533,7 +533,6 @@ export function PhaseTimeline({
                                 {chatId && handleDeployToSnappy && (
                                         <Button
                                             variant="primary"
-                                            size="sm"
                                             onClick={() => handleDeployToSnappy(chatId)}
                                             disabled={isDeploying}
                                             title={isDeploying ? 'Deploying...' : 'Deploy to Snappy'}
