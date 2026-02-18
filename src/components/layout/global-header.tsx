@@ -4,7 +4,7 @@ import { ThemeToggle } from '../theme-toggle';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/auth-context';
 import { AppyPieLogo } from '../icons/logos';
-import { useLocation } from 'react-router';
+import { useLocation, Link } from 'react-router';
 import clsx from 'clsx';
 
 export function GlobalHeader() {
@@ -36,14 +36,15 @@ export function GlobalHeader() {
 								className='flex items-center'
 							>
 								<SidebarTrigger className="h-8 w-8 text-text-primary rounded-md hover:bg-orange-50/40 transition-colors duration-200" />
-								<AppyPieLogo
-									className="flex-shrink-0 transition-all duration-300"
-									style={{
-										width: '120px',
-										height: '30px',
-										marginLeft: '8px',
-									}}
-								/>
+								<Link to="/" className="flex-shrink-0 transition-all duration-300 hover:opacity-80">
+									<AppyPieLogo
+										style={{
+											width: '120px',
+											height: '30px',
+											marginLeft: '8px',
+										}}
+									/>
+								</Link>
 							</motion.div>
 						) : (
 							<div></div>
@@ -58,14 +59,6 @@ export function GlobalHeader() {
 							transition={{ delay: 0.2 }}
 							className="flex flex-wrap items-center justify-end gap-3 justify-self-end"
 						>
-														{/* Disable cost display for now */}
-							{/* {user && (
-							<CostDisplay
-								{...extractUserAnalyticsProps(analytics)}
-								loading={analyticsLoading}
-								variant="inline"
-							/>
-						)} */}
 							<ThemeToggle />
 							<AuthButton />
 						</motion.div>
