@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { LogIn, LogOut, Settings } from 'lucide-react';
+import { LogIn, LogOut, Settings, Compass, Grid3X3 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -165,6 +165,20 @@ export function AuthButton({ className }: AuthButtonProps) {
 							>
 								<Settings className="mr-1 h-4 w-4" />
 								Settings
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								onClick={() => navigate('/discover')}
+								className="cursor-pointer"
+							>
+								<Compass className="mr-1 h-4 w-4" />
+								Discover
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								onClick={() => navigate('/apps')}
+								className="cursor-pointer"
+							>
+								<Grid3X3 className="mr-1 h-4 w-4" />
+								Apps
 							</DropdownMenuItem>
 						</DropdownMenuGroup>
 

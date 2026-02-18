@@ -3,9 +3,8 @@ import { AuthButton } from '../auth/auth-button';
 import { ThemeToggle } from '../theme-toggle';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/auth-context';
-import { Compass } from 'lucide-react';
 import { AppyPieLogo } from '../icons/logos';
-import { useLocation, Link } from 'react-router';
+import { useLocation } from 'react-router';
 import clsx from 'clsx';
 
 export function GlobalHeader() {
@@ -45,13 +44,6 @@ export function GlobalHeader() {
 										marginLeft: '8px',
 									}}
 								/>
-								<Link
-									to="/discover"
-									className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-text-primary hover:text-accent transition-colors duration-200 rounded-lg hover:bg-accent/10"
-								>
-									<Compass className="w-4 h-4" />
-									<span className="hidden sm:inline">Discover</span>
-								</Link>
 							</motion.div>
 						) : (
 							<div></div>
