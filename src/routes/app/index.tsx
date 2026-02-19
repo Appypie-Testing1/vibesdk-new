@@ -4,6 +4,8 @@ import type { AppDetailsData, FileType } from '@/api-types';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { appEvents } from '@/lib/app-events';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { MobileViewProvider, useMobileView } from '@/contexts/mobile-view-context';
+import { MobileWebSwitcher } from '@/components/mobile-web-switcher';
 import {
 	Star,
 	Eye,
@@ -51,6 +53,17 @@ import { PreviewIframe } from '../chat/components/preview-iframe';
 // Use proper types from API types
 type AppDetails = AppDetailsData;
 
+// Mobile/Web switcher component for preview tab
+function PreviewTabMobileWebSwitcher() {
+	const { mobileViewMode, setMobileViewMode } = useMobileView();
+	return (
+		<MobileWebSwitcher
+			viewMode={mobileViewMode}
+			onViewModeChange={setMobileViewMode}
+		/>
+	);
+}
+
 // Define supported actions for OAuth redirect
 type PendingAction = 'favorite' | 'bookmark' | 'star' | 'fork' | 'remix';
 
@@ -79,7 +92,7 @@ const ACTION_MAP: Record<PendingAction, string> = {
 	fork: 'fork',
 	remix: 'fork',
 };
-export default function AppView() {
+function AppViewContent() {
 	const { id } = useParams();
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -789,6 +802,7 @@ export default function AppView() {
 									<CardTitle className="text-base flex-shrink-0">
 										Live Preview
 									</CardTitle>
+									<PreviewTabMobileWebSwitcher />
 									{/* Preview URL action buttons */}
 									{appUrl && (
 										<div className="ml-auto flex items-center gap-0 flex-shrink-0">
@@ -1109,5 +1123,13 @@ export default function AppView() {
 				isOwner={isOwner}
 			/>
 		</div>
+	);
+}
+
+export default function AppView() {
+	return (
+		<MobileViewProvider>
+			<AppViewContent />
+		</MobileViewProvider>
 	);
 }
