@@ -1,11 +1,14 @@
 export function AppyPieLogo(props: React.SVGProps<SVGSVGElement>) {
+	// Check if dark mode is active
+	const isDarkMode = document.documentElement.classList.contains('dark');
+	
 	return (
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			xmlnsXlink="http://www.w3.org/1999/xlink"
-			width="121.924"
-			height="30.264"
-			viewBox="0 0 121.924 30.264"
+			width="122"
+			height="31"
+			viewBox="0 0 122 31"
 			{...props}
 		>
 			<defs>
