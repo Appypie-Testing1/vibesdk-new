@@ -49,6 +49,7 @@ import { GitCloneModal } from '@/components/shared/GitCloneModal';
 import { GitCloneCommand, GitClonePrivatePrompt } from '@/components/shared/GitCloneInline';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { PreviewIframe } from '../chat/components/preview-iframe';
+import { MobilePreviewWrapper } from '@/components/mobile-preview-wrapper';
 
 // Use proper types from API types
 type AppDetails = AppDetailsData;
@@ -843,12 +844,14 @@ function AppViewContent() {
 							<CardContent className="p-0">
 								<div className="border-t relative">
 									{appUrl ? (
-										<PreviewIframe
-											ref={previewIframeRef}
-											src={appUrl}
-											className="w-full h-[600px] lg:h-[800px]"
-											title={`${app.title} Preview`}
-										/>
+										<MobilePreviewWrapper>
+											<PreviewIframe
+												ref={previewIframeRef}
+												src={appUrl}
+												className="w-full h-[688px]"
+												title={`${app.title} Preview`}
+											/>
+										</MobilePreviewWrapper>
 									) : (
 										<div className="relative w-full h-[400px] bg-gray-50 flex items-center justify-center">
 											{/* Frosted glass overlay */}
