@@ -535,8 +535,8 @@ export function PhaseTimeline({
                                             variant="primary"
                                             onClick={() => handleDeployToSnappy(chatId)}
                                             disabled={isDeploying}
-                                            title={isDeploying ? 'Deploying...' : 'Deploy to Snappy'}
-                                            aria-label={isDeploying ? 'Deploying' : 'Deploy to Snappy'}
+                                            title={isDeploying ? 'Deploying...' : 'Deploy to AppyPie'}
+                                            aria-label={isDeploying ? 'Deploying' : 'Deploy to AppyPie'}
                                         >
                                         {isDeploying ? (
                                             <StatusLoader size="sm" color="accent" />
@@ -631,7 +631,7 @@ export function PhaseTimeline({
 														) : (
 															<Zap className="w-3 h-3" />
 														)}
-														{isDeploying ? 'Deploying...' : 'Deploy to Snappy'}
+														{isDeploying ? 'Deploying...' : 'Deploy to AppyPie'}
 													</button>
 												)}
 											</div>
