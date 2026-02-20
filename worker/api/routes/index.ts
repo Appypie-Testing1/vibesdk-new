@@ -11,7 +11,6 @@ import { setupCodegenRoutes } from './codegenRoutes';
 import { setupScreenshotRoutes } from './imagesRoutes';
 import { setupSentryRoutes } from './sentryRoutes';
 import { setupCapabilitiesRoutes } from './capabilitiesRoutes';
-import { setupDatabaseRoutes } from './database';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
 import { setupStatusRoutes } from './statusRoutes';
@@ -66,7 +65,4 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Screenshot serving routes (public)
     setupScreenshotRoutes(app);
-
-    // Database routes (Durable Object integration)
-    setupDatabaseRoutes(app);
 }
