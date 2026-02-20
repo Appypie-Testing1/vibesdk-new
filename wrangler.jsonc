@@ -98,7 +98,7 @@
             {
                 "class_name": "UserSecretsStore",
                 "name": "UserSecretsStore"
-            }
+            },
 		{
         "name": "GlobalDurableObject",
         "class_name": "GlobalDurableObject"
