@@ -1,20 +1,19 @@
-import { setupAuthRoutes } from './authRoutes.ts';
-import { setupAppRoutes } from './appRoutes.ts';
-import { setupUserRoutes } from './userRoutes.ts';
-import { setupStatsRoutes } from './statsRoutes.ts';
-import { setupAnalyticsRoutes } from './analyticsRoutes.ts';
-// import { setupUserSecretsRoutes } from './userSecretsRoutes.ts';
-import { setupModelConfigRoutes } from './modelConfigRoutes.ts';
-import { setupModelProviderRoutes } from './modelProviderRoutes.ts';
-import { setupGitHubExporterRoutes } from './githubExporterRoutes.ts';
-import { setupCodegenRoutes } from './codegenRoutes.ts';
-import { setupScreenshotRoutes } from './imagesRoutes.ts';
-import { setupSentryRoutes } from './sentryRoutes.ts';
-import { setupCapabilitiesRoutes } from './capabilitiesRoutes.ts';
-import { setupDatabaseRoutes } from './database.ts';
+import { setupAuthRoutes } from './authRoutes';
+import { setupAppRoutes } from './appRoutes';
+import { setupUserRoutes } from './userRoutes';
+import { setupStatsRoutes } from './statsRoutes';
+import { setupAnalyticsRoutes } from './analyticsRoutes';
+// import { setupUserSecretsRoutes } from './userSecretsRoutes';
+import { setupModelConfigRoutes } from './modelConfigRoutes';
+import { setupModelProviderRoutes } from './modelProviderRoutes';
+import { setupGitHubExporterRoutes } from './githubExporterRoutes';
+import { setupCodegenRoutes } from './codegenRoutes';
+import { setupScreenshotRoutes } from './imagesRoutes';
+import { setupSentryRoutes } from './sentryRoutes';
+import { setupCapabilitiesRoutes } from './capabilitiesRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
-import { setupStatusRoutes } from './statusRoutes.ts';
+import { setupStatusRoutes } from './statusRoutes';
 
 export function setupRoutes(app: Hono<AppEnv>): void {
     // Health check route
@@ -66,7 +65,4 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Screenshot serving routes (public)
     setupScreenshotRoutes(app);
-
-    // Database routes for app data persistence
-    setupDatabaseRoutes(app);
 }
