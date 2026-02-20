@@ -3,6 +3,9 @@ import { DurableObject } from 'cloudflare:workers';
 export class GlobalDurableObject extends DurableObject {
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
+		ctx.blockConcurrencyWhile(async () => {
+			await this.initialize();
+		});
 	}
 
 	async initialize() {
