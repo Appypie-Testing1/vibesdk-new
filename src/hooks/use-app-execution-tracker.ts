@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { databaseClient } from '@/lib/database-client';
-import { detectAppId } from '@/lib/app-id-detector';
 
 /**
  * Hook that automatically tracks and saves app execution data

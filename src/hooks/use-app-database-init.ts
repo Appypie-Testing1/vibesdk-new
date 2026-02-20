@@ -13,7 +13,7 @@ export function useAppDatabaseInit() {
 	useEffect(() => {
 		// Listen for app creation events
 		const unsubscribe = appEvents.on('app-created', async (event) => {
-			if (!user) return;
+			if (!user || event.type !== 'app-created') return;
 
 			try {
 				// Set the app ID for the database client
