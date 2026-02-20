@@ -1,9 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
 
-export interface Env {
-	GlobalDurableObject: DurableObjectNamespace;
-}
-
 export class GlobalDurableObject extends DurableObject {
 	private ctx: DurableObjectState;
 	private env: Env;
