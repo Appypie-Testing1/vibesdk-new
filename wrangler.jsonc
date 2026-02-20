@@ -84,10 +84,6 @@
 	"durable_objects": {
 		"bindings": [
 			{
-				"class_name": "CodeGeneratorAgent",
-				"name": "CodeGenObject"
-			},
-			{
 				"class_name": "UserAppSandboxService",
 				"name": "Sandbox"
 			},
@@ -99,10 +95,10 @@
                 "class_name": "UserSecretsStore",
                 "name": "UserSecretsStore"
             },
-		{
-        "name": "GlobalDurableObject",
-        "class_name": "GlobalDurableObject"
-      }
+			{
+				"class_name": "GlobalDurableObject",
+				"name": "GlobalDurableObject"
+			}
 		]
 	},
     "r2_buckets": [
