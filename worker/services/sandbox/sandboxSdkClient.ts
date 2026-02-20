@@ -1818,12 +1818,17 @@ export class SandboxSdkClient extends BaseSandboxService {
                             additionalModules = new Map<string, string>();
                             
                             for (const fullPath of modulePaths) {
+                                // Use just the filename (without assets/ prefix) so it matches
+                                // the import specifier in the bundled worker (e.g. "user-routes" not "assets/user-routes.js")
                                 const relativePath = fullPath.replace(`${instanceId}/dist/`, '');
+                                const moduleKey = relativePath.replace(/^assets\//, '').replace(/\.js$/, '');
                                 
                                 try {
                                     const buffer = await this.readFileAsBase64Buffer(fullPath);
                                     const moduleContent = buffer.toString('utf8');
+                                    // Register under both the full relative path and the bare module name
                                     additionalModules.set(relativePath, moduleContent);
+                                    additionalModules.set(moduleKey, moduleContent);
                                     
                                     this.logger.info('Worker module loaded', { 
                                         path: relativePath, 
