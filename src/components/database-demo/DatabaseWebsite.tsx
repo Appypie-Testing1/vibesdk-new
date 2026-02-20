@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, ShoppingCart, Users } from 'lucide-react';
+import { Plus, ShoppingCart, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface User {
