@@ -1,13 +1,8 @@
 import { DurableObject } from 'cloudflare:workers';
 
-export class GlobalDurableObject extends DurableObject {
-	private ctx: DurableObjectState;
-	private env: Env;
-
+export class GlobalDurableObject extends DurableObject<Env> {
 	constructor(ctx: DurableObjectState, env: Env) {
-		super(ctx);
-		this.ctx = ctx;
-		this.env = env;
+		super(ctx, env);
 	}
 
 	async initialize() {
@@ -118,17 +113,17 @@ export class GlobalDurableObject extends DurableObject {
 		try {
 			const product = this.ctx.storage.sql
 				.exec('SELECT price, stock FROM products WHERE id = ?', [productId])
-				.toArray()[0];
+				.toArray()[0] as { price: number; stock: number } | undefined;
 
 			if (!product) {
 				return { success: false, error: 'Product not found' };
 			}
 
-			if (product.stock < quantity) {
+			if ((product.stock as number) < quantity) {
 				return { success: false, error: 'Insufficient stock' };
 			}
 
-			const totalPrice = product.price * quantity;
+			const totalPrice = (product.price as number) * quantity;
 
 			await this.ctx.storage.sql.exec(
 				'INSERT INTO orders (user_id, product_id, quantity, total_price) VALUES (?, ?, ?, ?)',
