@@ -8,6 +8,18 @@ import { Toaster } from './components/ui/sonner';
 import { AppLayout } from './components/layout/app-layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FeatureProvider } from './features';
+import { useAppDatabaseInit } from './hooks/use-app-database-init';
+
+function AppContent() {
+  // Initialize database when apps are created
+  useAppDatabaseInit();
+
+  return (
+    <AppLayout>
+      <Outlet />
+    </AppLayout>
+  );
+}
 
 export default function App() {
   return (
@@ -18,9 +30,7 @@ export default function App() {
             <AuthProvider>
               <VaultProvider>
                 <AuthModalProvider>
-                  <AppLayout>
-                    <Outlet />
-                  </AppLayout>
+                  <AppContent />
                   <Toaster richColors position="top-right" />
                 </AuthModalProvider>
               </VaultProvider>
