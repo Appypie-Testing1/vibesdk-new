@@ -99,6 +99,10 @@
                 "class_name": "UserSecretsStore",
                 "name": "UserSecretsStore"
             }
+		{
+        "name": "GlobalDurableObject",
+        "class_name": "GlobalDurableObject"
+      }
 		]
 	},
     "r2_buckets": [
@@ -124,7 +128,8 @@
 		{
 			"new_sqlite_classes": [
 				"CodeGeneratorAgent",
-				"UserAppSandboxService"
+				"UserAppSandboxService",
+				"GlobalDurableObject"
 			],
 			"tag": "v1"
 		},
