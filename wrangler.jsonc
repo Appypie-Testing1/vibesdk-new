@@ -58,8 +58,13 @@
 	"containers": [
 		{
 			"class_name": "UserAppSandboxService",
+<<<<<<< HEAD
 			// "image": "./SandboxDockerfile",
+            "image": "registry.cloudflare.com/vibesdk-production-userappsandboxservice:cfe197fc",
+=======
+			//"image": "./SandboxDockerfile",
              "image": "registry.cloudflare.com/vibesdk-production-userappsandboxservice:727be683",
+>>>>>>> 4cd60cd (change by av)
 //"image": "registry.cloudflare.com/8343ab772b62abbc01fcefe2187f7790/vibesdk-production-userappsandboxservice:727be683",            
 // Altering max_instances value will have no effect. Please use the MAX_SANDBOX_INSTANCES var instead.
 	//		"max_instances": 1400,
@@ -84,9 +89,13 @@
 	"durable_objects": {
 		"bindings": [
 			{
-				"class_name": "UserAppSandboxService",
-				"name": "Sandbox"
+				"class_name": "CodeGeneratorAgent",
+				"name": "CodeGenObject"
 			},
+            {
+                "class_name": "UserAppSandboxService",
+                "name": "Sandbox"
+            },
             {
                 "class_name": "DORateLimitStore",
                 "name": "DORateLimitStore"
@@ -94,11 +103,7 @@
             {
                 "class_name": "UserSecretsStore",
                 "name": "UserSecretsStore"
-            },
-			{
-				"class_name": "GlobalDurableObject",
-				"name": "GlobalDurableObject"
-			}
+            }
 		]
 	},
     "r2_buckets": [
@@ -115,7 +120,7 @@
     ],
     "kv_namespaces": [
         {
-            "binding": "VibecoderStore",
+            "binding": "KV",
             "id": "a72896494bdd4991b3ab1cfec53903e2",
             "remote": true
         }
@@ -124,8 +129,7 @@
 		{
 			"new_sqlite_classes": [
 				"CodeGeneratorAgent",
-				"UserAppSandboxService",
-				"GlobalDurableObject"
+				"UserAppSandboxService"
 			],
 			"tag": "v1"
 		},
@@ -144,9 +148,7 @@
 	],
 	"routes": [
         {
-            //"pattern": "vibe.appypievibe.ai/*",
-	    "pattern": "vibesnappy.appypie.com/*",
-	    //"zone_name": "appypie.com",
+            "pattern": "vibe.appypievibe.ai/*",
             "custom_domain": true
         },
         {
@@ -158,7 +160,7 @@
 	"vars": {
         "TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
         //"ALLOWED_EMAIL": "",
-        "DISPATCH_NAMESPACE": "orange-build-default-namespace",
+       // "DISPATCHER": "vibesdk-default-namespace",
         "ENABLE_READ_REPLICAS": "true",
         "CLOUDFLARE_AI_GATEWAY": "vibesdk-gateway",
         "PLATFORM_CAPABILITIES": {
@@ -175,7 +177,7 @@
             },
             "version": "1.0.0"
         },
-        "CUSTOM_DOMAIN": "vibesnappy.appypie.com",
+        "CUSTOM_DOMAIN": "vibe.appypievibe.ai",
         "MAX_SANDBOX_INSTANCES": "10",
         "SANDBOX_INSTANCE_TYPE": "standard-3"
     },
