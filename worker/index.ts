@@ -15,6 +15,7 @@ import { getAgentStub } from './agents';
 export { UserAppSandboxService } from './services/sandbox/sandboxSdkClient';
 export { CodeGeneratorAgent } from './agents/core/codingAgent';
 export { UserSecretsStore } from './services/secrets/UserSecretsStore';
+export { GlobalDurableObject } from './services/database/GlobalDurableObject';
 
 // export const CodeGeneratorAgent = Sentry.instrumentDurableObjectWithSentry(sentryOptions, CodeGeneratorAgent);
 // export const DORateLimitStore = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseDORateLimitStore);

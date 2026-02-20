@@ -98,6 +98,10 @@
             {
                 "class_name": "UserSecretsStore",
                 "name": "UserSecretsStore"
+            },
+            {
+                "class_name": "GlobalDurableObject",
+                "name": "GlobalDurableObject"
             }
 		]
 	},
@@ -139,6 +143,12 @@
                 "UserSecretsStore"
             ],
             "tag": "v3"
+        },
+        {
+            "new_sqlite_classes": [
+                "GlobalDurableObject"
+            ],
+            "tag": "v4"
         }
 	],
 	"routes": [
