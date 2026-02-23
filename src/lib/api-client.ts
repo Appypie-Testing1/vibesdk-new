@@ -495,6 +495,19 @@ class ApiClient {
 	}
 
 	/**
+	 * Update app title and/or description
+	 */
+	async updateApp(
+		appId: string,
+		data: { title?: string; description?: string },
+	): Promise<ApiResponse<UpdateAppVisibilityData>> {
+		return this.request<UpdateAppVisibilityData>(`/api/apps/${appId}`, {
+			method: 'PATCH',
+			body: data,
+		});
+	}
+
+	/**
 	 * Update app visibility
 	 */
 	async updateAppVisibility(
