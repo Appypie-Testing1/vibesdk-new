@@ -139,6 +139,18 @@ export class CloudflareAPI {
 			metadataWithExports.exported_handlers = durableObjectClasses;
 		}
 
+		// Declare additional modules in metadata so Cloudflare knows their type.
+		// Without this the API throws "Expected exportTypes to be defined".
+		if (additionalModules && additionalModules.size > 0) {
+			metadataWithExports.modules = Array.from(additionalModules.keys()).map(
+				(name) => ({
+					name,
+					part: name,
+					type: 'esm' as const,
+				}),
+			);
+		}
+
 		// Don't modify worker content - Vite builds already include exports
 		// The exported_handlers in metadata is sufficient for the API
 		const finalWorkerContent = workerContent;
@@ -229,6 +241,7 @@ export class CloudflareAPI {
 				}
 
 				// Retry deployment with filtered migrations
+				// modules array is already set on metadataWithExports above
 				const retryFormData = new FormData();
 				retryFormData.append(
 					'metadata',

@@ -73,6 +73,12 @@ export interface AssetConfig {
  * Worker deployment metadata
  * Used in the multipart form data when deploying
  */
+export interface WorkerModuleEntry {
+	name: string;
+	part: string;
+	type: 'esm' | 'commonjs' | 'text' | 'data' | 'wasm';
+}
+
 export interface WorkerMetadata {
 	main_module: string;
 	compatibility_date: string;
@@ -85,6 +91,7 @@ export interface WorkerMetadata {
 	vars?: Record<string, string>;
 	migrations?: DurableObjectMigration;
 	exported_handlers?: string[]; // For Durable Object class exports
+	modules?: WorkerModuleEntry[]; // Additional ESM modules
 }
 
 /**
