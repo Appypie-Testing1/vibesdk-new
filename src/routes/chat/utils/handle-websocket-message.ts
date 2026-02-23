@@ -565,6 +565,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'generation_started': {
+                updateStage('blueprint', { status: 'completed' });
                 updateStage('code', { status: 'active' });
                 setTotalFiles(message.totalFiles);
                 setIsGenerating(true);
@@ -937,6 +938,8 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 // Initialize parser on first chunk
                 if (!blueprintParser) {
                     blueprintParser = createRepairingJSONParser();
+                    updateStage('bootstrap', { status: 'completed' });
+                    updateStage('blueprint', { status: 'active' });
                     logger.debug('Blueprint streaming started');
                 }
 
