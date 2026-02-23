@@ -247,6 +247,12 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
     async queueUserRequest(request: string, images?: ProcessedImageAttachment[]): Promise<void> {
         this.rechargePhasesCounter(3);
         await super.queueUserRequest(request, images);
+        // If the state machine is idle (generation finished), restart it to process the queued request
+        if (!this.isCodeGenerating()) {
+            this.generateAllFiles().catch((error: unknown) => {
+                this.logger.error('Error restarting state machine for queued request', error);
+            });
+        }
     }
 
     async build(): Promise<void> {

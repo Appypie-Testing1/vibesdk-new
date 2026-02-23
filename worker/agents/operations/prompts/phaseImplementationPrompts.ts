@@ -65,10 +65,18 @@ GOOD: const openWindow = useOSStore(s => s.openWindow); const setActiveWindow = 
 {{userSuggestions}}
 </CURRENT_PHASE>`;
 
-const formatUserSuggestions = (suggestions?: string[] | null): string => {
-	if (!suggestions || suggestions.length === 0) return '';
+const formatUserSuggestions = (suggestions?: string[] | null, imageUrls?: string[]): string => {
+	if ((!suggestions || suggestions.length === 0) && (!imageUrls || imageUrls.length === 0)) return '';
 
-	return `Client feedback to address in this phase:\n${suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
+	const imageSection = imageUrls && imageUrls.length > 0
+		? `\nUser-uploaded image URLs (use these exact URLs in the code — do NOT use unsplash or placehold.co):\n${imageUrls.map((url, i) => `  Image ${i + 1}: ${url}`).join('\n')}\n`
+		: '';
+
+	const suggestionSection = suggestions && suggestions.length > 0
+		? `Client feedback to address in this phase:\n${suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
+		: '';
+
+	return [imageSection, suggestionSection].filter(Boolean).join('\n');
 };
 
 export function formatPhaseImplementationUserPrompt(args: {
@@ -94,11 +102,12 @@ export function buildPhaseImplementationUserPrompt(args: {
 }): string {
 	const phaseText = TemplateRegistry.markdown.serialize(args.phase, PhaseConceptSchema);
 	const fileCount = args.phase.files?.length ?? 0;
+	const imageUrls = args.userContext?.images?.map(img => img.publicUrl).filter(Boolean) as string[] | undefined;
 
 	return formatPhaseImplementationUserPrompt({
 		phaseText,
 		issuesText: issuesPromptFormatter(args.issues),
-		userSuggestionsText: formatUserSuggestions(args.userContext?.suggestions),
+		userSuggestionsText: formatUserSuggestions(args.userContext?.suggestions, imageUrls),
 		fileCount,
 	});
 }

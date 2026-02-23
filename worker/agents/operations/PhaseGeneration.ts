@@ -223,20 +223,24 @@ Goal: Thoroughly review the entire codebase generated in previous phases. Identi
 
 This phase prepares the code for final deployment.`;
 
-const formatUserSuggestions = (suggestions?: string[] | null): string => {
-    if (!suggestions || suggestions.length === 0) {
+const formatUserSuggestions = (suggestions?: string[] | null, imageUrls?: string[]): string => {
+    if ((!suggestions || suggestions.length === 0) && (!imageUrls || imageUrls.length === 0)) {
         return '';
     }
+
+    const imageSection = imageUrls && imageUrls.length > 0
+        ? `\n**User-Uploaded Image URLs** (use these exact URLs in the code where images are needed — do NOT use unsplash or placehold.co):\n${imageUrls.map((url, i) => `  Image ${i + 1}: ${url}`).join('\n')}\n`
+        : '';
     
     return `
 <USER SUGGESTIONS>
 The following client suggestions and feedback have been provided, relayed by our client conversation agent.
 Explicitly state user's needs and suggestions in relevant files and components. For example, if user provides an image url, explicitly state it as-in in changes required for that file.
 Please attend to these **on priority**:
-
+${imageSection}
 **Client Feedback & Suggestions**:
 \`\`\`
-${suggestions.map((suggestion, index) => `${index + 1}. ${suggestion}`).join('\n')}
+${(suggestions ?? []).map((suggestion, index) => `${index + 1}. ${suggestion}`).join('\n')}
 \`\`\`
 
 **IMPORTANT**: Make sure the above feedbacks are resolved and executed properly, elegantly and in a non-hacky way. Only work towards resolving the above feedbacks.
@@ -257,11 +261,11 @@ ${serialized}`;
     return serialized;
 };
 
-const userPromptFormatter = (isFinal: boolean, issues: IssueReport, userSuggestions?: string[], isUserSuggestedPhase?: boolean) => {
+const userPromptFormatter = (isFinal: boolean, issues: IssueReport, userSuggestions?: string[], isUserSuggestedPhase?: boolean, imageUrls?: string[]) => {
     let prompt = isFinal ? LAST_PHASE_PROMPT : NEXT_PHASE_USER_PROMPT;
     prompt = prompt
         .replaceAll('{{issues}}', issuesPromptFormatterWithGuidelines(issues))
-        .replaceAll('{{userSuggestions}}', formatUserSuggestions(userSuggestions));
+        .replaceAll('{{userSuggestions}}', formatUserSuggestions(userSuggestions, imageUrls));
     
     if (isUserSuggestedPhase) {
         prompt = prompt.replaceAll('{{generateInstructions}}', 'User submitted feedback. Please thoroughly review the user needs and generate the next phase of the application accordingly, completely addressing their pain points in the right and proper way. And name the phase accordingly.');
@@ -289,7 +293,8 @@ export class PhaseGenerationOperation extends AgentOperation<PhasicGenerationCon
             logger.info(`Generating next phase ${suggestionsInfo}${imagesInfo} (isFinal: ${isFinal})`);
     
             // Create user message with optional images
-            const userPrompt = userPromptFormatter(isFinal, issues, userContext?.suggestions, isUserSuggestedPhase);
+            const imageUrls = userContext?.images?.map(img => img.publicUrl).filter(Boolean) as string[] | undefined;
+            const userPrompt = userPromptFormatter(isFinal, issues, userContext?.suggestions, isUserSuggestedPhase, imageUrls);
             const userMessage = userContext?.images && userContext.images.length > 0
                 ? createMultiModalUserMessage(
                     userPrompt,
