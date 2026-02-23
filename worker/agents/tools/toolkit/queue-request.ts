@@ -17,7 +17,7 @@ export function createQueueRequestTool(
 			logger.info('Received app edit request', {
 				modificationRequest,
 			});
-			agent.queueUserRequest(modificationRequest);
+			await agent.queueUserRequest(modificationRequest);
 			return null;
 		},
 	});

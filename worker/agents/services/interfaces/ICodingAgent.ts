@@ -26,7 +26,7 @@ export interface ICodingAgent {
     
     deployToCloudflare(target?: DeploymentTarget): Promise<{ deploymentUrl?: string; workersUrl?: string } | null>;
     
-    queueUserRequest(request: string, images?: ProcessedImageAttachment[]): void;
+    queueUserRequest(request: string, images?: ProcessedImageAttachment[]): Promise<void>;
     
     clearConversation(): void;
     
