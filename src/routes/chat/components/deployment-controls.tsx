@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
 import { Button } from '../../../components/primitives/button';
-import { Loader, ExternalLink, Zap, Check, Globe, Lock, Share2 } from 'lucide-react';
+import { Loader, ExternalLink, Zap, Check, Globe, Lock, Share2, Pencil, X } from 'lucide-react';
 import clsx from 'clsx';
 import { apiClient } from '../../../lib/api-client';
 import { toast } from 'sonner';
@@ -55,10 +55,18 @@ export function DeploymentControls({
 	const [isDeployButtonClicked, setIsDeployButtonClicked] = useState(false);
 	const [isUpdatingVisibility, setIsUpdatingVisibility] = useState(false);
 	const [localVisibility, setLocalVisibility] = useState(appVisibility);
+	const [isEditingShareUrl, setIsEditingShareUrl] = useState(false);
+	const [shareUrlSuffix, setShareUrlSuffix] = useState('');
 	const deploymentRef = useRef<HTMLDivElement>(null);
 
 	const { copied: urlCopied, copy: copyUrl } = useCopyToClipboard();
 	const { copied: linkCopied, copy: copyLink } = useCopyToClipboard();
+
+	const shareUrl = appId ? `${window.location.origin}/app/${shareUrlSuffix || appId}` : '';
+
+	useEffect(() => {
+		if (appId) setShareUrlSuffix(appId);
+	}, [appId]);
 
 	// Reset deployment button state when deployment completes (success or failure)
 	useEffect(() => {
@@ -329,25 +337,67 @@ export function DeploymentControls({
 						</div>
 					</div>
 
-					{/* Shareable Link - Only shown when app is public */}
-					{localVisibility === 'public' && appId && (
+					{/* Shareable Link - Always shown for owner, editable */}
+					{appId && (
 						<div className="bg-accent/5 border border-accent/20 rounded-md p-3 mb-3">
-							<div className="text-xs text-accent font-medium mb-1 flex items-center gap-1">
-								<Share2 className="w-3 h-3" />
-								Shareable Link:
+							<div className="text-xs text-accent font-medium mb-1 flex items-center justify-between gap-1">
+								<span className="flex items-center gap-1">
+									<Share2 className="w-3 h-3" />
+									Shareable Link:
+								</span>
+								{!isEditingShareUrl ? (
+									<button
+										onClick={() => setIsEditingShareUrl(true)}
+										className="flex items-center gap-1 text-accent/70 hover:text-accent transition-colors"
+										title="Edit sharing URL"
+									>
+										<Pencil className="w-3 h-3" />
+										Edit
+									</button>
+								) : (
+									<button
+										onClick={() => { setIsEditingShareUrl(false); setShareUrlSuffix(appId); }}
+										className="flex items-center gap-1 text-text-tertiary hover:text-text-primary transition-colors"
+										title="Cancel editing"
+									>
+										<X className="w-3 h-3" />
+										Cancel
+									</button>
+								)}
 							</div>
-							<div className="flex items-center gap-2">
-								<code className="flex-1 text-sm font-mono text-accent bg-accent/5 px-2 py-1 rounded text-ellipsis overflow-hidden">
-									{window.location.origin}/app/{appId}
-								</code>
-								<Button
-									onClick={() => copyLink(`${window.location.origin}/app/${appId}`)}
-									variant="secondary"
-									className="h-7 px-2 text-xs bg-accent/10 border border-accent/30 text-accent hover:bg-accent/20 transition-all flex-shrink-0"
-								>
-									{linkCopied ? 'Copied!' : 'Copy Link'}
-								</Button>
-							</div>
+							{isEditingShareUrl ? (
+								<div className="flex items-center gap-2">
+									<span className="text-xs text-text-tertiary flex-shrink-0 font-mono">{window.location.origin}/app/</span>
+									<input
+										type="text"
+										value={shareUrlSuffix}
+										onChange={(e) => setShareUrlSuffix(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ''))}
+										className="flex-1 text-sm font-mono text-accent bg-accent/5 border border-accent/30 px-2 py-1 rounded outline-none focus:border-accent min-w-0"
+										autoFocus
+										onKeyDown={(e) => { if (e.key === 'Enter') setIsEditingShareUrl(false); if (e.key === 'Escape') { setIsEditingShareUrl(false); setShareUrlSuffix(appId); } }}
+									/>
+									<Button
+										onClick={() => setIsEditingShareUrl(false)}
+										variant="secondary"
+										className="h-7 px-2 text-xs bg-accent text-white border-accent hover:bg-accent/90 transition-all flex-shrink-0"
+									>
+										Done
+									</Button>
+								</div>
+							) : (
+								<div className="flex items-center gap-2">
+									<code className="flex-1 text-sm font-mono text-accent bg-accent/5 px-2 py-1 rounded text-ellipsis overflow-hidden">
+										{shareUrl}
+									</code>
+									<Button
+										onClick={() => copyLink(shareUrl)}
+										variant="secondary"
+										className="h-7 px-2 text-xs bg-accent/10 border border-accent/30 text-accent hover:bg-accent/20 transition-all flex-shrink-0"
+									>
+										{linkCopied ? 'Copied!' : 'Copy Link'}
+									</Button>
+								</div>
+							)}
 						</div>
 					)}
 					

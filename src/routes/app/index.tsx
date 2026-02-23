@@ -26,6 +26,8 @@ import {
 	Trash2,
 	Github,
 	GitBranch,
+	Pencil,
+	X,
 } from 'lucide-react';
 import { MonacoEditor } from '@/components/monaco-editor/monaco-editor';
 import { getFileType } from '@/utils/string';
@@ -116,6 +118,9 @@ function AppViewContent() {
 	const [isGitCloneModalOpen, setIsGitCloneModalOpen] = useState(false);
 	const [activeFilePath, setActiveFilePath] = useState<string>();
 	const previewIframeRef = useRef<HTMLIFrameElement>(null);
+	const [isEditingTitle, setIsEditingTitle] = useState(false);
+	const [editTitleValue, setEditTitleValue] = useState('');
+	const [isSavingTitle, setIsSavingTitle] = useState(false);
 
 	const fetchAppDetails = useCallback(async () => {
 		if (!id) return;
@@ -475,6 +480,28 @@ function AppViewContent() {
 		}
 	};
 
+	const handleSaveTitle = async () => {
+		if (!app || !editTitleValue.trim() || editTitleValue.trim() === app.title) {
+			setIsEditingTitle(false);
+			return;
+		}
+		try {
+			setIsSavingTitle(true);
+			const response = await apiClient.updateApp(app.id, { title: editTitleValue.trim() });
+			if (response.success) {
+				setApp((prev) => prev ? { ...prev, title: editTitleValue.trim() } : null);
+				toast.success('Project name updated');
+			} else {
+				throw new Error(response.error?.message || 'Failed to update name');
+			}
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to update name');
+		} finally {
+			setIsSavingTitle(false);
+			setIsEditingTitle(false);
+		}
+	};
+
 	const handleDeleteApp = async () => {
 		if (!app) return;
 
@@ -563,9 +590,43 @@ function AppViewContent() {
 					<div className="flex-1">
 						<div className="flex rounded w-fit pb-3 pt-2 flex-col mb-6">
 							<div className="flex items-center gap-3 mb-2">
-								<h1 className="text-4xl font-semibold tracking-tight text-text-primary">
-									{app.title}
-								</h1>
+								{isOwner && isEditingTitle ? (
+									<div className="flex items-center gap-2">
+										<input
+											type="text"
+											value={editTitleValue}
+											onChange={(e) => setEditTitleValue(e.target.value)}
+											onKeyDown={(e) => {
+												if (e.key === 'Enter') void handleSaveTitle();
+												if (e.key === 'Escape') setIsEditingTitle(false);
+											}}
+											autoFocus
+											className="text-4xl font-semibold tracking-tight text-text-primary bg-transparent border-b-2 border-accent outline-none min-w-[200px]"
+										/>
+										<Button size="sm" onClick={() => void handleSaveTitle()} disabled={isSavingTitle} className="gap-1">
+											{isSavingTitle ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+											Save
+										</Button>
+										<Button size="sm" variant="ghost" onClick={() => setIsEditingTitle(false)}>
+											<X className="h-3 w-3" />
+										</Button>
+									</div>
+								) : (
+									<div className="flex items-center gap-2 group">
+										<h1 className="text-4xl font-semibold tracking-tight text-text-primary">
+											{app.title}
+										</h1>
+										{isOwner && (
+											<button
+												onClick={() => { setEditTitleValue(app.title); setIsEditingTitle(true); }}
+												className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-bg-3"
+												title="Edit project name"
+											>
+												<Pencil className="h-4 w-4 text-text-tertiary" />
+											</button>
+										)}
+									</div>
+								)}
 
 								<div className="flex items-center gap-2 border rounded-xl">
 									<Badge variant={'default'}>

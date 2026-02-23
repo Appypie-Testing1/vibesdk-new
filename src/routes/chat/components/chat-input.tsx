@@ -148,6 +148,17 @@ export function ChatInput({
 						ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
 					}}
 					onKeyDown={handleKeyDown}
+					onPaste={(e) => {
+						const items = Array.from(e.clipboardData.items);
+						const imageFiles = items
+							.filter((item) => item.type.startsWith('image/'))
+							.map((item) => item.getAsFile())
+							.filter((f): f is File => f !== null);
+						if (imageFiles.length > 0) {
+							e.preventDefault();
+							onAddImages(imageFiles);
+						}
+					}}
 					disabled={isChatDisabled}
 					placeholder={placeholder}
 					rows={1}

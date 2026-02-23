@@ -59,6 +59,9 @@ export function setupAppRoutes(app: Hono<AppEnv>): void {
     // OWNER-ONLY ROUTES (App modification)
     // ========================================
     
+    // Update app title/description - OWNER ONLY
+    appRouter.patch('/:id', setAuthLevel(AuthConfig.ownerOnly), adaptController(AppController, AppController.updateApp));
+
     // Update app visibility - OWNER ONLY
     appRouter.put('/:id/visibility', setAuthLevel(AuthConfig.ownerOnly), adaptController(AppController, AppController.updateAppVisibility));
 

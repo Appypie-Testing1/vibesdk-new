@@ -247,6 +247,17 @@ export default function Home() {
 											handleCreateApp(query, projectMode);
 										}
 									}}
+									onPaste={(e) => {
+										const items = Array.from(e.clipboardData.items);
+										const imageFiles = items
+											.filter((item) => item.type.startsWith('image/'))
+											.map((item) => item.getAsFile())
+											.filter((f): f is File => f !== null);
+										if (imageFiles.length > 0) {
+											e.preventDefault();
+											addImages(imageFiles);
+										}
+									}}
 								/>
 								{images.length > 0 && (
 									<div className="mt-3">

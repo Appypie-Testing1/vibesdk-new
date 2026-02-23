@@ -226,6 +226,55 @@ export class AppController extends BaseController {
         }
     }
 
+    // Update app title/description
+    static async updateApp(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<UpdateAppVisibilityData>>> {
+        try {
+            const user = context.user!;
+            const appId = context.pathParams.id;
+            if (!appId) {
+                return AppController.createErrorResponse<UpdateAppVisibilityData>('App ID is required', 400);
+            }
+
+            const bodyResult = await AppController.parseJsonBody(request);
+            if (!bodyResult.success) {
+                return bodyResult.response! as ControllerResponse<ApiResponse<UpdateAppVisibilityData>>;
+            }
+
+            const body = bodyResult.data as { title?: string; description?: string };
+            if (!body.title && !body.description) {
+                return AppController.createErrorResponse<UpdateAppVisibilityData>('title or description is required', 400);
+            }
+
+            const appService = new AppService(env);
+            const ownershipResult = await appService.checkAppOwnership(appId, user.id);
+            if (!ownershipResult.exists) {
+                return AppController.createErrorResponse<UpdateAppVisibilityData>('App not found', 404);
+            }
+            if (!ownershipResult.isOwner) {
+                return AppController.createErrorResponse<UpdateAppVisibilityData>('You can only edit your own apps', 403);
+            }
+
+            const updates: Record<string, string | null> = {};
+            if (body.title) updates.title = body.title.trim();
+            if (body.description !== undefined) updates.description = body.description.trim() || null;
+
+            const success = await appService.updateApp(appId, updates);
+            if (!success) {
+                return AppController.createErrorResponse<UpdateAppVisibilityData>('Failed to update app', 500);
+            }
+
+            const updatedApp = await appService.getSingleAppWithFavoriteStatus(appId, user.id);
+            const responseData: UpdateAppVisibilityData = {
+                app: { ...updatedApp!, visibility: updatedApp!.visibility },
+                message: 'App updated successfully',
+            };
+            return AppController.createSuccessResponse(responseData);
+        } catch (error) {
+            this.logger.error('Error updating app:', error);
+            return AppController.createErrorResponse<UpdateAppVisibilityData>('Failed to update app', 500);
+        }
+    }
+
     // Delete app
     static async deleteApp(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<AppDeleteData>>> {
         try {

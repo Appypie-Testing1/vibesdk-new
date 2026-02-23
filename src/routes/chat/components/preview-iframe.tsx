@@ -25,8 +25,8 @@ interface LoadState {
 
 const MAX_RETRIES = 10;
 const REDEPLOY_AFTER_ATTEMPT = 8;
-const POST_LOAD_WAIT_SANDBOX = 0;
-const POST_LOAD_WAIT_DISPATCHER = 0;
+const POST_LOAD_WAIT_SANDBOX = 2000;
+const POST_LOAD_WAIT_DISPATCHER = 1000;
 
 const getRetryDelay = (attempt: number): number => {
 	// 1s, 2s, 4s, 8s (capped)
