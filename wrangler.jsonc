@@ -157,10 +157,15 @@
             "custom_domain": true
         },
         {
+        "pattern": "*.vibesnappy.appypie.com/*",
+        "custom_domain": false,
+        "zone_id": "db01fac4261b2604aacad8410443a3e2"
+    }
+/*{
             "pattern": "*build-preview.cloudflare.dev/*",
             "custom_domain": false,
             "zone_id": "db01fac4261b2604aacad8410443a3e2"
-        }
+        }*/
     ],
 	"vars": {
         "TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
