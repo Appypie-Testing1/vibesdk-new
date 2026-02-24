@@ -1,6 +1,43 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+**Development:**
+```bash
+bun run dev          # Start frontend + worker dev server (Vite + Cloudflare)
+bun run typecheck    # TypeScript type-check without emitting
+bun run lint         # ESLint
+bun run build        # tsc + vite build (produces dist/)
+```
+
+**Testing (root — runs in Cloudflare Workers via vitest-pool-workers):**
+```bash
+bun run test                        # Run all tests once
+bun run test:watch                  # Watch mode
+bun run test:coverage               # Coverage report
+vitest run path/to/file.test.ts     # Run a single test file
+```
+
+**SDK sub-package (run from `sdk/` directory):**
+```bash
+bun test test/*.test.ts                         # Unit tests
+bun test --timeout 600000 test/integration/*.test.ts  # Integration tests (needs VIBESDK_INTEGRATION_API_KEY)
+```
+
+**Database:**
+```bash
+bun run db:generate          # Generate migrations (local)
+bun run db:migrate:local     # Apply migrations locally
+bun run db:migrate:remote    # Apply migrations to production D1
+bun run db:studio            # Open Drizzle Studio (local)
+```
+
+**Deploy:**
+```bash
+bun run deploy               # Deploy via scripts/deploy.ts (reads .prod.vars)
+```
 
 ## Communication Style
 - Be professional, concise, and direct
@@ -41,6 +78,7 @@ vibesdk is an AI-powered full-stack application generation platform built on Clo
 
 **Other:**
 - `/shared` - Shared types between frontend/backend (not worker specific types that are also imported in frontend)
+- `/sdk` - Client SDK (`@cf-vibesdk/sdk`), separate `package.json`, own bun-based tests
 - `/migrations` - D1 database migrations
 - `/container` - Sandbox container tooling
 - `/templates` - Project scaffolding templates
@@ -84,7 +122,7 @@ IDLE → PHASE_GENERATING → PHASE_IMPLEMENTING → REVIEWING → IDLE
 ## Common Development Tasks
 
 **Change LLM Model for Operation:**
-Edit `/worker/agents/inferutils/config.ts` → `AGENT_CONFIG` object
+Edit `/worker/agents/inferutils/config.ts`. There are two configs: `DEFAULT_AGENT_CONFIG` (Gemini-only, used when `PLATFORM_MODEL_PROVIDERS` env var is unset) and `PLATFORM_AGENT_CONFIG` (multi-provider, used at build.cloudflare.dev). The exported `AGENT_CONFIG` selects between them at runtime.
 
 **Modify Conversation Agent Behavior:**
 Edit `/worker/agents/operations/UserConversationProcessor.ts` (system prompt line 50)
@@ -111,8 +149,8 @@ Edit `/worker/agents/operations/UserConversationProcessor.ts` (system prompt lin
 ## Important Context
 
 **Deep Debugger:**
-- Location: `/worker/agents/assistants/codeDebugger.ts`
-- Model: Gemini 2.5 Pro (reasoning_effort: high, 32k tokens)
+- Location: `/worker/agents/operations/DeepDebugger.ts`
+- Model: configured via `deepDebugger` key in `AGENT_CONFIG` (reasoning_effort: high)
 - Diagnostic priority: run_analysis → get_runtime_errors → get_logs
 - Can fix multiple files in parallel (regenerate_file)
 - Cannot run during code generation (checked via isCodeGenerating())

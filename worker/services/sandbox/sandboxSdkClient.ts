@@ -1818,15 +1818,18 @@ export class SandboxSdkClient extends BaseSandboxService {
                             additionalModules = new Map<string, string>();
                             
                             for (const fullPath of modulePaths) {
-                                // Use just the filename (without assets/ prefix) so it matches
-                                // the import specifier in the bundled worker (e.g. "user-routes" not "assets/user-routes.js")
+                                // Register under all import specifier variants that bundlers may produce:
+                                //   "./assets/user-routes.js"  (Vite relative import — most common)
+                                //   "assets/user-routes.js"    (relative without ./)
+                                //   "user-routes"              (bare name, no path or extension)
                                 const relativePath = fullPath.replace(`${instanceId}/dist/`, '');
+                                const relativePathWithDot = `./${relativePath}`;
                                 const moduleKey = relativePath.replace(/^assets\//, '').replace(/\.js$/, '');
-                                
+
                                 try {
                                     const buffer = await this.readFileAsBase64Buffer(fullPath);
                                     const moduleContent = buffer.toString('utf8');
-                                    // Register under both the full relative path and the bare module name
+                                    additionalModules.set(relativePathWithDot, moduleContent);
                                     additionalModules.set(relativePath, moduleContent);
                                     additionalModules.set(moduleKey, moduleContent);
                                     
