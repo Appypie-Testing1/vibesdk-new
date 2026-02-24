@@ -1798,9 +1798,11 @@ export class SandboxSdkClient extends BaseSandboxService {
                         const existsCheck = await this.safeSandboxExec(`test -f ${distTarget} && echo "exists" || echo "missing"`);
                         if (existsCheck.stdout.trim() === 'exists') continue;
 
-                        // Find the TypeScript source file anywhere under src/
+                        // Find the TypeScript source file anywhere in the project except
+                        // dist/ and node_modules/. AI-generated apps put routes in worker/,
+                        // not src/, so we must not restrict the search to a single directory.
                         const findSrc = await this.safeSandboxExec(
-                            `find ${instanceId}/src -name "${moduleName}.ts" ! -path "*/node_modules/*" 2>/dev/null | head -1`
+                            `find ${instanceId} -name "${moduleName}.ts" ! -path "*/node_modules/*" ! -path "*/dist/*" 2>/dev/null | head -1`
                         );
                         const srcFile = findSrc.stdout.trim();
 
@@ -1809,11 +1811,13 @@ export class SandboxSdkClient extends BaseSandboxService {
                             continue;
                         }
 
-                        // Compile the source file as a standalone ESM bundle into dist/
+                        // Compile the source file as a self-contained ESM bundle into dist/.
+                        // Use --platform=neutral so cloudflare:* specifiers are kept as-is
+                        // (the runtime resolves them; we just need everything else bundled).
                         const relSrc = srcFile.replace(`${instanceId}/`, '');
                         const compileResult = await this.executeCommand(
                             instanceId,
-                            `bunx esbuild ${relSrc} --bundle --outfile=dist/${moduleName}.js --format=esm --platform=browser --external:cloudflare:workers --external:node:* 2>&1`
+                            `bunx esbuild ${relSrc} --bundle --outfile=dist/${moduleName}.js --format=esm --platform=neutral --external:cloudflare:* --external:node:* 2>&1`
                         );
                         if (compileResult.exitCode === 0) {
                             this.logger.info('Compiled missing dynamic import module', { moduleName, src: relSrc });
