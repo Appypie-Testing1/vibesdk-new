@@ -1799,15 +1799,19 @@ export class SandboxSdkClient extends BaseSandboxService {
             this.logger.info('Worker script loaded', { sizeKB: (workerContent.length / 1024).toFixed(2) });
             
             // Step 3a: Check for additional worker modules (ESM imports)
-            // Scan all of dist/ except dist/index.js (main worker) and dist/client/ (browser assets).
-            // Modules may reside at dist/assets/, dist/routes/, dist/, or any subdirectory depending
-            // on how the user's project was built (Vite, tsc, esbuild, etc.).
+            // Scan all of dist/ except:
+            //   - Any file named index.js (main worker entries; uploading them as additional modules
+            //     conflicts with the primary worker script and causes Cloudflare 400 validation errors)
+            //   - dist/client/* (browser SPA assets, not worker code)
+            // This handles all common build tool outputs:
+            //   Vite/@cloudflare/vite-plugin  → dist/<worker-name>/assets/user-routes.js
+            //   tsc                           → dist/routes/user-routes.js
+            //   esbuild code-splitting        → dist/assets/user-routes.js
             let additionalModules: Map<string, string> | undefined;
             try {
                 const distPath = `${instanceId}/dist`;
-                // Find all JS files under dist/, skipping the main entry and the browser client tree
                 const findResult = await this.safeSandboxExec(
-                    `find ${distPath} -type f -name "*.js" ! -path "${distPath}/index.js" ! -path "${distPath}/client/*"`
+                    `find ${distPath} -type f -name "*.js" ! -name "index.js" ! -path "${distPath}/client/*"`
                 );
 
                 if (findResult.exitCode === 0) {
@@ -1818,19 +1822,18 @@ export class SandboxSdkClient extends BaseSandboxService {
                         additionalModules = new Map<string, string>();
 
                         for (const fullPath of modulePaths) {
-                            // Register under all import specifier variants that bundlers may produce:
-                            //   "./assets/user-routes.js"  (Vite relative import — most common)
-                            //   "assets/user-routes.js"    (relative without ./)
-                            //   "user-routes"              (bare name — stripped path and extension)
+                            // Register each module under two names so it can be found regardless of
+                            // how the worker code references it:
+                            //   "assets/user-routes.js"  — relative path (no ./ prefix to avoid
+                            //                               multipart form-data encoding issues)
+                            //   "user-routes"            — bare name used by some bundlers
                             const relativePath = fullPath.replace(`${instanceId}/dist/`, '');
-                            const relativePathWithDot = `./${relativePath}`;
                             // Strip any leading directory segments and extension for the bare key
                             const moduleKey = relativePath.replace(/^.*\//, '').replace(/\.js$/, '');
 
                             try {
                                 const buffer = await this.readFileAsBase64Buffer(fullPath);
                                 const moduleContent = buffer.toString('utf8');
-                                additionalModules.set(relativePathWithDot, moduleContent);
                                 additionalModules.set(relativePath, moduleContent);
                                 additionalModules.set(moduleKey, moduleContent);
 
