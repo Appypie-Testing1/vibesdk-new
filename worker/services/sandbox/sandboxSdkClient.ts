@@ -1770,7 +1770,61 @@ export class SandboxSdkClient extends BaseSandboxService {
                 this.logger.warn('Wrangler build failed', wranglerBuildResult.stdout, wranglerBuildResult.stderr);
                 // Continue anyway - some projects might not need wrangler build
             }
-            
+
+            // Step 1.5: Compile any dynamic imports that bundlers couldn't statically resolve.
+            // Pattern: import(`${variable}`) where variable = "./some-module" — bundlers skip
+            // these because template literals aren't statically analyzable. We read dist/index.js,
+            // extract relative string literals that look like module paths, and compile any whose
+            // output counterpart doesn't yet exist in dist/.
+            try {
+                const workerRaw = await this.safeSandboxExec(`cat ${instanceId}/dist/index.js 2>/dev/null | head -c 50000`);
+                if (workerRaw.exitCode === 0 && workerRaw.stdout) {
+                    // Extract all single/double-quoted relative paths that look like module refs
+                    const relPathMatches = workerRaw.stdout.match(/["'](\.[^"']+)["']/g) || [];
+                    const relPaths = [...new Set(
+                        relPathMatches
+                            .map(m => m.replace(/^["']|["']$/g, ''))
+                            .filter(p => p.startsWith('./') && !p.includes('/') && !p.endsWith('.js'))
+                    )];
+
+                    this.logger.info('Dynamic import candidates from worker head', { relPaths });
+
+                    for (const relPath of relPaths) {
+                        const moduleName = relPath.replace(/^\.\//, '');
+                        const distTarget = `${instanceId}/dist/${moduleName}.js`;
+
+                        // Skip if already compiled
+                        const existsCheck = await this.safeSandboxExec(`test -f ${distTarget} && echo "exists" || echo "missing"`);
+                        if (existsCheck.stdout.trim() === 'exists') continue;
+
+                        // Find the TypeScript source file anywhere under src/
+                        const findSrc = await this.safeSandboxExec(
+                            `find ${instanceId}/src -name "${moduleName}.ts" ! -path "*/node_modules/*" 2>/dev/null | head -1`
+                        );
+                        const srcFile = findSrc.stdout.trim();
+
+                        if (!srcFile) {
+                            this.logger.warn('No source file found for dynamic import module', { moduleName });
+                            continue;
+                        }
+
+                        // Compile the source file as a standalone ESM bundle into dist/
+                        const relSrc = srcFile.replace(`${instanceId}/`, '');
+                        const compileResult = await this.executeCommand(
+                            instanceId,
+                            `bunx esbuild ${relSrc} --bundle --outfile=dist/${moduleName}.js --format=esm --platform=browser --external:cloudflare:workers --external:node:* 2>&1`
+                        );
+                        if (compileResult.exitCode === 0) {
+                            this.logger.info('Compiled missing dynamic import module', { moduleName, src: relSrc });
+                        } else {
+                            this.logger.warn('Failed to compile dynamic import module', { moduleName, stderr: compileResult.stderr });
+                        }
+                    }
+                }
+            } catch (err) {
+                this.logger.warn('Dynamic import compilation step failed (non-fatal):', err);
+            }
+
             // Step 2: Parse wrangler config from KV
             this.logger.info('Reading wrangler configuration from KV');
             const wranglerConfigContent = await env.VibecoderStore.get(this.getWranglerKVKey(instanceId));
