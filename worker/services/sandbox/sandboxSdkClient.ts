@@ -1797,7 +1797,12 @@ export class SandboxSdkClient extends BaseSandboxService {
             
             const workerContent = workerFile.content;
             this.logger.info('Worker script loaded', { sizeKB: (workerContent.length / 1024).toFixed(2) });
-            
+
+            // Log the first 2 KB of dist/index.js so we can see its import statements in worker logs.
+            this.logger.info('Worker script head (imports)', {
+                head: workerContent.substring(0, 2000)
+            });
+
             // Step 3a: Check for additional worker modules (ESM imports)
             // Scan all of dist/ except:
             //   - Any file named index.js (main worker entries; uploading them as additional modules
@@ -1810,6 +1815,13 @@ export class SandboxSdkClient extends BaseSandboxService {
             let additionalModules: Map<string, string> | undefined;
             try {
                 const distPath = `${instanceId}/dist`;
+
+                // Log the full dist/ tree to make module resolution issues diagnosable from worker logs.
+                const treeResult = await this.safeSandboxExec(`find ${distPath} -type f | sort`);
+                this.logger.info('dist/ contents before module scan', {
+                    files: treeResult.stdout.trim().split('\n').filter(Boolean)
+                });
+
                 const findResult = await this.safeSandboxExec(
                     `find ${distPath} -type f -name "*.js" ! -name "index.js" ! -path "${distPath}/client/*"`
                 );
@@ -1847,7 +1859,10 @@ export class SandboxSdkClient extends BaseSandboxService {
                         }
 
                         if (additionalModules.size > 0) {
-                            this.logger.info('Registered additional worker modules', { count: additionalModules.size });
+                            this.logger.info('Registered additional worker modules', {
+                                count: additionalModules.size,
+                                names: Array.from(additionalModules.keys())
+                            });
                         }
                     }
                 }
