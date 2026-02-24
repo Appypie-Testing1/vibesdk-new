@@ -1779,12 +1779,13 @@ export class SandboxSdkClient extends BaseSandboxService {
             try {
                 const workerRaw = await this.safeSandboxExec(`cat ${instanceId}/dist/index.js 2>/dev/null | head -c 50000`);
                 if (workerRaw.exitCode === 0 && workerRaw.stdout) {
-                    // Extract all single/double-quoted relative paths that look like module refs
+                    // Extract all single/double-quoted relative paths that look like module refs.
+                    // Keep only top-level refs like "./user-routes" (no subdirectory separator after the ./).
                     const relPathMatches = workerRaw.stdout.match(/["'](\.[^"']+)["']/g) || [];
                     const relPaths = [...new Set(
                         relPathMatches
                             .map(m => m.replace(/^["']|["']$/g, ''))
-                            .filter(p => p.startsWith('./') && !p.includes('/') && !p.endsWith('.js'))
+                            .filter(p => p.startsWith('./') && !p.slice(2).includes('/') && !p.endsWith('.js'))
                     )];
 
                     this.logger.info('Dynamic import candidates from worker head', { relPaths });
