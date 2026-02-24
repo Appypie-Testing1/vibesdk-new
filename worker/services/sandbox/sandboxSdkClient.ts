@@ -1799,52 +1799,52 @@ export class SandboxSdkClient extends BaseSandboxService {
             this.logger.info('Worker script loaded', { sizeKB: (workerContent.length / 1024).toFixed(2) });
             
             // Step 3a: Check for additional worker modules (ESM imports)
-            // Process them the same way as assets but as strings for the Map
+            // Scan all of dist/ except dist/index.js (main worker) and dist/client/ (browser assets).
+            // Modules may reside at dist/assets/, dist/routes/, dist/, or any subdirectory depending
+            // on how the user's project was built (Vite, tsc, esbuild, etc.).
             let additionalModules: Map<string, string> | undefined;
             try {
-                const workerAssetsPath = `${instanceId}/dist/assets`;
-                const workerAssetsResult = await this.safeSandboxExec(`test -d ${workerAssetsPath} && echo "exists" || echo "missing"`);
-                const hasWorkerAssets = workerAssetsResult.exitCode === 0 && workerAssetsResult.stdout.trim() === "exists";
-                
-                if (hasWorkerAssets) {
-                    this.logger.info('Processing additional worker modules', { workerAssetsPath });
-                    
-                    // Find all JS files in the worker assets directory
-                    const findResult = await this.safeSandboxExec(`find ${workerAssetsPath} -type f -name "*.js"`);
-                    if (findResult.exitCode === 0) {
-                        const modulePaths = findResult.stdout.trim().split('\n').filter((path: string) => path.trim());
-                        
-                        if (modulePaths.length > 0) {
-                            additionalModules = new Map<string, string>();
-                            
-                            for (const fullPath of modulePaths) {
-                                // Register under all import specifier variants that bundlers may produce:
-                                //   "./assets/user-routes.js"  (Vite relative import — most common)
-                                //   "assets/user-routes.js"    (relative without ./)
-                                //   "user-routes"              (bare name, no path or extension)
-                                const relativePath = fullPath.replace(`${instanceId}/dist/`, '');
-                                const relativePathWithDot = `./${relativePath}`;
-                                const moduleKey = relativePath.replace(/^assets\//, '').replace(/\.js$/, '');
+                const distPath = `${instanceId}/dist`;
+                // Find all JS files under dist/, skipping the main entry and the browser client tree
+                const findResult = await this.safeSandboxExec(
+                    `find ${distPath} -type f -name "*.js" ! -path "${distPath}/index.js" ! -path "${distPath}/client/*"`
+                );
 
-                                try {
-                                    const buffer = await this.readFileAsBase64Buffer(fullPath);
-                                    const moduleContent = buffer.toString('utf8');
-                                    additionalModules.set(relativePathWithDot, moduleContent);
-                                    additionalModules.set(relativePath, moduleContent);
-                                    additionalModules.set(moduleKey, moduleContent);
-                                    
-                                    this.logger.info('Worker module loaded', { 
-                                        path: relativePath, 
-                                        sizeKB: (moduleContent.length / 1024).toFixed(2) 
-                                    });
-                                } catch (error) {
-                                    this.logger.warn(`Failed to read worker module ${fullPath}:`, error);
-                                }
+                if (findResult.exitCode === 0) {
+                    const modulePaths = findResult.stdout.trim().split('\n').filter((path: string) => path.trim());
+
+                    if (modulePaths.length > 0) {
+                        this.logger.info('Processing additional worker modules', { count: modulePaths.length, distPath });
+                        additionalModules = new Map<string, string>();
+
+                        for (const fullPath of modulePaths) {
+                            // Register under all import specifier variants that bundlers may produce:
+                            //   "./assets/user-routes.js"  (Vite relative import — most common)
+                            //   "assets/user-routes.js"    (relative without ./)
+                            //   "user-routes"              (bare name — stripped path and extension)
+                            const relativePath = fullPath.replace(`${instanceId}/dist/`, '');
+                            const relativePathWithDot = `./${relativePath}`;
+                            // Strip any leading directory segments and extension for the bare key
+                            const moduleKey = relativePath.replace(/^.*\//, '').replace(/\.js$/, '');
+
+                            try {
+                                const buffer = await this.readFileAsBase64Buffer(fullPath);
+                                const moduleContent = buffer.toString('utf8');
+                                additionalModules.set(relativePathWithDot, moduleContent);
+                                additionalModules.set(relativePath, moduleContent);
+                                additionalModules.set(moduleKey, moduleContent);
+
+                                this.logger.info('Worker module loaded', {
+                                    path: relativePath,
+                                    sizeKB: (moduleContent.length / 1024).toFixed(2)
+                                });
+                            } catch (error) {
+                                this.logger.warn(`Failed to read worker module ${fullPath}:`, error);
                             }
-                            
-                            if (additionalModules.size > 0) {
-                                this.logger.info('Found additional worker modules', { count: additionalModules.size });
-                            }
+                        }
+
+                        if (additionalModules.size > 0) {
+                            this.logger.info('Registered additional worker modules', { count: additionalModules.size });
                         }
                     }
                 }
