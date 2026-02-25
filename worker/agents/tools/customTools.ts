@@ -44,12 +44,11 @@ export function buildTools(
     logger: StructuredLogger,
     toolRenderer: RenderToolCall,
     streamCb: (chunk: string) => void,
-    imageUrls?: string[],
 ): ToolDefinition<any, any>[] {
     return [
         toolWebSearchDefinition,
         toolFeedbackDefinition,
-        createQueueRequestTool(agent, logger, imageUrls),
+        createQueueRequestTool(agent, logger),
         createGetLogsTool(agent, logger),
         createDeployPreviewTool(agent, logger),
         createWaitForGenerationTool(agent, logger),

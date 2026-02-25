@@ -10,7 +10,6 @@ import { useParams, useSearchParams, useNavigate } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LoaderCircle, MoreHorizontal, RotateCcw } from 'lucide-react';
 import clsx from 'clsx';
-import { toast } from 'sonner';
 import { UserMessage, AIMessage } from './components/messages';
 import { PhaseTimeline } from './components/phase-timeline';
 import { type DebugMessage } from './components/debug-panel';
@@ -582,20 +581,13 @@ export default function Chat() {
 		(e: FormEvent) => {
 			e.preventDefault();
 
-			const hasContent = newMessage.trim().length > 0 || images.length > 0;
-
-			// Don't submit if chat is disabled or no content to send
-			if (isChatDisabled || !hasContent) {
+			// Don't submit if chat is disabled or message is empty
+			if (isChatDisabled || !newMessage.trim()) {
 				return;
 			}
 
-			// Require an open WebSocket — if not ready, inform the user and preserve their input
-			if (!websocket || websocket.readyState !== 1) {
-				toast.error('Connection not ready. Please wait a moment and try again.');
-				return;
-			}
-
-			websocket.send(
+			// When generation is active, send as conversational AI suggestion
+			websocket?.send(
 				JSON.stringify({
 					type: 'user_suggestion',
 					message: newMessage,
@@ -604,9 +596,11 @@ export default function Chat() {
 			);
 			sendUserMessage(newMessage);
 			setNewMessage('');
+			// Clear images after sending
 			if (images.length > 0) {
 				clearImages();
 			}
+			// Ensure we scroll after sending our own message
 			requestAnimationFrame(() => scrollToBottom());
 		},
 		[newMessage, websocket, sendUserMessage, isChatDisabled, scrollToBottom, images, clearImages],
