@@ -780,19 +780,19 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setIsGenerating(false);
                 setIsGenerationPaused(true);
                 setIsDebugging(false);
-                
+
                 // Reset phase indicators
                 setIsPhaseProgressActive(false);
                 setIsThinking(false);
-                
+
                 // Mark any active phases as cancelled (not completed, since they were interrupted)
-                setPhaseTimeline((prev) => 
-                    prev.map(phase => 
+                setPhaseTimeline((prev) =>
+                    prev.map(phase =>
                         (phase.status === 'generating' || phase.status === 'validating')
-                            ? { 
-                                ...phase, 
+                            ? {
+                                ...phase,
                                 status: 'cancelled' as const,
-                                files: phase.files.map(file => 
+                                files: phase.files.map(file =>
                                     file.status === 'generating' || file.status === 'validating'
                                         ? { ...file, status: 'cancelled' as const }
                                         : file
@@ -801,12 +801,33 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                             : phase
                     )
                 );
-                
+
+                // Resolve any pending deep_debug 'start' events so the useEffect-driven
+                // isDebugging derivation also sees them as finished.
+                setMessages(prev => prev.map(msg => {
+                    if (msg.role !== 'assistant' || !msg.ui?.toolEvents) return msg;
+                    const hasActiveDebug = msg.ui.toolEvents.some(
+                        e => e.name === 'deep_debug' && e.status === 'start'
+                    );
+                    if (!hasActiveDebug) return msg;
+                    return {
+                        ...msg,
+                        ui: {
+                            ...msg.ui,
+                            toolEvents: msg.ui.toolEvents.map(e =>
+                                e.name === 'deep_debug' && e.status === 'start'
+                                    ? { ...e, status: 'error' as const }
+                                    : e
+                            )
+                        }
+                    };
+                }));
+
                 // Show toast notification for user-initiated stop
                 toast.info('Generation stopped', {
                     description: message.message || 'Code generation has been stopped'
                 });
-                
+
                 sendMessage(createAIMessage('generation_stopped', message.message));
                 break;
             }
@@ -905,11 +926,15 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
 
                 if (message.tool) {
                     const tool = message.tool;
-                    setMessages(prev => appendToolEvent(prev, conversationId, { 
-                        name: tool.name, 
+                    setMessages(prev => appendToolEvent(prev, conversationId, {
+                        name: tool.name,
                         status: tool.status,
-                        result: tool.result 
+                        result: tool.result
                     }));
+                    // When a deep_debug session finishes, immediately re-enable chat input
+                    if (tool.name === 'deep_debug' && (tool.status === 'success' || tool.status === 'error')) {
+                        deps.setIsDebugging(false);
+                    }
                     break;
                 }
 

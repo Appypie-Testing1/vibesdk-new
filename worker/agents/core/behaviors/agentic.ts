@@ -151,19 +151,17 @@ export class AgenticCodingBehavior extends BaseCodingBehavior<AgenticState> impl
         await this.queueUserRequest(userMessage, processedImages);
 
         if (this.isCodeGenerating()) {
-            // Code generating - render tool call for UI
+            // Acknowledge the queued request with a conversational response so the user
+            // knows their message was received and will be acted on.
+            const conversationId = IdGenerator.generateConversationId();
+            const hasImages = !!processedImages && processedImages.length > 0;
+            const ack = hasImages
+                ? "Got it. I'll apply your changes (including the attached image) once the current build cycle finishes."
+                : "Got it. I'll apply your changes once the current build cycle finishes.";
             this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
-                message: '',
-                conversationId: IdGenerator.generateConversationId(),
+                message: ack,
+                conversationId,
                 isStreaming: false,
-                tool: {
-                    name: 'Message Queued',
-                    status: 'success',
-                    args: {
-                        userMessage,
-                        images: processedImages
-                    }
-                }
             });
         }
 
