@@ -13,16 +13,18 @@ function isValidSessionId(id: string): boolean {
 }
 
 function validateFileName(file: string): string | null {
-    // Reject any traversal or path separators
+    // Reject path traversal and separators first — these are the real security threats
     if (file.includes('..') || file.includes('/') || file.includes('\\') || file.includes('\0')) {
-        return null;
-    }
-    // Enforce simple filename pattern
-    if (!/^[A-Za-z0-9._-]{1,128}$/.test(file)) {
         return null;
     }
     // Disallow leading dot files
     if (file.startsWith('.')) {
+        return null;
+    }
+    // Allow alphanumeric, spaces, dots, hyphens, underscores, parentheses, and @.
+    // Spaces appear in common upload filenames (e.g. "WhatsApp Image 2024-01-01.jpeg").
+    // Path separators and traversal are already rejected above.
+    if (!/^[A-Za-z0-9 ._\-@()]{1,256}$/.test(file)) {
         return null;
     }
     // Validate extension

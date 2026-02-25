@@ -382,7 +382,8 @@ export class UserConversationProcessor extends AgentOperation<GenerationContext,
                 agent,
                 logger,
                 toolCallRenderer,
-                (chunk: string) => inputs.conversationResponseCallback(chunk, aiConversationId, true)
+                (chunk: string) => inputs.conversationResponseCallback(chunk, aiConversationId, true),
+                imageUrls,
             ).map(td => ({
                 ...td,
                 onStart: (_tc: ChatCompletionMessageFunctionToolCall, args: Record<string, unknown>) => Promise.resolve(toolCallRenderer({ name: td.name, status: 'start', args })),
