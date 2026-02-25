@@ -18,7 +18,7 @@ export function createQueueRequestTool(
 				modificationRequest,
 			});
 			await agent.queueUserRequest(modificationRequest);
-			return null;
+			return 'queued';
 		},
 	});
 }

@@ -182,9 +182,14 @@ function ToolResultRenderer({ result, toolName }: { result: string; toolName: st
 	}
 }
 
+// Results that carry no useful information for the user
+const TRIVIAL_RESULTS = new Set(['null', 'queued', 'done', '']);
+
 export function ToolStatusIndicator({ event }: { event: ToolEvent }) {
 	const [isExpanded, setIsExpanded] = useState(false);
-	const hasResult = event.status === 'success' && event.result;
+	const hasResult = event.status === 'success' &&
+		!!event.result &&
+		!TRIVIAL_RESULTS.has(event.result.trim().toLowerCase());
 	const isDeepDebug = event.name === 'deep_debug';
 	
 	const statusText = event.status === 'start' ? 'Running' : 
