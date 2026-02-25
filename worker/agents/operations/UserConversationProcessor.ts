@@ -84,15 +84,27 @@ const SYSTEM_PROMPT = `You are Orange, the conversational AI interface for Cloud
 - Relay modification requests to the development agent via \`queue_request\` (but speak as if YOU are making the changes)
 - Execute other tools to help users
 
+## IMAGE HANDLING (CRITICAL):
+Users can attach images directly to their chat messages. When they do, **you receive the image visually AND its public URL in the system_context "Uploaded image URLs" section**.
+- **NEVER** say "I can't receive/upload images" or "please provide a URL" — the image and its URL are already provided
+- When a user attaches an image, the \`<system_context>\` will contain a section like:
+  \`\`\`
+  ## Uploaded image URLs (use these exact URLs in queue_request):
+  - https://example.com/api/uploads/session123/photo.jpg
+  \`\`\`
+- **ALWAYS include the exact URL(s) from that section in your \`queue_request\` call** so the implementation agent can embed them directly in code (e.g. as \`<img src="...">\` or CSS \`background-image\`)
+- Describe what you see in the image AND provide the URL so the agent has full context
+- After calling \`queue_request\` with image context and URL, say nothing further — the request is done
+
 ## HOW TO INTERACT:
 
 1. **For general questions or discussions**: Simply respond naturally and helpfully. Be friendly and informative.
 
-2. **When users want to modify their app or point out issues/bugs**: 
+2. **When users want to modify their app or point out issues/bugs**:
    - First acknowledge in first person: "I'll add that", "I'll fix that issue"
    - Then call the queue_request tool with a clear, actionable description (this internally relays to the dev agent)
    - The modification request should be specific but NOT include code-level implementation details
-   - After calling the tool, confirm YOU are working on it: "I'll have that ready in the next phase or two"
+   - After calling the tool, say nothing more — \`queue_request\` returning "queued" means it succeeded
    - The queue_request tool relays to the development agent behind the scenes. Use it often - it's cheap.
 
 3. **For information requests**: Use the appropriate tools (web_search, etc) when they would be helpful.
@@ -184,6 +196,11 @@ Users may face issues, bugs and runtime errors. You have TWO options:
     ## CRITICAL - After Tool Execution:
     When a tool completes execution, you should respond based on what the tool returned:
 
+    **If \`queue_request\` returns "queued":**
+    - Success. The change is queued. You already told the user — say NOTHING more.
+    - NEVER generate a follow-up that contradicts your first message (e.g. do NOT say "I can't upload images" after you already acknowledged the image)
+    - NEVER ask the user for a URL or any additional input after a successful \`queue_request\`
+
     **If tool returns meaningful data** (logs, search results, transcripts, etc.):
     - Synthesize and share the information with the user
     - Add new insights based on the tool's output
@@ -191,14 +208,14 @@ Users may face issues, bugs and runtime errors. You have TWO options:
     **If tool returns empty/minimal result** (null, "done", empty string):
     - The tool succeeded silently - you already told the user what you're doing
     - DO NOT repeat your previous message
-    - Either:
     - Say nothing more (system will show tool completion)
-    - OR add a brief confirmation: "✓" or "Done" 
     - NEVER repeat your entire previous explanation
 
     **Examples:**
-    ❌ BAD: User asks for fix → You say "I'll queue that" + call queue_request → Tool returns "done" → You say "I'll queue that" again
-    ✅ GOOD: User asks for fix → You say "I'll queue that" + call queue_request → Tool returns "done" → You say nothing OR "✓"
+    ❌ BAD: User sends image + "update this" → You say "I'll update it" + call queue_request → Tool returns "queued" → You say "I can't upload images, please send a URL"
+    ✅ GOOD: User sends image + "update this" → You say "I'll update it" + call queue_request (describing the image) → Tool returns "queued" → You say nothing
+    ❌ BAD: User asks for fix → You say "I'll queue that" + call queue_request → Tool returns "queued" → You say "I'll queue that" again
+    ✅ GOOD: User asks for fix → You say "I'll queue that" + call queue_request → Tool returns "queued" → You say nothing OR "✓"
 
 deep_debug can be more expensive to run cost-wise than queue_request for complex changes.
 
@@ -251,13 +268,6 @@ I hope this description of the system is enough for you to understand your own r
     User: "Its still not fixed!"
     You: "I understand. Clearly my previous changes weren't enough. Let me try again" -> call queue_request("Maximum update depth error is still occuring. Did you check the errors for the hint? Please go through the error resolution guide and review previous phase diffs as well as relevant codebase, and fix it on priority!")
 
-## IMAGE INPUTS (IMPORTANT):
-Users can attach images directly to their chat messages. When a user attaches an image, YOU receive it in the current conversation turn as a multimodal input — you can see it.
-- NEVER say "I can't receive images" or "please provide a URL" — you already have the image
-- When a user attaches an image (e.g. a reference design, screenshot of a bug, or UI mockup), describe what you see in detail when calling queue_request so the implementation agent has full context
-- Example: User attaches a screenshot of a login page and says "make it look like this" → you call queue_request with a detailed description of the visual design you observed in the image
-- The \`queue_request\` tool result "queued" means it succeeded — do not add a follow-up message, just confirm briefly to the user
-
 ## IMPORTANT GUIDELINES:
 - DO NOT Write '<system_context>' tag in your response! That tag is only present in user responses
 - DO NOT generate or discuss code-level implementation details. Do not try to solve bugs. You may generate ideas in a loop with the user though.
@@ -301,21 +311,29 @@ const USER_PROMPT = `
 
 ## Project updates since last conversation:
 {{projectUpdates}}
-</system_context>
+{{imageUrlsSection}}</system_context>
 {{userMessage}}
 `;
 
 
-function buildUserMessageWithContext(userMessage: string, errors: RuntimeError[], projectUpdates: string[], forInference: boolean): string {
-    let userPrompt = USER_PROMPT.replace("{{timestamp}}", new Date().toISOString()).replace("{{userMessage}}", userMessage)
+function buildUserMessageWithContext(userMessage: string, errors: RuntimeError[], projectUpdates: string[], forInference: boolean, imageUrls?: string[]): string {
+    let userPrompt = USER_PROMPT.replace("{{timestamp}}", new Date().toISOString()).replace("{{userMessage}}", userMessage);
     if (forInference) {
         if (projectUpdates && projectUpdates.length > 0) {
             userPrompt = userPrompt.replace("{{projectUpdates}}", projectUpdates.join("\n\n"));
+        } else {
+            userPrompt = userPrompt.replace("{{projectUpdates}}", "none");
+        }
+        if (imageUrls && imageUrls.length > 0) {
+            const urlList = imageUrls.map(u => `- ${u}`).join("\n");
+            userPrompt = userPrompt.replace("{{imageUrlsSection}}", `\n## Uploaded image URLs (use these exact URLs in queue_request):\n${urlList}\n`);
+        } else {
+            userPrompt = userPrompt.replace("{{imageUrlsSection}}", "");
         }
         return userPrompt.replace("{{errors}}", PROMPT_UTILS.serializeErrors(errors));
     } else {
         // To save tokens
-        return userPrompt.replace("{{projectUpdates}}", "redacted").replace("{{errors}}", "redacted");
+        return userPrompt.replace("{{projectUpdates}}", "redacted").replace("{{errors}}", "redacted").replace("{{imageUrlsSection}}", "");
     }
 }
 
@@ -333,8 +351,13 @@ export class UserConversationProcessor extends AgentOperation<GenerationContext,
         try {
             const systemPromptMessages = getSystemPromptWithProjectContext(SYSTEM_PROMPT, context, CodeSerializerType.SIMPLE);
             
+            // Extract public URLs from processed image attachments
+            const imageUrls = images && images.length > 0
+                ? images.map(img => img.publicUrl).filter(Boolean)
+                : undefined;
+
             // Create user message with optional images for inference
-            const userPromptForInference = buildUserMessageWithContext(userMessage, errors, projectUpdates, true);
+            const userPromptForInference = buildUserMessageWithContext(userMessage, errors, projectUpdates, true, imageUrls);
             const userMessageForInference = images && images.length > 0
                 ? createMultiModalUserMessage(
                     userPromptForInference,
@@ -428,6 +451,7 @@ export class UserConversationProcessor extends AgentOperation<GenerationContext,
 
             
             // For conversation history, store only text (images are ephemeral and not persisted)
+            // imageUrls are redacted in forInference=false branch so no change needed
             const userPromptForHistory = buildUserMessageWithContext(userMessage, errors, projectUpdates, false);
             const userMessageForHistory = images && images.length > 0
                 ? createMultiModalUserMessage(

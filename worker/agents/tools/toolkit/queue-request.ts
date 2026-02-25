@@ -18,7 +18,9 @@ export function createQueueRequestTool(
 				modificationRequest,
 			});
 			await agent.queueUserRequest(modificationRequest);
-			return 'queued';
+			// Returning a clear success string stops the LLM from generating a confused follow-up.
+			// Do NOT say anything more to the user after this tool call succeeds.
+			return 'queued — do not add any follow-up message to the user';
 		},
 	});
 }

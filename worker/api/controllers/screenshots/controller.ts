@@ -50,6 +50,46 @@ function getMimeByExtension(file: string): string | undefined {
 }
 export class ScreenshotsController extends BaseController {
     static logger = createLogger('ScreenshotsController');
+
+    private static async serveFromR2(
+        env: Env,
+        r2KeyPrefix: string,
+        id: string | undefined,
+        file: string | undefined,
+        notFoundMessage: string,
+    ): Promise<ControllerResponse<ApiResponse<never>>> {
+        if (!id || !file) {
+            return ScreenshotsController.createErrorResponse('Missing path parameters', 400);
+        }
+
+        if (!isValidSessionId(id)) {
+            return ScreenshotsController.createErrorResponse('Invalid id', 400);
+        }
+
+        const validatedFile = validateFileName(file);
+        if (!validatedFile) {
+            return ScreenshotsController.createErrorResponse('Invalid file name', 400);
+        }
+
+        // R2 keys use encodeURIComponent for the filename (see uploadImageToR2)
+        const key = `${r2KeyPrefix}/${id}/${encodeURIComponent(validatedFile)}`;
+        const obj = await env.TEMPLATES_BUCKET.get(key);
+        if (!obj || !obj.body) {
+            return ScreenshotsController.createErrorResponse(notFoundMessage, 404);
+        }
+
+        const contentType = obj.httpMetadata?.contentType || getMimeByExtension(validatedFile) || 'image/png';
+        const headers = new Headers({
+            'Content-Type': contentType,
+            'Cache-Control': 'public, max-age=31536000, immutable',
+            'X-Content-Type-Options': 'nosniff',
+        });
+
+        // We return a naked Response because our controller helper types expect JSON, but this route is binary.
+        // It's safe because the router uses this Response directly.
+        return new Response(obj.body, { headers }) as unknown as ControllerResponse<ApiResponse<never>>;
+    }
+
     static async serveScreenshot(
         _request: Request,
         env: Env,
@@ -57,43 +97,35 @@ export class ScreenshotsController extends BaseController {
         context: RouteContext,
     ): Promise<ControllerResponse<ApiResponse<never>>> {
         try {
-            const sessionId = context.pathParams.id;
-            const file = context.pathParams.file;
-
-            if (!sessionId || !file) {
-                return ScreenshotsController.createErrorResponse('Missing path parameters', 400);
-            }
-
-            // Validate and sanitize path parameters
-            if (!isValidSessionId(sessionId)) {
-                return ScreenshotsController.createErrorResponse('Invalid session id', 400);
-            }
-
-            const validatedFile = validateFileName(file);
-            if (!validatedFile) {
-                return ScreenshotsController.createErrorResponse('Invalid file name', 400);
-            }
-
-            const key = `screenshots/${sessionId}/${validatedFile}`;
-            const obj = await env.TEMPLATES_BUCKET.get(key);
-            if (!obj || !obj.body) {
-                return ScreenshotsController.createErrorResponse('Screenshot not found', 404);
-            }
-
-            const contentType = obj.httpMetadata?.contentType || getMimeByExtension(validatedFile) || 'image/png';
-            const headers = new Headers({
-                'Content-Type': contentType,
-                'Cache-Control': 'public, max-age=31536000, immutable',
-                'X-Content-Type-Options': 'nosniff',
-            });
-
-			// We return a naked Response because our controller helper types expect JSON, but this route is binary.
-			// It's safe because the router uses this Response directly.
-			return new Response(obj.body, {
-				headers,
-			}) as unknown as ControllerResponse<ApiResponse<never>>;
-		        } catch (error) {
+            return await ScreenshotsController.serveFromR2(
+                env,
+                'screenshots',
+                context.pathParams.id,
+                context.pathParams.file,
+                'Screenshot not found',
+            );
+        } catch (error) {
             this.logger.error('Error serving screenshot', { error });
+            return ScreenshotsController.createErrorResponse('Internal server error', 500);
+        }
+    }
+
+    static async serveUpload(
+        _request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<never>>> {
+        try {
+            return await ScreenshotsController.serveFromR2(
+                env,
+                'uploads',
+                context.pathParams.id,
+                context.pathParams.file,
+                'Upload not found',
+            );
+        } catch (error) {
+            this.logger.error('Error serving upload', { error });
             return ScreenshotsController.createErrorResponse('Internal server error', 500);
         }
     }
