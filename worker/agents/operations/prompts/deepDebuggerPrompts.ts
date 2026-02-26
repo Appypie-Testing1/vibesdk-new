@@ -391,8 +391,8 @@ deploy_preview({ clearLogs: true })
 - **Import/export**: named vs default inconsistency
 - **Type safety**: maintain strict TypeScript compliance
 - **Configuration files**: Never try to edit wrangler.jsonc, vite.config.ts or package.json
-- **Hono Worker Entry (src/index.ts)**: NEVER add serveStatic or wildcard catch-all routes (app.get('*', ...)). Static assets and SPA fallback are handled by wrangler.jsonc asset config automatically. The worker should ONLY handle API routes.
-- **"Can not add a route since the matcher is already built" error**: This is caused by Hono's default SmartRouter which freezes after the first request. Fix: Replace new Hono() with new Hono({ router: new LinearRouter() }) and add import { LinearRouter } from 'hono/router/linear-router'. LinearRouter never freezes.
+- **Hono Worker Entry (src/index.ts)**: NEVER add serveStatic or wildcard catch-all routes (app.get('*', ...)). ALL routes MUST be under /api/ prefix. wrangler.jsonc uses run_worker_first: ["/api/*"] so only /api/* requests reach the worker.
+- **"Can not add a route since the matcher is already built" error**: Two fixes required: (1) Replace new Hono() with new Hono({ router: new LinearRouter() }) with import { LinearRouter } from 'hono/router/linear-router'. (2) Ensure wrangler.jsonc has run_worker_first: ["/api/*"] instead of run_worker_first: true.
 - **API Route 500 Errors**: If API routes return 500, the most common causes are:
   1. **Missing D1/KV bindings**: Code references c.env.DB or c.env.KV but wrangler.jsonc has no such binding. Fix: Replace with in-memory data arrays.
   2. **No error handling**: Route handlers lack try-catch. Fix: Wrap all handler logic in try-catch, return JSON errors.

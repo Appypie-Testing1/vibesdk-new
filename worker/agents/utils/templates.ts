@@ -152,8 +152,8 @@ app.use('/api/*', cors({
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Health check
-app.get('/health', (c) => {
+// Health check — MUST be under /api/ to match run_worker_first routing
+app.get('/api/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
@@ -214,7 +214,7 @@ function App() {
 
   useEffect(() => {
     // Test health endpoint
-    fetch('/health')
+    fetch('/api/health')
       .then(res => res.json())
       .then(data => setMessage(data.status))
       .catch(() => setMessage('Error'));
@@ -348,7 +348,7 @@ export default {
             "assets": {
                 "directory": "dist",
                 "not_found_handling": "single-page-application",
-                "run_worker_first": true,
+                "run_worker_first": ["/api/*"],
                 "binding": "ASSETS"
             },
             "vars": {

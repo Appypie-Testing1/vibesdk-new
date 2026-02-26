@@ -675,14 +675,35 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
     }
 
     /**
+     * Sanitize wrangler.jsonc to use Cloudflare-recommended run_worker_first pattern.
+     * Replaces `"run_worker_first": true` with `"run_worker_first": ["/api/*"]` which
+     * ensures only API requests hit the worker, avoiding router issues in dev mode.
+     */
+    private static sanitizeWranglerConfig(contents: string): string {
+        // Replace run_worker_first: true with the Cloudflare-recommended array pattern
+        // This prevents ALL requests from hitting the worker (which triggers Hono router issues)
+        return contents.replace(
+            /"run_worker_first"\s*:\s*true/g,
+            '"run_worker_first": ["/api/*"]'
+        );
+    }
+
+    /**
      * Apply worker entry point sanitization to a list of files.
-     * Only processes files that look like Hono worker entry points.
+     * Processes Hono worker entry points and wrangler config.
      */
     private static sanitizeFiles<T extends { filePath: string; fileContents: string }>(files: T[]): T[] {
         return files.map(file => {
-            // Only sanitize likely worker entry points that import Hono
+            // Sanitize Hono worker entry points
             if (/^src\/index\.(ts|js)$/.test(file.filePath) && file.fileContents.includes('hono')) {
                 const sanitized = DeploymentManager.sanitizeWorkerEntryPoint(file.fileContents);
+                if (sanitized !== file.fileContents) {
+                    return { ...file, fileContents: sanitized };
+                }
+            }
+            // Sanitize wrangler config to use recommended run_worker_first pattern
+            if (/wrangler\.jsonc?$/.test(file.filePath) && file.fileContents.includes('run_worker_first')) {
+                const sanitized = DeploymentManager.sanitizeWranglerConfig(file.fileContents);
                 if (sanitized !== file.fileContents) {
                     return { ...file, fileContents: sanitized };
                 }

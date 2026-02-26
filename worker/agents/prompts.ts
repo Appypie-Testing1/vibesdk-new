@@ -102,8 +102,8 @@ and provide a preview url for the application.
 - The default SmartRouter FREEZES after the first request — LinearRouter is mandatory.
 - Use Hono for API routes only. Do NOT add serveStatic or wildcard catch-all routes.
 - Static assets and SPA fallback are handled automatically by wrangler.jsonc asset configuration.
-- The wrangler.jsonc MUST include: \`"assets": { "directory": "dist", "not_found_handling": "single-page-application", "run_worker_first": true, "binding": "ASSETS" }\`
-- The worker handles /api/* routes. All other requests automatically fall through to static assets.
+- The wrangler.jsonc MUST include: \`"assets": { "directory": "dist", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"], "binding": "ASSETS" }\`
+- ALL worker routes MUST be under /api/ prefix (e.g., /api/health, /api/products). Only /api/* requests reach the worker.
 - MUST include \`app.onError()\` global error handler.
 - MUST wrap every route handler in try-catch.
 - MUST use in-memory data stores (arrays/objects) — D1/KV are NOT available.
@@ -466,9 +466,10 @@ COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
 
     23. **Worker Entry Point Structure:**
     - The worker (src/index.ts) should ONLY handle API routes and middleware.
+    - ALL routes MUST be under \`/api/\` prefix (e.g., \`/api/health\`, \`/api/products\`, \`/api/auth/login\`).
+    - wrangler.jsonc uses \`run_worker_first: ["/api/*"]\` which means ONLY \`/api/*\` requests reach the worker. Any route not under \`/api/\` will NOT work.
     - All route registration must happen at module scope (before any request is handled).
     - NEVER dynamically add routes inside request handlers or middleware.
-    - Keep CORS middleware scoped to \`/api/*\`, not \`/*\`.
     - MUST use LinearRouter instead of the default SmartRouter (see rule 29).
     \`\`\`tsx
     // CORRECT worker entry pattern:
@@ -479,15 +480,17 @@ COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
     const app = new Hono({ router: new LinearRouter() });
     app.use('/api/*', cors({ origin: '*' }));
     app.get('/api/health', (c) => c.json({ status: 'ok' }));
-    // ... more API routes ...
+    app.get('/api/products', (c) => c.json({ products: [...] }));
+    // ALL routes MUST start with /api/
     export default app;
     \`\`\`
 
     24. **Asset Serving Architecture:**
-    - wrangler.jsonc has \`run_worker_first: true\` - every request hits the worker first.
-    - If the worker does NOT match a route, Cloudflare automatically serves from the \`ASSETS\` binding.
-    - If no static asset matches either, \`not_found_handling: "single-page-application"\` serves index.html.
-    - This means: Worker handles API routes only. Everything else falls through to static assets automatically.
+    - wrangler.jsonc has \`run_worker_first: ["/api/*"]\` — ONLY \`/api/*\` requests hit the worker.
+    - All other requests (HTML, JS, CSS, images) are served directly from static assets.
+    - If no static asset matches, \`not_found_handling: "single-page-application"\` serves index.html.
+    - This means: Worker handles \`/api/*\` routes ONLY. Static assets and SPA routing are fully automatic.
+    - NEVER add routes outside \`/api/\` — they will never reach the worker.
 
     25. **MANDATORY: Global Error Handler in Worker Entry:**
     - The worker entry (src/index.ts) MUST include \`app.onError()\` to catch unhandled exceptions.
