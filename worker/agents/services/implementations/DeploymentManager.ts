@@ -572,8 +572,8 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
             }
         }
 
-        // Get latest files
-        const files = this.fileManager.getAllFiles();
+        // Get latest files and sanitize worker entry point
+        const files = DeploymentManager.sanitizeFiles(this.fileManager.getAllFiles());
 
         this.getLog().info('Files to deploy', {
             files: files.map(f => f.filePath)
@@ -607,6 +607,43 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
     }
 
     /**
+     * Sanitize worker entry point to remove patterns that break Hono's router on deployed apps.
+     * Removes: serveStatic imports/usage, wildcard SPA fallback routes.
+     * These are handled by wrangler.jsonc asset config (not_found_handling + ASSETS binding).
+     */
+    private static sanitizeWorkerEntryPoint(contents: string): string {
+        let result = contents;
+
+        // Remove serveStatic import line
+        result = result.replace(/^import\s*\{[^}]*serveStatic[^}]*\}\s*from\s*['"]hono\/cloudflare-workers['"];?\s*$/gm, '');
+
+        // Remove app.use('/*', serveStatic(...)) or app.use('*', serveStatic(...))
+        result = result.replace(/^\s*app\.use\(\s*['"][/*]*['"]\s*,\s*serveStatic\([^)]*\)\s*\);?\s*$/gm, '');
+
+        // Remove wildcard SPA fallback: app.get('*', ...) that references ASSETS or index.html
+        result = result.replace(/^\s*app\.get\(\s*['"][*]['"][\s\S]*?(?:ASSETS|index\.html)[\s\S]*?\}\s*\)\s*;?\s*$/gm, '');
+
+        return result;
+    }
+
+    /**
+     * Apply worker entry point sanitization to a list of files.
+     * Only processes files that look like Hono worker entry points.
+     */
+    private static sanitizeFiles<T extends { filePath: string; fileContents: string }>(files: T[]): T[] {
+        return files.map(file => {
+            // Only sanitize likely worker entry points that import Hono
+            if (/^src\/index\.(ts|js)$/.test(file.filePath) && file.fileContents.includes('hono')) {
+                const sanitized = DeploymentManager.sanitizeWorkerEntryPoint(file.fileContents);
+                if (sanitized !== file.fileContents) {
+                    return { ...file, fileContents: sanitized };
+                }
+            }
+            return file;
+        });
+    }
+
+    /**
      * Determine which files to deploy
      */
     private getFilesToDeploy(
@@ -614,16 +651,18 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         redeployed: boolean
     ): Array<{ filePath: string; fileContents: string }> {
         const state = this.getState();
-        
+
         // If no files requested or redeploying, use all generated files from state
         if (!requestedFiles || requestedFiles.length === 0 || redeployed) {
             requestedFiles = Object.values(state.generatedFilesMap);
         }
 
-        return requestedFiles.map(file => ({
+        const files = requestedFiles.map(file => ({
             filePath: file.filePath,
             fileContents: file.fileContents
         }));
+
+        return DeploymentManager.sanitizeFiles(files);
     }
     
     /**
