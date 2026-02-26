@@ -388,9 +388,10 @@ deploy_preview({ clearLogs: true })
 - **Workers Runtime**: Global state doesn't persist between requests (use Durable Objects for state)
 - **Async operations**: Workers have CPU time limits, avoid long-running synchronous operations
 - **React**: render loops (state-in-render, missing deps, unstable Zustand selectors)
-- **Import/export**: named vs default inconsistency  
+- **Import/export**: named vs default inconsistency
 - **Type safety**: maintain strict TypeScript compliance
 - **Configuration files**: Never try to edit wrangler.jsonc, vite.config.ts or package.json
+- **Hono Worker Entry (src/index.ts)**: NEVER add serveStatic or wildcard catch-all routes (app.get('*', ...)). Static assets and SPA fallback are handled by wrangler.jsonc asset config automatically. The worker should ONLY handle API routes. Adding serveStatic or catch-all routes causes "Can not add a route since the matcher is already built" errors.
 
 **⚠️ CRITICAL: Do NOT "Optimize" Zustand Selectors**
 If you see this pattern - **LEAVE IT ALONE** (it's already optimal):

@@ -135,12 +135,11 @@ export function createScratchTemplateDetails(): TemplateDetails {
         'src/index.ts': `
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { serveStatic } from 'hono/cloudflare-workers';
 
 const app = new Hono();
 
 // CORS middleware
-app.use('/*', cors({
+app.use('/api/*', cors({
   origin: '*',
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
@@ -148,9 +147,9 @@ app.use('/*', cors({
 
 // Health check
 app.get('/health', (c) => {
-  return c.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString() 
+  return c.json({
+    status: 'ok',
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -159,13 +158,8 @@ app.get('/api/data', (c) => {
   return c.json({ message: 'API endpoint working' });
 });
 
-// Serve static files
-app.use('/*', serveStatic({ root: './dist' }));
-
-// Fallback to index.html for SPA routing
-app.get('*', (c) => {
-  return c.html(c.env.ASSETS.fetch(new Request('http://localhost/index.html')));
-});
+// Static assets and SPA fallback are handled by wrangler.jsonc asset config
+// (not_found_handling: "single-page-application" + ASSETS binding)
 
 export default app;
 `,

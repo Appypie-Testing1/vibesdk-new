@@ -97,6 +97,12 @@ The project should support the following commands in package.json to run the app
 }
 and provide a preview url for the application.
 
+**Worker Entry Point (src/index.ts) MUST follow this pattern:**
+- Use Hono for API routes only. Do NOT add serveStatic or wildcard catch-all routes.
+- Static assets and SPA fallback are handled automatically by wrangler.jsonc asset configuration.
+- The wrangler.jsonc MUST include: \`"assets": { "directory": "dist", "not_found_handling": "single-page-application", "run_worker_first": true, "binding": "ASSETS" }\`
+- The worker handles /api/* routes. All other requests automatically fall through to static assets.
+
 </START_FROM_SCRATCH>`;
         }
     },
@@ -424,6 +430,55 @@ COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
 
     # Never write image files! Never write jpeg, png, svg, etc files yourself! Always use some image url from the web.
     **Do not recommend installing \`cloudflare:workers\` or \`cloudflare:durable-objects\` as dependencies, these are already installed in the project always.**
+
+    **CLOUDFLARE WORKERS + HONO CRITICAL RULES (FAILURE WILL BREAK DEPLOYED APPS):**
+    The worker entry point (src/index.ts) uses Hono as the HTTP framework. Follow these rules strictly:
+
+    21. **NO serveStatic in Worker Entry Point:**
+    - NEVER import or use \`serveStatic\` from \`hono/cloudflare-workers\`.
+    - Static assets are served automatically by Cloudflare via the \`ASSETS\` binding and \`not_found_handling: "single-page-application"\` in wrangler.jsonc.
+    - Adding \`serveStatic\` causes "Can not add a route since the matcher is already built" errors on deployed apps.
+    \`\`\`tsx
+    // BAD - causes deployment crashes:
+    import { serveStatic } from 'hono/cloudflare-workers';
+    app.use('/*', serveStatic({ root: './dist' }));
+
+    // GOOD - not needed, wrangler.jsonc handles static assets automatically
+    \`\`\`
+
+    22. **NO Wildcard SPA Fallback Routes in Worker:**
+    - NEVER add \`app.get('*', ...)\` or \`app.all('*', ...)\` catch-all routes for SPA fallback.
+    - SPA routing is handled by \`not_found_handling: "single-page-application"\` in wrangler.jsonc.
+    - Adding catch-all routes after other middleware can trigger Hono's "matcher already built" error.
+    \`\`\`tsx
+    // BAD - redundant and can break Hono's router:
+    app.get('*', (c) => c.env.ASSETS.fetch(new Request('http://localhost/index.html')));
+
+    // GOOD - no catch-all needed, wrangler.jsonc handles SPA routing
+    \`\`\`
+
+    23. **Worker Entry Point Structure:**
+    - The worker (src/index.ts) should ONLY handle API routes and middleware.
+    - All route registration must happen at module scope (before any request is handled).
+    - NEVER dynamically add routes inside request handlers or middleware.
+    - Keep CORS middleware scoped to \`/api/*\`, not \`/*\`.
+    \`\`\`tsx
+    // CORRECT worker entry pattern:
+    import { Hono } from 'hono';
+    import { cors } from 'hono/cors';
+
+    const app = new Hono();
+    app.use('/api/*', cors({ origin: '*' }));
+    app.get('/api/health', (c) => c.json({ status: 'ok' }));
+    // ... more API routes ...
+    export default app;
+    \`\`\`
+
+    24. **Asset Serving Architecture:**
+    - wrangler.jsonc has \`run_worker_first: true\` - every request hits the worker first.
+    - If the worker does NOT match a route, Cloudflare automatically serves from the \`ASSETS\` binding.
+    - If no static asset matches either, \`not_found_handling: "single-page-application"\` serves index.html.
+    - This means: Worker handles API routes only. Everything else falls through to static assets automatically.
 
 </AVOID COMMON PITFALLS>`,
     COMMON_DEP_DOCUMENTATION: `<COMMON DEPENDENCY DOCUMENTATION>
