@@ -294,10 +294,11 @@ body {
                 'hono': '^4.11.0'
             },
             devDependencies: {
-                '@cloudflare/vite-plugin': '^1.17.1',
+                '@cloudflare/vite-plugin': '^1.0.12',
+                '@vitejs/plugin-react': '^4.5.0',
                 '@cloudflare/workers-types': '^4.20251213.0',
-                'vite': 'npm:rolldown-vite@latest',
-                'wrangler': '^4.50.0'
+                'vite': '^6.3.0',
+                'wrangler': '^4.14.0'
             }
         }, null, 2),
         'vite.config.ts': `
