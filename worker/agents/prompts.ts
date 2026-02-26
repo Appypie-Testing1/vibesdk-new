@@ -443,7 +443,7 @@ COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
 
     21. **NO serveStatic in Worker Entry Point:**
     - NEVER import or use \`serveStatic\` from \`hono/cloudflare-workers\`.
-    - Static assets are served automatically by Cloudflare via the \`ASSETS\` binding and \`not_found_handling: "single-page-application"\` in wrangler.jsonc.
+    - Static assets are served automatically via the \`ASSETS\` binding and \`not_found_handling: "single-page-application"\` in wrangler.jsonc.
     - Adding \`serveStatic\` causes "Can not add a route since the matcher is already built" errors on deployed apps.
     \`\`\`tsx
     // BAD - causes deployment crashes:
@@ -526,7 +526,7 @@ COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
 
     27. **MANDATORY: Use In-Memory Data Stores (No D1/KV Unless Configured):**
     - This project does NOT have D1 database or KV namespace bindings by default.
-    - NEVER reference \`c.env.DB\`, \`c.env.KV\`, or any other Cloudflare binding unless it is explicitly defined in wrangler.jsonc.
+    - NEVER reference \`c.env.DB\`, \`c.env.KV\`, or any other platform binding unless it is explicitly defined in wrangler.jsonc.
     - For all data needs, use **in-memory JavaScript data structures** (arrays, Maps, objects).
     - Data stored in memory resets on worker restart — this is expected and acceptable for preview/development.
     - Seed the in-memory store with realistic sample data so the app works immediately on first load.
@@ -964,9 +964,9 @@ export const STRATEGIES = {
 
     **No need to add accessibility features. Focus on delivering an actually working, feature-wise polished and complete application in as few phases as possible.**
     **Always stick to existing project/template patterns. Respect and work with existing worker bindings rather than making custom ones**
-    **Rely on open source tools and free tier services only apart from whats configured in the environment. Refer to template usage instructions to know if specific cloudflare services are also available for use.**
+    **Rely on open source tools and free tier services only apart from whats configured in the environment. Refer to template usage instructions to know if specific platform services are also available for use.**
     **Make sure to implement all the features and functionality requested by the user. Stick to the blueprint's implementation roadmap and end at the conclusion of the final phase. There should be no compromises**
-    **This is a Cloudflare Workers & Durable Objects project. The environment is preconfigured. Absolutely DO NOT Propose changes to wrangler.toml or any other config files. These config files are hidden from you but they do exist.**
+    **This is an Appy Pie serverless project. The environment is preconfigured. Absolutely DO NOT Propose changes to wrangler.toml or any other config files. These config files are hidden from you but they do exist.**
     **The Homepage of the frontend is a dummy page. It should be rewritten as the primary page of the application in the initial phase.**
     **Refrain from editing any of the 'dont touch' files in the project, e.g - package.json, vite.config.ts, wrangler.jsonc, etc.**
 </PHASES GENERATION STRATEGY>`, 

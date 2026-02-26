@@ -116,7 +116,7 @@ To build a valid, previewable and deployable project, it is essential to follow 
 
 Failure to have a compatible package.json would result in the app un-previewable and un-deployable.
 
-2. The project **MUST** be a valid Cloudflare worker/durable object + Vite + bun project. 
+2. The project **MUST** be a valid Appy Pie worker + Vite + bun project. 
 
 3. It must have a valid wrangler.jsonc and a vite.config.ts file.
 
@@ -365,7 +365,7 @@ This application was generated with enhanced scaffolding including:
 
 - ✅ **API Endpoints**: Health check and data endpoints
 - ✅ **Modern UI**: React with Tailwind CSS
-- ✅ **Cloudflare Ready**: Optimized for Workers deployment
+- ✅ **Deployment Ready**: Optimized for serverless deployment
 - ✅ **TypeScript**: Full type safety
 
 ## Development

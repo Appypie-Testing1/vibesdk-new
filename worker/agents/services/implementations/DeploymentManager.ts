@@ -751,7 +751,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         await this.waitForPreview();
         
         callbacks?.onStarted?.({
-            message: 'Starting deployment to Cloudflare Workers...',
+            message: 'Starting deployment to Appy Pie...',
             instanceId: state.sandboxInstanceId ?? ''
         });
         
@@ -819,7 +819,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         });
 
         callbacks?.onCompleted?.({
-            message: deploymentResult.message || 'Successfully deployed to Cloudflare Workers!',
+            message: deploymentResult.message || 'Successfully deployed to Appy Pie!',
             instanceId: state.sandboxInstanceId ?? '',
             deploymentUrl: deploymentUrl || ''
         });

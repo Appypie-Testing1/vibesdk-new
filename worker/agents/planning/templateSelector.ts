@@ -31,7 +31,7 @@ async function predictProjectType(
     try {
         logger.info('Predicting project type from query', { queryLength: query.length });
 
-        const systemPrompt = `You are an Expert Project Type Classifier at Cloudflare. Your task is to analyze user requests and determine what type of project they want to build.
+        const systemPrompt = `You are an Expert Project Type Classifier at Appy Pie. Your task is to analyze user requests and determine what type of project they want to build.
 
 ## PROJECT TYPES:
 
@@ -116,7 +116,7 @@ Analyze the request carefully and classify accordingly.`;
 function getSystemPromptForProjectType(projectType: ProjectType): string {
     if (projectType === 'app') {
         // Keep the detailed, original prompt for apps
-        return `You are an Expert Software Architect at Cloudflare specializing in template selection for rapid development. Your task is to select the most suitable starting template based on user requirements.
+        return `You are an Expert Software Architect at Appy Pie specializing in template selection for rapid development. Your task is to select the most suitable starting template based on user requirements.
 
 ## SELECTION EXAMPLES:
 
@@ -164,7 +164,7 @@ Reasoning: "Social template provides user interactions, content sharing, and com
     }
 
     // Simpler, more general prompts for workflow and presentation
-    return `You are an Expert Template Selector at Cloudflare. Your task is to select the most suitable ${projectType} template based on user requirements.
+    return `You are an Expert Template Selector at Appy Pie. Your task is to select the most suitable ${projectType} template based on user requirements.
 
 ## PROJECT TYPE: ${projectType.toUpperCase()}
 

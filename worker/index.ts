@@ -153,7 +153,7 @@ const worker = {
 		// 1. Critical configuration check: Ensure custom domain is set.
         const previewDomain = getPreviewDomain(env);
 		if (!previewDomain || previewDomain.trim() === '') {
-			logger.error('FATAL: env.CUSTOM_DOMAIN is not configured in wrangler.toml or the Cloudflare dashboard.');
+			logger.error('FATAL: env.CUSTOM_DOMAIN is not configured in wrangler.toml or the dashboard.');
 			return new Response('Server configuration error: Application domain is not set.', { status: 500 });
 		}
 
