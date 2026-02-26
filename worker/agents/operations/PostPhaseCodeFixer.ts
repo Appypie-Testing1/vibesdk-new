@@ -15,7 +15,7 @@ export interface FastCodeFixerInputs {
     allPhases?: PhaseConceptType[];
 }
 
-const SYSTEM_PROMPT = `You are a Senior Software Engineer at Cloudflare's Incident Response Team specializing in rapid bug fixes. Your task is to analyze identified code issues and generate complete fixed files using the SCOF format.`
+const SYSTEM_PROMPT = `You are a Senior Software Engineer at Appy Pie's Incident Response Team specializing in rapid bug fixes. Your task is to analyze identified code issues and generate complete fixed files using the SCOF format.`
 const USER_PROMPT = `
 ================================
 Here is the codebase of the project:

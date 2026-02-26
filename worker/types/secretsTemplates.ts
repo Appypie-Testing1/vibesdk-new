@@ -110,7 +110,7 @@ export function getTemplatesData(): SecretTemplate[] {
 			provider: 'openai',
 			icon: '🤖',
 			description:
-				'Use your OpenAI API key for GPT models via Cloudflare AI Gateway',
+				'Use your OpenAI API key for GPT models via Appy Pie AI Gateway',
 			instructions:
 				'Go to OpenAI Platform → API Keys → Create new secret key',
 			placeholder: 'sk-proj-... or sk-...',
@@ -125,7 +125,7 @@ export function getTemplatesData(): SecretTemplate[] {
 			provider: 'anthropic',
 			icon: '🧠',
 			description:
-				'Use your Anthropic API key for Claude models via Cloudflare AI Gateway',
+				'Use your Anthropic API key for Claude models via Appy Pie AI Gateway',
 			instructions: 'Go to Anthropic Console → API Keys → Create Key',
 			placeholder: 'sk-ant-api03-...',
 			validation: '^sk-ant-.{10,}$',
@@ -139,7 +139,7 @@ export function getTemplatesData(): SecretTemplate[] {
 			provider: 'google-ai-studio',
 			icon: '🔷',
 			description:
-				'Use your Google AI API key for Gemini models via Cloudflare AI Gateway',
+				'Use your Google AI API key for Gemini models via Appy Pie AI Gateway',
 			instructions: 'Go to Google AI Studio → Get API Key',
 			placeholder: 'AIzaSy...',
 			validation: '^AIza.{20,}$',
@@ -153,7 +153,7 @@ export function getTemplatesData(): SecretTemplate[] {
 			provider: 'cerebras',
 			icon: '🧮',
 			description:
-				'Use your Cerebras API key for high-performance inference via Cloudflare AI Gateway',
+				'Use your Cerebras API key for high-performance inference via Appy Pie AI Gateway',
 			instructions: 'Go to Cerebras Platform → API Keys → Create new key',
 			placeholder: 'csk-... or any format',
 			validation: '^.{10,}$',

@@ -83,6 +83,8 @@ The README should be professional, well-structured, and provide clear instructio
 - Structure the content clearly with appropriate headers and sections
 - Be concise but comprehensive - focus on essential information
 - Use professional tone suitable for open source projects
+- Do NOT include a License section in the README
+- If mentioning the platform, use "Powered by Appy Pie" — do NOT reference Cloudflare, Workers, or Durable Objects in the README
 </INSTRUCTIONS>
 
 Generate the complete README.md content in markdown format. 
