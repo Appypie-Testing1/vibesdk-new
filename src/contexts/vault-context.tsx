@@ -228,14 +228,19 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
 				}));
 			}
 		} catch (error) {
-			console.error('Failed to fetch vault status:', error);
+			// Vault API may not be deployed yet — treat non-JSON responses (route not found)
+			// or network errors as "not_setup" to avoid noisy console errors.
+			const isRouteNotFound = error instanceof Error && (
+				error.message.includes('is not valid JSON') ||
+				error.message.includes('Expected JSON but received')
+			);
 			setState((prev) => ({
 				...prev,
-				status: 'unknown',
+				status: 'not_setup',
 				config: null,
 				unlockMethod: null,
 				isLoading: false,
-				error: 'Failed to check vault status',
+				error: isRouteNotFound ? null : 'Failed to check vault status',
 			}));
 		}
 	}, [isAuthenticated, setLoading]);

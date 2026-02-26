@@ -339,12 +339,23 @@ class ApiClient {
 
 		try {
 			const response = await fetch(url, config);
-			
+
 			// For streaming responses, skip JSON parsing if response is ok
 			if (options.skipJsonParsing && response.ok) {
 				return { response, data: null };
 			}
-			
+
+			// Guard against non-JSON responses (e.g. SPA HTML from not-found handler)
+			const contentType = response.headers.get('content-type') || '';
+			if (!contentType.includes('application/json')) {
+				throw new ApiError(
+					response.status,
+					'Invalid Response',
+					`Expected JSON but received ${contentType || 'unknown content type'}`,
+					endpoint,
+				);
+			}
+
 			const data = await response.json() as ApiResponse<T>;
 
 			if (!response.ok) {
@@ -373,8 +384,6 @@ class ApiClient {
                             }
                             break;
                         case SecurityErrorType.RATE_LIMITED:
-                            // Handle rate limiting
-                            console.log('Rate limited', errorData);
                             throw RateLimitExceededError.fromRateLimitError(errorData as unknown as RateLimitError);
                         default:
                             // Security error

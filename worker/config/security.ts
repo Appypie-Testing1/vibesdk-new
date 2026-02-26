@@ -153,13 +153,13 @@ export function getSecureHeadersConfig(env: Env): SecureHeadersConfig {
     const isDevelopment = isDev(env);
     
     return {
-        // Content Security Policy - strict by default
+        // Content Security Policy
         contentSecurityPolicy: {
             defaultSrc: ["'self'"],
             scriptSrc: [
                 "'self'",
-                // Allow inline scripts with nonce (Hono will add nonce automatically)
-                "'strict-dynamic'",
+                "'unsafe-inline'", // Required for Monaco editor inline scripts
+                "blob:", // Required for Monaco editor web workers loaded as scripts
                 // Development only - for hot reload
                 ...(isDevelopment ? ["'unsafe-eval'"] : [])
             ],
@@ -187,16 +187,23 @@ export function getSecureHeadersConfig(env: Env): SecureHeadersConfig {
                 "ws://localhost:*",
                 "wss://localhost:*",
                 `wss://${env.CUSTOM_DOMAIN || '*'}`,
+                // Sandbox preview connections (API calls from preview iframes)
+                `https://*.${env.CUSTOM_DOMAIN || 'localhost'}`,
                 // API endpoints
                 "https://api.github.com",
                 "https://api.cloudflare.com"
             ],
-            frameSrc: ["'none'"],
+            // Allow sandbox preview iframes
+            frameSrc: [
+                "'self'",
+                `https://*.${env.CUSTOM_DOMAIN || 'localhost'}`,
+                ...(isDevelopment ? ["http://localhost:*"] : [])
+            ],
             objectSrc: ["'none'"],
             mediaSrc: ["'self'"],
             workerSrc: ["'self'", "blob:"],
             formAction: ["'self'"],
-            frameAncestors: ["'none'"],
+            frameAncestors: ["'self'"],
             baseUri: ["'self'"],
             manifestSrc: ["'self'"],
             upgradeInsecureRequests: !isDevelopment ? [] : undefined
@@ -207,8 +214,8 @@ export function getSecureHeadersConfig(env: Env): SecureHeadersConfig {
             ? undefined // Don't set in development
             : 'max-age=31536000; includeSubDomains; preload',
         
-        // X-Frame-Options - Prevent clickjacking
-        xFrameOptions: 'DENY',
+        // X-Frame-Options - Allow same-origin framing (for preview iframes)
+        xFrameOptions: 'SAMEORIGIN',
         
         // X-Content-Type-Options - Prevent MIME sniffing
         xContentTypeOptions: 'nosniff',
@@ -220,9 +227,11 @@ export function getSecureHeadersConfig(env: Env): SecureHeadersConfig {
         referrerPolicy: 'strict-origin-when-cross-origin',
         
         // Cross-Origin policies
-        crossOriginEmbedderPolicy: 'require-corp',
-        crossOriginResourcePolicy: 'same-origin',
-        crossOriginOpenerPolicy: 'same-origin',
+        // Using credentialless instead of require-corp to allow cross-origin
+        // sandbox preview iframes while still providing isolation
+        crossOriginEmbedderPolicy: isDevelopment ? false : 'credentialless',
+        crossOriginResourcePolicy: 'cross-origin',
+        crossOriginOpenerPolicy: 'same-origin-allow-popups',
         
         // Origin Agent Cluster
         originAgentCluster: '?1',
