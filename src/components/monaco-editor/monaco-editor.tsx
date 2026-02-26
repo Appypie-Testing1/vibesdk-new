@@ -35,6 +35,21 @@ self.MonacoEnvironment = {
 	},
 };
 
+// Eagerly disable expensive TS diagnostics at module level to prevent
+// TypeScript worker errors (getSuggestionDiagnostics) before any editor mounts.
+// Individual editor instances can re-enable features as needed via the effect below.
+{
+	const tsDefaults = monaco.languages.typescript.typescriptDefaults;
+	const jsDefaults = monaco.languages.typescript.javascriptDefaults;
+	const sharedDiagnostics = {
+		noSemanticValidation: true,
+		noSyntaxValidation: true,
+		noSuggestionDiagnostics: true,
+	};
+	tsDefaults.setDiagnosticsOptions(sharedDiagnostics);
+	jsDefaults.setDiagnosticsOptions(sharedDiagnostics);
+}
+
 // From GitHub Dark theme
 monaco.editor.defineTheme('vibesdk-dark', {
 	base: 'vs-dark',
@@ -151,10 +166,13 @@ export const MonacoEditor = memo<MonacoEditorProps>(function MonacoEditor({
 		const jsDefaults = monaco.languages.typescript.javascriptDefaults;
 
 		if (shouldEnableTypeScript) {
-			// Enable full IntelliSense for editing
+			// Enable syntax/semantic validation for editing, but keep suggestion
+			// diagnostics off — the editor doesn't have node_modules type info so
+			// getSuggestionDiagnostics always throws for external imports.
 			tsDefaults.setDiagnosticsOptions({
 				noSemanticValidation: false,
 				noSyntaxValidation: false,
+				noSuggestionDiagnostics: true,
 			});
 			tsDefaults.setCompilerOptions({
 				jsx: monaco.languages.typescript.JsxEmit.React,
@@ -166,6 +184,11 @@ export const MonacoEditor = memo<MonacoEditorProps>(function MonacoEditor({
 				target: monaco.languages.typescript.ScriptTarget.ESNext,
 				jsxFactory: 'React.createElement',
 				jsxFragmentFactory: 'React.Fragment',
+			});
+			jsDefaults.setDiagnosticsOptions({
+				noSemanticValidation: false,
+				noSyntaxValidation: false,
+				noSuggestionDiagnostics: true,
 			});
 			jsDefaults.setCompilerOptions({
 				allowJs: true,
@@ -179,11 +202,14 @@ export const MonacoEditor = memo<MonacoEditorProps>(function MonacoEditor({
 				jsxFragmentFactory: 'React.Fragment',
 			});
 		} else {
-			// Disable expensive features for viewing
-			tsDefaults.setDiagnosticsOptions({
+			// Disable all expensive features for read-only viewing
+			const disabledDiagnostics = {
 				noSemanticValidation: true,
 				noSyntaxValidation: true,
-			});
+				noSuggestionDiagnostics: true,
+			};
+			tsDefaults.setDiagnosticsOptions(disabledDiagnostics);
+			jsDefaults.setDiagnosticsOptions(disabledDiagnostics);
 			tsDefaults.setCompilerOptions({
 				jsx: monaco.languages.typescript.JsxEmit.React,
 				target: monaco.languages.typescript.ScriptTarget.ESNext,

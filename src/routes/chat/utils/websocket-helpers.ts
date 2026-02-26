@@ -16,7 +16,7 @@ export function sendWebSocketMessage(
     data?: Record<string, unknown>
 ): boolean {
     if (!isWebSocketReady(websocket)) {
-        console.warn(`WebSocket not ready for message type: ${type}`);
+
         return false;
     }
     
