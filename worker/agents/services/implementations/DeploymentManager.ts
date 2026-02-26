@@ -607,9 +607,11 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
     }
 
     /**
-     * Sanitize worker entry point to remove patterns that break Hono's router on deployed apps.
-     * Removes: serveStatic imports/usage, wildcard SPA fallback routes.
-     * These are handled by wrangler.jsonc asset config (not_found_handling + ASSETS binding).
+     * Sanitize worker entry point to remove patterns that break Hono's router on deployed apps
+     * and inject safety measures for common runtime issues.
+     *
+     * 1. Removes: serveStatic imports/usage, wildcard SPA fallback routes.
+     * 2. Injects: global error handler (app.onError) if missing.
      */
     private static sanitizeWorkerEntryPoint(contents: string): string {
         let result = contents;
@@ -622,6 +624,16 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
 
         // Remove wildcard SPA fallback: app.get('*', ...) that references ASSETS or index.html
         result = result.replace(/^\s*app\.get\(\s*['"][*]['"][\s\S]*?(?:ASSETS|index\.html)[\s\S]*?\}\s*\)\s*;?\s*$/gm, '');
+
+        // Inject global error handler if missing — prevents unhandled exceptions from
+        // returning opaque 500s with no JSON body
+        if (!result.includes('.onError(') && !result.includes('.onError (')) {
+            const honoInitMatch = result.match(/^(.*new Hono\b[^)]*\)\s*;?\s*)$/m);
+            if (honoInitMatch) {
+                const errorHandler = `\n// Global error handler (auto-injected safety net)\napp.onError((err, c) => {\n  console.error('Unhandled route error:', err.message);\n  return c.json({ error: err.message || 'Internal Server Error' }, 500);\n});\n`;
+                result = result.replace(honoInitMatch[0], honoInitMatch[0] + errorHandler);
+            }
+        }
 
         return result;
     }

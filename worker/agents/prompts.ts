@@ -102,6 +102,11 @@ and provide a preview url for the application.
 - Static assets and SPA fallback are handled automatically by wrangler.jsonc asset configuration.
 - The wrangler.jsonc MUST include: \`"assets": { "directory": "dist", "not_found_handling": "single-page-application", "run_worker_first": true, "binding": "ASSETS" }\`
 - The worker handles /api/* routes. All other requests automatically fall through to static assets.
+- MUST include \`app.onError()\` global error handler.
+- MUST wrap every route handler in try-catch.
+- MUST use in-memory data stores (arrays/objects) — D1/KV are NOT available.
+- MUST include seed/sample data so the app works immediately after deployment.
+- NEVER reference c.env.DB, c.env.KV, or any undefined Cloudflare binding.
 
 </START_FROM_SCRATCH>`;
         }
@@ -479,6 +484,70 @@ COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
     - If the worker does NOT match a route, Cloudflare automatically serves from the \`ASSETS\` binding.
     - If no static asset matches either, \`not_found_handling: "single-page-application"\` serves index.html.
     - This means: Worker handles API routes only. Everything else falls through to static assets automatically.
+
+    25. **MANDATORY: Global Error Handler in Worker Entry:**
+    - The worker entry (src/index.ts) MUST include \`app.onError()\` to catch unhandled exceptions.
+    - Without this, any uncaught error in a route handler returns a raw 500 with no useful information.
+    \`\`\`tsx
+    const app = new Hono();
+    app.onError((err, c) => {
+      console.error('Unhandled error:', err.message);
+      return c.json({ error: err.message || 'Internal Server Error' }, 500);
+    });
+    \`\`\`
+
+    26. **MANDATORY: Try-Catch in ALL API Route Handlers:**
+    - Every API route handler MUST wrap its logic in try-catch.
+    - Return proper JSON error responses, never let exceptions propagate unhandled.
+    \`\`\`tsx
+    // CORRECT:
+    app.get('/api/products', async (c) => {
+      try {
+        const products = getProducts();
+        return c.json({ products });
+      } catch (err) {
+        return c.json({ error: 'Failed to fetch products' }, 500);
+      }
+    });
+
+    // WRONG - unhandled exception becomes opaque 500:
+    app.get('/api/products', async (c) => {
+      const products = getProducts(); // if this throws, user sees broken app
+      return c.json({ products });
+    });
+    \`\`\`
+
+    27. **MANDATORY: Use In-Memory Data Stores (No D1/KV Unless Configured):**
+    - This project does NOT have D1 database or KV namespace bindings by default.
+    - NEVER reference \`c.env.DB\`, \`c.env.KV\`, or any other Cloudflare binding unless it is explicitly defined in wrangler.jsonc.
+    - For all data needs, use **in-memory JavaScript data structures** (arrays, Maps, objects).
+    - Data stored in memory resets on worker restart — this is expected and acceptable for preview/development.
+    - Seed the in-memory store with realistic sample data so the app works immediately on first load.
+    \`\`\`tsx
+    // CORRECT - in-memory data store with seed data:
+    const products = [
+      { id: '1', name: 'Product A', price: 29.99, featured: true },
+      { id: '2', name: 'Product B', price: 49.99, featured: false },
+    ];
+    app.get('/api/products', (c) => {
+      const featured = c.req.query('featured');
+      const filtered = featured === 'true' ? products.filter(p => p.featured) : products;
+      return c.json({ products: filtered });
+    });
+
+    // WRONG - D1 is NOT configured, this WILL crash with 500:
+    app.get('/api/products', async (c) => {
+      const db = c.env.DB; // undefined! No D1 binding in wrangler.jsonc
+      const results = await db.prepare('SELECT * FROM products').all(); // CRASH
+      return c.json(results);
+    });
+    \`\`\`
+
+    28. **MANDATORY: Seed Data for All API Routes:**
+    - Every API route that returns data MUST have seed/sample data available.
+    - The app MUST work immediately after deployment without any manual data setup.
+    - Users expect to see a working preview with realistic content, not empty states or errors.
+    - Create comprehensive seed data arrays at the top of src/index.ts (or in separate data files).
 
 </AVOID COMMON PITFALLS>`,
     COMMON_DEP_DOCUMENTATION: `<COMMON DEPENDENCY DOCUMENTATION>

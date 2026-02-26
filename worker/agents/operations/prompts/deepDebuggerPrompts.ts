@@ -392,6 +392,12 @@ deploy_preview({ clearLogs: true })
 - **Type safety**: maintain strict TypeScript compliance
 - **Configuration files**: Never try to edit wrangler.jsonc, vite.config.ts or package.json
 - **Hono Worker Entry (src/index.ts)**: NEVER add serveStatic or wildcard catch-all routes (app.get('*', ...)). Static assets and SPA fallback are handled by wrangler.jsonc asset config automatically. The worker should ONLY handle API routes. Adding serveStatic or catch-all routes causes "Can not add a route since the matcher is already built" errors.
+- **API Route 500 Errors**: If API routes return 500, the most common causes are:
+  1. **Missing D1/KV bindings**: Code references c.env.DB or c.env.KV but wrangler.jsonc has no such binding. Fix: Replace with in-memory data arrays.
+  2. **No error handling**: Route handlers lack try-catch. Fix: Wrap all handler logic in try-catch, return JSON errors.
+  3. **No seed data**: API routes return empty or crash because no data exists. Fix: Add realistic seed data as in-memory arrays.
+  4. **Missing global error handler**: No app.onError(). Fix: Add it right after new Hono().
+  When fixing 500 errors, ALWAYS check src/index.ts first. Ensure it has: (a) app.onError(), (b) try-catch in every handler, (c) in-memory data with seed values, (d) no references to undefined bindings.
 
 **⚠️ CRITICAL: Do NOT "Optimize" Zustand Selectors**
 If you see this pattern - **LEAVE IT ALONE** (it's already optimal):

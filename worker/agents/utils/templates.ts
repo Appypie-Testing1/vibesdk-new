@@ -138,7 +138,13 @@ import { cors } from 'hono/cors';
 
 const app = new Hono();
 
-// CORS middleware
+// Global error handler - catches unhandled exceptions in any route
+app.onError((err, c) => {
+  console.error('Unhandled error:', err.message);
+  return c.json({ error: err.message || 'Internal Server Error' }, 500);
+});
+
+// CORS middleware - scoped to API routes only
 app.use('/api/*', cors({
   origin: '*',
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -147,19 +153,42 @@ app.use('/api/*', cors({
 
 // Health check
 app.get('/health', (c) => {
-  return c.json({
-    status: 'ok',
-    timestamp: new Date().toISOString()
-  });
+  return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// API routes placeholder
+// -------------------------------------------------------------------
+// In-memory data store (use this pattern for API data)
+// This project does NOT have a D1 database configured.
+// Store data in memory. Data resets on worker restart, which is fine
+// for development and preview. For production persistence, the user
+// can ask to add D1 later.
+// -------------------------------------------------------------------
+const dataStore = {
+  items: [] as Array<{ id: string; name: string; createdAt: string }>,
+};
+
+// Example CRUD routes using in-memory store
 app.get('/api/data', (c) => {
-  return c.json({ message: 'API endpoint working' });
+  return c.json({ items: dataStore.items });
 });
 
-// Static assets and SPA fallback are handled by wrangler.jsonc asset config
-// (not_found_handling: "single-page-application" + ASSETS binding)
+app.post('/api/data', async (c) => {
+  try {
+    const body = await c.req.json();
+    const item = {
+      id: crypto.randomUUID(),
+      name: body.name || 'Untitled',
+      createdAt: new Date().toISOString(),
+    };
+    dataStore.items.push(item);
+    return c.json(item, 201);
+  } catch (err) {
+    return c.json({ error: 'Invalid request body' }, 400);
+  }
+});
+
+// Static assets and SPA fallback are handled by wrangler.jsonc asset config.
+// Do NOT add serveStatic or app.get('*', ...) — they are unnecessary and break routing.
 
 export default app;
 `,
