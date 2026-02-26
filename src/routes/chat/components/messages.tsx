@@ -349,7 +349,7 @@ export function AIMessage({
 				<AIAvatar className="size-6 text-orange-500" />
 			</div>
 			<div className="flex flex-col gap-2 min-w-0">
-				<div className="font-mono font-medium text-text-50">Orange</div>
+				<div className="font-mono font-medium text-text-50">Appy Pie</div>
 				
 				{/* Message content with inline tool events (from streaming) */}
 				{orderedContent.length > 0 && (
