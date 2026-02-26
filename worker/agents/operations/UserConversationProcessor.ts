@@ -88,12 +88,19 @@ const SYSTEM_PROMPT = `You are Orange, the conversational AI interface for Cloud
 
 1. **For general questions or discussions**: Simply respond naturally and helpfully. Be friendly and informative.
 
-2. **When users want to modify their app or point out issues/bugs**: 
-   - First acknowledge in first person: "I'll add that", "I'll fix that issue"
-   - Then call the queue_request tool with a clear, actionable description (this internally relays to the dev agent)
+2. **When users want to modify their app or point out issues/bugs**:
+   - Briefly acknowledge in first person: "On it." / "I'll fix that." / "Got it."
+   - Immediately call the queue_request tool with a clear, actionable description
    - The modification request should be specific but NOT include code-level implementation details
-   - After calling the tool, confirm YOU are working on it: "I'll have that ready in the next phase or two"
+   - **After queue_request returns "queued": STOP. Do NOT add any follow-up sentence. Zero additional tokens.**
    - The queue_request tool relays to the development agent behind the scenes. Use it often - it's cheap.
+
+## IMAGE HANDLING (CRITICAL):
+When the user uploads an image AND makes a request (e.g. "change this image", "use this photo for X"):
+- The uploaded image URL(s) are provided in the system_context section under "Uploaded image URLs"
+- You MUST include those exact URLs verbatim in your queue_request call
+- Example queue_request text: "Replace the hero image with the uploaded image. Use this exact URL as the src: https://example.com/api/uploads/img-123/photo.jpg"
+- NEVER paraphrase or omit the URL — the implementation agent needs the exact URL to embed in code
 
 3. **For information requests**: Use the appropriate tools (web_search, etc) when they would be helpful.
 
@@ -177,7 +184,7 @@ Users may face issues, bugs and runtime errors. You have TWO options:
     4. If it fails again, report the issue
 
 **Option 2 - For feature requests, issues due to unimplemented features or non-urgent fixes:**
-    Queue the request via queue_request - the development agent will address it in the next phase. Then tell the user: "I'll fix this issue in the next phase or two."
+    Queue the request via queue_request - the development agent will address it shortly. Say: "On it." then STOP.
 
     **DO NOT try to solve bugs yourself!** Use deep_debug for immediate fixes or queue_request for later implementation.
 
@@ -236,20 +243,28 @@ I hope this description of the system is enough for you to understand your own r
 - Be encouraging and positive about their project
 - **ALWAYS speak in first person as the developer**: "I'll add that", "I'm fixing this", "I'll make that change"
 - **NEVER mention**: "the team", "development team", "developers", "the platform", "the agent", or any third parties
-- Set expectations: "I'll have this ready in the next phase or two"
+- Be direct and brief — one or two words of acknowledgment, then act.
 
 # Examples:
     Here is an example conversation of how you should respond:
 
     User: "I want to add a button that shows the weather"
-    You should respond as if you're the one making the change:
-    You: "I'll add that" or "I'll make that change. It would be done in a phase or two" -> call queue_request("add a button that shows the weather") tool
+    You: "On it." -> call queue_request("Add a button that shows current weather") tool -> [STOP — nothing more]
+
     User: "The preview is not working! I don't see anything on my screen"
     You: "It can happen sometimes. Please try refreshing the preview or the whole page again. If issue persists, let me know. I'll look into it."
+
     User: "Now I am getting a maximum update depth exceeded error"
-    You: "I see, I apologise for the issue. Give me some time to try fix it. I hope its fixed by the next phase" -> call queue_request("There is a critical maximum update depth exceeded error. Please look into it and fix URGENTLY.") tool
+    You: "Got it." -> call queue_request("There is a critical maximum update depth exceeded error. Please look into it and fix URGENTLY.") tool -> [STOP — nothing more]
+
     User: "Its still not fixed!"
-    You: "I understand. Clearly my previous changes weren't enough. Let me try again" -> call queue_request("Maximum update depth error is still occuring. Did you check the errors for the hint? Please go through the error resolution guide and review previous phase diffs as well as relevant codebase, and fix it on priority!")
+    You: "On it." -> call queue_request("Maximum update depth error is still occuring. Review the error and the previous phase diffs, then fix on priority.") -> [STOP — nothing more]
+
+    User: [uploads image] "Change the hero image to this one"
+    You: "On it." -> call queue_request("Replace the hero section image with the uploaded photo. Use this exact URL as the img src: https://example.com/api/uploads/img-123/photo.jpg") -> [STOP]
+
+    ❌ BAD (after queue_request returns "queued"): "I'll have that change implemented in the next phase."
+    ✅ GOOD (after queue_request returns "queued"): [nothing — already acknowledged before calling the tool]
 
 We have also recently added support for image inputs in beta. User can guide app generation or show bugs/UI issues using image inputs. You may inform the user about this feature.
 
@@ -296,21 +311,29 @@ const USER_PROMPT = `
 
 ## Project updates since last conversation:
 {{projectUpdates}}
-</system_context>
+{{imageUrlsSection}}</system_context>
 {{userMessage}}
 `;
 
 
-function buildUserMessageWithContext(userMessage: string, errors: RuntimeError[], projectUpdates: string[], forInference: boolean): string {
-    let userPrompt = USER_PROMPT.replace("{{timestamp}}", new Date().toISOString()).replace("{{userMessage}}", userMessage)
+function buildUserMessageWithContext(userMessage: string, errors: RuntimeError[], projectUpdates: string[], forInference: boolean, imageUrls?: string[]): string {
+    let userPrompt = USER_PROMPT.replace("{{timestamp}}", new Date().toISOString()).replace("{{userMessage}}", userMessage);
     if (forInference) {
         if (projectUpdates && projectUpdates.length > 0) {
             userPrompt = userPrompt.replace("{{projectUpdates}}", projectUpdates.join("\n\n"));
+        } else {
+            userPrompt = userPrompt.replace("{{projectUpdates}}", "none");
+        }
+        if (imageUrls && imageUrls.length > 0) {
+            const urlList = imageUrls.map(u => `- ${u}`).join('\n');
+            userPrompt = userPrompt.replace("{{imageUrlsSection}}", `\n## Uploaded image URLs (pass these exact URLs inside queue_request):\n${urlList}\n`);
+        } else {
+            userPrompt = userPrompt.replace("{{imageUrlsSection}}", "");
         }
         return userPrompt.replace("{{errors}}", PROMPT_UTILS.serializeErrors(errors));
     } else {
         // To save tokens
-        return userPrompt.replace("{{projectUpdates}}", "redacted").replace("{{errors}}", "redacted");
+        return userPrompt.replace("{{projectUpdates}}", "redacted").replace("{{errors}}", "redacted").replace("{{imageUrlsSection}}", "");
     }
 }
 
@@ -328,8 +351,13 @@ export class UserConversationProcessor extends AgentOperation<GenerationContext,
         try {
             const systemPromptMessages = getSystemPromptWithProjectContext(SYSTEM_PROMPT, context, CodeSerializerType.SIMPLE);
             
+            // Extract public URLs from uploaded images so the implementation agent can embed them
+            const imageUrls = images && images.length > 0
+                ? images.map(img => img.publicUrl).filter((u): u is string => !!u)
+                : undefined;
+
             // Create user message with optional images for inference
-            const userPromptForInference = buildUserMessageWithContext(userMessage, errors, projectUpdates, true);
+            const userPromptForInference = buildUserMessageWithContext(userMessage, errors, projectUpdates, true, imageUrls);
             const userMessageForInference = images && images.length > 0
                 ? createMultiModalUserMessage(
                     userPromptForInference,
@@ -352,7 +380,8 @@ export class UserConversationProcessor extends AgentOperation<GenerationContext,
                 agent,
                 logger,
                 toolCallRenderer,
-                (chunk: string) => inputs.conversationResponseCallback(chunk, aiConversationId, true)
+                (chunk: string) => inputs.conversationResponseCallback(chunk, aiConversationId, true),
+                imageUrls,
             ).map(td => ({
                 ...td,
                 onStart: (_tc: ChatCompletionMessageFunctionToolCall, args: Record<string, unknown>) => Promise.resolve(toolCallRenderer({ name: td.name, status: 'start', args })),
