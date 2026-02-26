@@ -98,6 +98,8 @@ The project should support the following commands in package.json to run the app
 and provide a preview url for the application.
 
 **Worker Entry Point (src/index.ts) MUST follow this pattern:**
+- MUST use LinearRouter: \`import { LinearRouter } from 'hono/router/linear-router'; const app = new Hono({ router: new LinearRouter() });\`
+- The default SmartRouter FREEZES after the first request — LinearRouter is mandatory.
 - Use Hono for API routes only. Do NOT add serveStatic or wildcard catch-all routes.
 - Static assets and SPA fallback are handled automatically by wrangler.jsonc asset configuration.
 - The wrangler.jsonc MUST include: \`"assets": { "directory": "dist", "not_found_handling": "single-page-application", "run_worker_first": true, "binding": "ASSETS" }\`
@@ -467,12 +469,14 @@ COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
     - All route registration must happen at module scope (before any request is handled).
     - NEVER dynamically add routes inside request handlers or middleware.
     - Keep CORS middleware scoped to \`/api/*\`, not \`/*\`.
+    - MUST use LinearRouter instead of the default SmartRouter (see rule 29).
     \`\`\`tsx
     // CORRECT worker entry pattern:
     import { Hono } from 'hono';
+    import { LinearRouter } from 'hono/router/linear-router';
     import { cors } from 'hono/cors';
 
-    const app = new Hono();
+    const app = new Hono({ router: new LinearRouter() });
     app.use('/api/*', cors({ origin: '*' }));
     app.get('/api/health', (c) => c.json({ status: 'ok' }));
     // ... more API routes ...
@@ -489,7 +493,7 @@ COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
     - The worker entry (src/index.ts) MUST include \`app.onError()\` to catch unhandled exceptions.
     - Without this, any uncaught error in a route handler returns a raw 500 with no useful information.
     \`\`\`tsx
-    const app = new Hono();
+    const app = new Hono({ router: new LinearRouter() });
     app.onError((err, c) => {
       console.error('Unhandled error:', err.message);
       return c.json({ error: err.message || 'Internal Server Error' }, 500);
@@ -548,6 +552,20 @@ COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
     - The app MUST work immediately after deployment without any manual data setup.
     - Users expect to see a working preview with realistic content, not empty states or errors.
     - Create comprehensive seed data arrays at the top of src/index.ts (or in separate data files).
+
+    29. **MANDATORY: Use LinearRouter Instead of Default SmartRouter:**
+    - Hono's default SmartRouter FREEZES after the first request — any subsequent route addition throws "Can not add a route since the matcher is already built".
+    - This is a FATAL error that crashes the entire worker with no recovery.
+    - The fix is simple: use LinearRouter which NEVER freezes and can accept routes at any time.
+    - ALWAYS initialize Hono with LinearRouter:
+    \`\`\`tsx
+    import { Hono } from 'hono';
+    import { LinearRouter } from 'hono/router/linear-router';
+
+    const app = new Hono({ router: new LinearRouter() });
+    \`\`\`
+    - NEVER use \`new Hono()\` without specifying LinearRouter.
+    - This applies to ALL Hono instances, including sub-apps created with \`new Hono()\`.
 
 </AVOID COMMON PITFALLS>`,
     COMMON_DEP_DOCUMENTATION: `<COMMON DEPENDENCY DOCUMENTATION>

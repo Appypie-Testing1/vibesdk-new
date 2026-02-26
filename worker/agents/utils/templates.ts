@@ -134,9 +134,10 @@ export function createScratchTemplateDetails(): TemplateDetails {
     const enhancedFiles: Record<string, string> = {
         'src/index.ts': `
 import { Hono } from 'hono';
+import { LinearRouter } from 'hono/router/linear-router';
 import { cors } from 'hono/cors';
 
-const app = new Hono();
+const app = new Hono({ router: new LinearRouter() });
 
 // Global error handler - catches unhandled exceptions in any route
 app.onError((err, c) => {

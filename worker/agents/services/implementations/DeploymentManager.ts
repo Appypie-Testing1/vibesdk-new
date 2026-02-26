@@ -611,7 +611,8 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
      * and inject safety measures for common runtime issues.
      *
      * 1. Removes: serveStatic imports/usage, wildcard SPA fallback routes.
-     * 2. Injects: global error handler (app.onError) if missing.
+     * 2. Replaces: default Hono SmartRouter with LinearRouter (prevents "matcher already built" error).
+     * 3. Injects: global error handler (app.onError) if missing.
      */
     private static sanitizeWorkerEntryPoint(contents: string): string {
         let result = contents;
@@ -624,6 +625,41 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
 
         // Remove wildcard SPA fallback: app.get('*', ...) that references ASSETS or index.html
         result = result.replace(/^\s*app\.get\(\s*['"][*]['"][\s\S]*?(?:ASSETS|index\.html)[\s\S]*?\}\s*\)\s*;?\s*$/gm, '');
+
+        // Replace default Hono SmartRouter with LinearRouter.
+        // SmartRouter freezes after first match() call, causing "Can not add a route since
+        // the matcher is already built" when @cloudflare/vite-plugin triggers HMR re-evaluation.
+        // LinearRouter never freezes and can accept routes at any time.
+        if (!result.includes('LinearRouter')) {
+            // Add LinearRouter import if not present
+            const honoImportMatch = result.match(/^(import\s*\{[^}]*\}\s*from\s*['"]hono['"];?\s*)$/m);
+            if (honoImportMatch) {
+                result = result.replace(
+                    honoImportMatch[0],
+                    honoImportMatch[0] + "import { LinearRouter } from 'hono/router/linear-router';\n"
+                );
+            } else {
+                // Hono imported differently (e.g., import { Hono } from 'hono'), prepend LinearRouter import
+                const anyHonoImport = result.match(/^(import\s+.*from\s*['"]hono['"];?\s*)$/m);
+                if (anyHonoImport) {
+                    result = result.replace(
+                        anyHonoImport[0],
+                        anyHonoImport[0] + "import { LinearRouter } from 'hono/router/linear-router';\n"
+                    );
+                }
+            }
+
+            // Replace `new Hono()` or `new Hono<...>()` with LinearRouter version
+            result = result.replace(
+                /new\s+Hono\s*(<[^>]*>)?\s*\(\s*\)/g,
+                'new Hono$1({ router: new LinearRouter() })'
+            );
+            // Handle `new Hono({ ...existingOptions })` — inject router if not already there
+            result = result.replace(
+                /new\s+Hono\s*(<[^>]*>)?\s*\(\s*\{(?![\s\S]*router\s*:)([\s\S]*?)\}\s*\)/g,
+                'new Hono$1({ router: new LinearRouter(), $2})'
+            );
+        }
 
         // Inject global error handler if missing — prevents unhandled exceptions from
         // returning opaque 500s with no JSON body
