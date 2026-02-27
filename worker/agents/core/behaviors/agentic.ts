@@ -70,6 +70,9 @@ export class AgenticCodingBehavior extends BaseCodingBehavior<AgenticState> impl
         
         this.logger.info('Generated project name', { projectName });
         
+        const templateRenderMode = templateInfo?.templateDetails?.renderMode;
+        const templateInitCommand = templateInfo?.templateDetails?.initCommand;
+
         this.setState({
             ...this.state,
             projectName,
@@ -90,11 +93,31 @@ export class AgenticCodingBehavior extends BaseCodingBehavior<AgenticState> impl
             hostname,
             metadata: inferenceContext.metadata,
             projectType: this.projectType,
-            behaviorType: 'agentic'
+            behaviorType: 'agentic',
+            ...(templateRenderMode ? { templateRenderMode } : {}),
+            ...(templateInitCommand ? { templateInitCommand } : {}),
         });
-        
-        const isScratchTemplate = !templateInfo || templateInfo.templateDetails.name === 'scratch' || templateInfo.templateDetails.name === 'expo-scratch';
-        if (templateInfo && !isScratchTemplate) {
+
+        const isExpoScratch = templateInfo?.templateDetails?.name === 'expo-scratch';
+        const isScratchTemplate = !templateInfo || templateInfo.templateDetails.name === 'scratch' || isExpoScratch;
+
+        if (templateInfo && isExpoScratch) {
+            // Expo scratch: commit starter files so the LLM builds on top of them
+            const filesToSave = Object.entries(templateInfo.templateDetails.allFiles).map(([filePath, content]) => ({
+                filePath,
+                fileContents: content,
+                filePurpose: 'Expo starter template file'
+            }));
+
+            await this.fileManager.saveGeneratedFiles(
+                filesToSave,
+                'Initialize Expo project from scratch template',
+                true
+            );
+            this.logger.info('Committed expo-scratch template files to git', {
+                files: Object.keys(templateInfo.templateDetails.allFiles)
+            });
+        } else if (templateInfo && !isScratchTemplate) {
             // Customize template files (package.json, wrangler.jsonc, .bootstrap.js, .gitignore)
             const customizedFiles = customizeTemplateFiles(
                 templateInfo.templateDetails.allFiles,
@@ -103,24 +126,24 @@ export class AgenticCodingBehavior extends BaseCodingBehavior<AgenticState> impl
                     commandsHistory: [] // Empty initially, will be updated later
                 }
             );
-            
-            this.logger.info('Customized template files', { 
-                files: Object.keys(customizedFiles) 
+
+            this.logger.info('Customized template files', {
+                files: Object.keys(customizedFiles)
             });
-            
+
             // Save customized files to git
             const filesToSave = Object.entries(customizedFiles).map(([filePath, content]) => ({
                 filePath,
                 fileContents: content,
                 filePurpose: 'Project configuration file'
             }));
-            
+
             await this.fileManager.saveGeneratedFiles(
                 filesToSave,
                 'Initialize project configuration files',
                 true
             );
-            
+
             this.logger.info('Committed customized template files to git');
             this.deployToSandbox();
         }

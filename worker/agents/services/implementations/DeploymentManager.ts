@@ -689,8 +689,52 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
     }
 
     /**
+     * Fix orphaned closing braces before JSX closing tags in TSX/JSX files.
+     * LLMs sometimes generate a stray `}` on the line before or same line as `</tag>`,
+     * producing invalid JSX like:
+     *   {card.trend}
+     *   }</span>
+     * This tracks cumulative brace depth to only remove braces that have no matching opener.
+     */
+    private static sanitizeJsxBraces(content: string): string {
+        const lines = content.split('\n');
+        const result: string[] = [];
+        // Track net brace depth across all lines (only outside strings/templates)
+        let braceDepth = 0;
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+
+            // Check if this line is a stray `}` before a closing JSX tag
+            const strayBraceMatch = line.match(/^(\s*)}\s*(<\/\w[^>]*>.*)$/);
+            if (strayBraceMatch && braceDepth === 0) {
+                // braceDepth is 0 so there's no open `{` for this `}` to close -- remove it
+                result.push(strayBraceMatch[1] + strayBraceMatch[2]);
+                continue;
+            }
+
+            // Update brace depth: count `{` and `}` outside string literals
+            // Simple heuristic that avoids counting braces inside quotes
+            const stripped = line
+                .replace(/`[^`]*`/g, '')       // remove template literals (single-line)
+                .replace(/'[^']*'/g, '')        // remove single-quoted strings
+                .replace(/"[^"]*"/g, '')        // remove double-quoted strings
+                .replace(/\/\/.*$/g, '');       // remove line comments
+
+            const opens = (stripped.match(/\{/g) || []).length;
+            const closes = (stripped.match(/\}/g) || []).length;
+            braceDepth += opens - closes;
+            if (braceDepth < 0) braceDepth = 0; // clamp to avoid drift from multiline strings
+
+            result.push(line);
+        }
+
+        return result.join('\n');
+    }
+
+    /**
      * Apply worker entry point sanitization to a list of files.
-     * Processes Hono worker entry points and wrangler config.
+     * Processes Hono worker entry points, wrangler config, and JSX brace fixes.
      */
     private static sanitizeFiles<T extends { filePath: string; fileContents: string }>(files: T[], renderMode?: string): T[] {
         // Skip Vite/Hono sanitization entirely for mobile (Expo) projects
@@ -698,21 +742,35 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
             return files;
         }
         return files.map(file => {
+            let contents = file.fileContents;
+            let changed = false;
+
             // Sanitize Hono worker entry points
-            if (/^src\/index\.(ts|js)$/.test(file.filePath) && file.fileContents.includes('hono')) {
-                const sanitized = DeploymentManager.sanitizeWorkerEntryPoint(file.fileContents);
-                if (sanitized !== file.fileContents) {
-                    return { ...file, fileContents: sanitized };
+            if (/^src\/index\.(ts|js)$/.test(file.filePath) && contents.includes('hono')) {
+                const sanitized = DeploymentManager.sanitizeWorkerEntryPoint(contents);
+                if (sanitized !== contents) {
+                    contents = sanitized;
+                    changed = true;
                 }
             }
             // Sanitize wrangler config to use recommended run_worker_first pattern
-            if (/wrangler\.jsonc?$/.test(file.filePath) && file.fileContents.includes('run_worker_first')) {
-                const sanitized = DeploymentManager.sanitizeWranglerConfig(file.fileContents);
-                if (sanitized !== file.fileContents) {
-                    return { ...file, fileContents: sanitized };
+            if (/wrangler\.jsonc?$/.test(file.filePath) && contents.includes('run_worker_first')) {
+                const sanitized = DeploymentManager.sanitizeWranglerConfig(contents);
+                if (sanitized !== contents) {
+                    contents = sanitized;
+                    changed = true;
                 }
             }
-            return file;
+            // Fix orphaned JSX braces in TSX/JSX files
+            if (/\.(tsx|jsx)$/.test(file.filePath)) {
+                const sanitized = DeploymentManager.sanitizeJsxBraces(contents);
+                if (sanitized !== contents) {
+                    contents = sanitized;
+                    changed = true;
+                }
+            }
+
+            return changed ? { ...file, fileContents: contents } : file;
         });
     }
 

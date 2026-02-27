@@ -769,8 +769,8 @@ export default function Chat() {
 								/>
 							)}
 
-							{/* Deployment and Generation Controls - Only for phasic mode */}
-							{chatId && behaviorType !== 'agentic' && (
+							{/* Deployment and Generation Controls - phasic mode + agentic mobile */}
+							{chatId && (behaviorType !== 'agentic' || templateDetails?.renderMode === 'mobile') && (
 								<motion.div
 									ref={deploymentControlsRef}
 									initial={{ opacity: 0, y: 20 }}
