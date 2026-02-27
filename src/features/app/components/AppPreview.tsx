@@ -25,15 +25,16 @@ export const AppPreview = forwardRef<HTMLIFrameElement, PreviewComponentProps>(
 	) => {
 		// Mobile (Expo) projects: show QR code instead of iframe
 		if (templateDetails?.renderMode === 'mobile' && previewUrl) {
-			// Derive expo deep link from preview URL
+			// Derive expo deep link: exps:// for HTTPS, exp:// for HTTP
 			let expoDeepLink: string;
 			try {
 				const url = new URL(previewUrl);
-				expoDeepLink = `exp://${url.hostname}:80`;
+				const scheme = url.protocol === 'https:' ? 'exps' : 'exp';
+				expoDeepLink = `${scheme}://${url.host}`;
 			} catch {
 				expoDeepLink = previewUrl;
 			}
-			return <ExpoQRPreview expoDeepLink={expoDeepLink} className={className} />;
+			return <ExpoQRPreview expoDeepLink={expoDeepLink} previewUrl={previewUrl} className={className} />;
 		}
 
 		if (!previewUrl) {

@@ -510,7 +510,7 @@ const styles = StyleSheet.create({
             version: '1.0.0',
             main: 'expo-router/entry',
             scripts: {
-                dev: 'npx expo start --port ${PORT:-8001}',
+                dev: 'npx expo start --port ${PORT:-8001} --host 0.0.0.0',
                 build: 'npx expo export',
                 lint: 'npx eslint . --ext .ts,.tsx',
             },
@@ -558,7 +558,7 @@ const styles = StyleSheet.create({
         deps: { 'expo': '~52.0.0', 'react-native': '0.76.6' },
         projectType: 'app',
         renderMode: 'mobile',
-        initCommand: 'npx expo start --port ${PORT:-8001}',
+        initCommand: 'npx expo start --port ${PORT:-8001} --host 0.0.0.0',
         frameworks: ['react-native', 'expo', 'expo-router'],
         importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'package.json', 'app.json'],
         dontTouchFiles: ['app.json'],

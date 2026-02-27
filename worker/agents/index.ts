@@ -92,12 +92,29 @@ export async function getTemplateForQuery(
         } as TemplateSelection; // satisfies schema shape
         return { templateDetails: scratch, selection, projectType: 'general' };
     }
+    // Check for mobile/native app requests FIRST -- before LLM template selection
+    // This ensures mobile queries always get the Expo template, not a web template
+    const mobileKeywords = /\b(mobile\s*app|ios\s*app|android\s*app|react\s*native|expo|phone\s*app|native\s*app|iphone|smartphone|mobile\s*application)\b/i;
+    if (mobileKeywords.test(query)) {
+        logger.info('Mobile app detected from query keywords; using expo-scratch template');
+        const expoScratch: TemplateDetails = createExpoScratchTemplateDetails();
+        const selection: TemplateSelection = {
+            selectedTemplateName: 'expo-scratch',
+            reasoning: 'Mobile app request detected - using Expo/React Native template',
+            useCase: 'Other',
+            complexity: 'moderate',
+            styleSelection: 'Custom',
+            projectType: 'app',
+        } as TemplateSelection;
+        return { templateDetails: expoScratch, selection, projectType: 'app' };
+    }
+
     // Fetch available templates
     const templatesResponse = await SandboxSdkClient.listTemplates();
     if (!templatesResponse || !templatesResponse.success) {
         throw new Error(`Failed to fetch templates from sandbox service, ${templatesResponse.error}`);
     }
-        
+
     const analyzeQueryResponse = await selectTemplate({
         env,
         inferenceContext,
@@ -106,24 +123,16 @@ export async function getTemplateForQuery(
         availableTemplates: templatesResponse.templates,
         images,
     });
-    
-    logger.info('Selected template', { selectedTemplate: analyzeQueryResponse });
-            
-    if (!analyzeQueryResponse.selectedTemplateName) {
-        // Check if the query is asking for a mobile/native app
-        const mobileKeywords = /\b(mobile\s*app|ios\s*app|android\s*app|react\s*native|expo|phone\s*app|native\s*app|iphone|smartphone)\b/i;
-        if (mobileKeywords.test(query)) {
-            logger.info('No template found but query looks mobile; falling back to expo-scratch');
-            const expoScratch: TemplateDetails = createExpoScratchTemplateDetails();
-            return { templateDetails: expoScratch, selection: analyzeQueryResponse, projectType: analyzeQueryResponse.projectType };
-        }
 
+    logger.info('Selected template', { selectedTemplate: analyzeQueryResponse });
+
+    if (!analyzeQueryResponse.selectedTemplateName) {
         // For non-general requests when no template is selected, fall back to web scratch
         logger.warn('No suitable template found; falling back to scratch');
         const scratch: TemplateDetails = createScratchTemplateDetails();
         return { templateDetails: scratch, selection: analyzeQueryResponse, projectType: analyzeQueryResponse.projectType };
     }
-            
+
     const selectedTemplate = templatesResponse.templates.find(template => template.name === analyzeQueryResponse.selectedTemplateName);
     if (!selectedTemplate) {
         logger.error('Selected template not found');
@@ -134,7 +143,7 @@ export async function getTemplateForQuery(
         logger.error('Failed to fetch files', { templateDetailsResponse });
         throw new Error('Failed to fetch files');
     }
-            
+
     const templateDetails = templateDetailsResponse.templateDetails;
     return { templateDetails, selection: analyzeQueryResponse, projectType: analyzeQueryResponse.projectType };
 }

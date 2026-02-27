@@ -226,7 +226,8 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         if (templateDetails.renderMode === 'mobile' && previewUrl) {
                             try {
                                 const parsedUrl = new URL(previewUrl);
-                                setExpoDeepLink(`exp://${parsedUrl.hostname}:80`);
+                                const scheme = parsedUrl.protocol === 'https:' ? 'exps' : 'exp';
+                                setExpoDeepLink(`${scheme}://${parsedUrl.host}`);
                             } catch {
                                 // Ignore invalid preview URLs
                             }

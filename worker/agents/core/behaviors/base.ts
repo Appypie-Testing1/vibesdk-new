@@ -1141,11 +1141,14 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         }
 
         // Compute expo deep link transformer for mobile templates
+        // Uses exps:// for HTTPS sandbox URLs, exp:// for HTTP
         const computeExpoDeepLink = this.state.templateRenderMode === 'mobile'
             ? (previewURL: string): string | undefined => {
                 try {
                     const url = new URL(previewURL);
-                    return `exp://${url.hostname}:80`;
+                    const isSecure = url.protocol === 'https:';
+                    const scheme = isSecure ? 'exps' : 'exp';
+                    return `${scheme}://${url.host}`;
                 } catch {
                     return undefined;
                 }
