@@ -437,6 +437,8 @@ To build a valid, previewable Expo/React Native project, follow these rules:
 4. Do NOT include wrangler.jsonc or Cloudflare-specific files -- this is a React Native project.
 
 5. All UI must use React Native components (View, Text, TouchableOpacity, etc.), NOT HTML elements.
+
+6. These packages are already installed: expo, expo-router, expo-constants, expo-font, expo-linking, expo-splash-screen, expo-status-bar, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens. Do NOT add them again with exec_commands.
 `;
 
 /**
@@ -516,16 +518,25 @@ const styles = StyleSheet.create({
             },
             dependencies: {
                 'expo': '~52.0.0',
+                'expo-constants': '~17.0.0',
+                'expo-font': '~13.0.0',
+                'expo-linking': '~7.0.0',
                 'expo-router': '~4.0.0',
+                'expo-splash-screen': '~0.29.0',
                 'expo-status-bar': '~2.0.0',
+                'expo-system-ui': '~4.0.0',
                 'react': '^18.3.1',
                 'react-native': '0.76.6',
+                'react-native-gesture-handler': '~2.20.0',
+                'react-native-reanimated': '~3.16.0',
                 'react-native-safe-area-context': '~5.0.0',
                 'react-native-screens': '~4.4.0',
+                'react-native-web': '~0.19.13',
             },
             devDependencies: {
                 '@types/react': '~18.3.0',
                 'typescript': '~5.3.0',
+                '@babel/core': '^7.25.0',
             },
         }, null, 2),
         'tsconfig.json': JSON.stringify({
@@ -555,7 +566,7 @@ const styles = StyleSheet.create({
         },
         allFiles: expoFiles,
         language: 'typescript',
-        deps: { 'expo': '~52.0.0', 'react-native': '0.76.6' },
+        deps: { 'expo': '~52.0.0', 'react-native': '0.76.6', 'react-native-gesture-handler': '~2.20.0', 'react-native-reanimated': '~3.16.0', 'expo-router': '~4.0.0' },
         projectType: 'app',
         renderMode: 'mobile',
         initCommand: 'npx expo start --port ${PORT:-8001} --host 0.0.0.0',
