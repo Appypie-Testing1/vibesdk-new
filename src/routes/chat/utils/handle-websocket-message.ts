@@ -222,6 +222,16 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                             fileCount: Object.keys(templateDetails.allFiles || {}).length,
                         });
 
+                        // Restore expo deep link for mobile projects on reconnect
+                        if (templateDetails.renderMode === 'mobile' && previewUrl) {
+                            try {
+                                const parsedUrl = new URL(previewUrl);
+                                setExpoDeepLink(`exp://${parsedUrl.hostname}:80`);
+                            } catch {
+                                // Ignore invalid preview URLs
+                            }
+                        }
+
                         if (templateDetails.allFiles && bootstrapFiles.length === 0) {
                             const importantFilesSet = new Set(templateDetails.importantFiles);
                             const files = Object.entries(templateDetails.allFiles).map(([filePath, fileContents]) => ({
