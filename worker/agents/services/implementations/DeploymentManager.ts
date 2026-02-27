@@ -573,7 +573,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         }
 
         // Get latest files and sanitize worker entry point
-        const files = DeploymentManager.sanitizeFiles(this.fileManager.getAllFiles());
+        const files = DeploymentManager.sanitizeFiles(this.fileManager.getAllFiles(), state.templateRenderMode);
 
         this.getLog().info('Files to deploy', {
             files: files.map(f => f.filePath)
@@ -586,7 +586,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         const createResponse = await client.createInstance({
             files,
             projectName,
-            initCommand: 'bun run dev',
+            initCommand: state.templateInitCommand || 'bun run dev',
             envVars: localEnvVars
         });
 
@@ -692,7 +692,11 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
      * Apply worker entry point sanitization to a list of files.
      * Processes Hono worker entry points and wrangler config.
      */
-    private static sanitizeFiles<T extends { filePath: string; fileContents: string }>(files: T[]): T[] {
+    private static sanitizeFiles<T extends { filePath: string; fileContents: string }>(files: T[], renderMode?: string): T[] {
+        // Skip Vite/Hono sanitization entirely for mobile (Expo) projects
+        if (renderMode === 'mobile') {
+            return files;
+        }
         return files.map(file => {
             // Sanitize Hono worker entry points
             if (/^src\/index\.(ts|js)$/.test(file.filePath) && file.fileContents.includes('hono')) {
@@ -731,9 +735,9 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
             fileContents: file.fileContents
         }));
 
-        return DeploymentManager.sanitizeFiles(files);
+        return DeploymentManager.sanitizeFiles(files, state.templateRenderMode);
     }
-    
+
     /**
      * Deploy to Cloudflare Workers
      * Returns deployment URL and deployment ID for database updates

@@ -418,3 +418,151 @@ bun run deploy
     };
 }
 
+const EXPO_SCRATCH_TEMPLATE_INSTRUCTIONS = `
+To build a valid, previewable Expo/React Native project, follow these rules:
+
+1. The package.json **MUST** have a dev script using expo start:
+\`\`\`
+"scripts": {
+    "dev": "npx expo start --port \${PORT:-8001}",
+    "build": "npx expo export",
+    "lint": "npx eslint . --ext .ts,.tsx"
+}
+\`\`\`
+
+2. The project **MUST** have a valid app.json with Expo configuration.
+
+3. Use expo-router for navigation (file-based routing in the app/ directory).
+
+4. Do NOT include wrangler.jsonc or Cloudflare-specific files -- this is a React Native project.
+
+5. All UI must use React Native components (View, Text, TouchableOpacity, etc.), NOT HTML elements.
+`;
+
+/**
+ * Expo/React Native scratch template for mobile app generation.
+ * Used when no Expo template is available in the catalog.
+ */
+export function createExpoScratchTemplateDetails(): TemplateDetails {
+    const expoFiles: Record<string, string> = {
+        'app/_layout.tsx': `
+import { Stack } from 'expo-router';
+
+export default function RootLayout() {
+  return (
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: '#f5f5f5' },
+        headerTintColor: '#333',
+        headerTitleStyle: { fontWeight: 'bold' },
+      }}
+    >
+      <Stack.Screen name="index" options={{ title: 'Home' }} />
+    </Stack>
+  );
+}
+`,
+        'app/index.tsx': `
+import { View, Text, StyleSheet } from 'react-native';
+
+export default function HomeScreen() {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Welcome</Text>
+      <Text style={styles.subtitle}>Your Expo app is ready</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+  },
+});
+`,
+        'app.json': JSON.stringify({
+            expo: {
+                name: 'expo-app',
+                slug: 'expo-app',
+                version: '1.0.0',
+                orientation: 'portrait',
+                scheme: 'expo-app',
+                platforms: ['ios', 'android'],
+                web: { bundler: 'metro' },
+                plugins: ['expo-router'],
+            }
+        }, null, 2),
+        'package.json': JSON.stringify({
+            name: 'expo-app',
+            version: '1.0.0',
+            main: 'expo-router/entry',
+            scripts: {
+                dev: 'npx expo start --port ${PORT:-8001}',
+                build: 'npx expo export',
+                lint: 'npx eslint . --ext .ts,.tsx',
+            },
+            dependencies: {
+                'expo': '~52.0.0',
+                'expo-router': '~4.0.0',
+                'expo-status-bar': '~2.0.0',
+                'react': '^18.3.1',
+                'react-native': '0.76.6',
+                'react-native-safe-area-context': '~5.0.0',
+                'react-native-screens': '~4.4.0',
+            },
+            devDependencies: {
+                '@types/react': '~18.3.0',
+                'typescript': '~5.3.0',
+            },
+        }, null, 2),
+        'tsconfig.json': JSON.stringify({
+            extends: 'expo/tsconfig.base',
+            compilerOptions: {
+                strict: true,
+                paths: { '@/*': ['./*'] },
+            },
+        }, null, 2),
+    };
+
+    return {
+        name: 'expo-scratch',
+        description: {
+            selection: 'expo-scratch-template',
+            usage: `Expo/React Native scratch template for mobile app development. ${EXPO_SCRATCH_TEMPLATE_INSTRUCTIONS}`
+        },
+        fileTree: {
+            path: '/',
+            type: 'directory',
+            children: [
+                { path: 'app', type: 'directory', children: [] },
+                { path: 'package.json', type: 'file' },
+                { path: 'app.json', type: 'file' },
+                { path: 'tsconfig.json', type: 'file' },
+            ]
+        },
+        allFiles: expoFiles,
+        language: 'typescript',
+        deps: { 'expo': '~52.0.0', 'react-native': '0.76.6' },
+        projectType: 'app',
+        renderMode: 'mobile',
+        initCommand: 'npx expo start --port ${PORT:-8001}',
+        frameworks: ['react-native', 'expo', 'expo-router'],
+        importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'package.json', 'app.json'],
+        dontTouchFiles: ['app.json'],
+        redactedFiles: [],
+        disabled: false,
+    };
+}

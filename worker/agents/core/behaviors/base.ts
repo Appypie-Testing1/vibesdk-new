@@ -177,6 +177,15 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             };
             this.logger.info('Template details loaded and customized');
 
+            // Persist template metadata to agent state for DeploymentManager and frontend
+            if (templateDetails.initCommand || templateDetails.renderMode) {
+                this.setState({
+                    ...this.state,
+                    ...(templateDetails.initCommand ? { templateInitCommand: templateDetails.initCommand } : {}),
+                    ...(templateDetails.renderMode ? { templateRenderMode: templateDetails.renderMode } : {}),
+                });
+            }
+
             // If renderMode == 'browser', we can deploy right away
             if (templateDetails.renderMode === 'browser') {
                 await this.deployToSandbox();
@@ -199,7 +208,13 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     protected isPreviewable(): boolean {
-        // If there are 'package.json', and 'wrangler.jsonc' files, then it is previewable
+        // Mobile (Expo) projects are previewable if they have package.json and app.json or app.config.ts
+        if (this.state.templateRenderMode === 'mobile') {
+            return this.fileManager.fileExists('package.json') && (
+                this.fileManager.fileExists('app.json') || this.fileManager.fileExists('app.config.ts')
+            );
+        }
+        // Standard web projects require package.json + wrangler config
         return this.fileManager.fileExists('package.json') && (this.fileManager.fileExists('wrangler.jsonc') || this.fileManager.fileExists('wrangler.toml'));
     }
 
@@ -1108,6 +1123,18 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, result);
             return result;
         }
+
+        // Compute expo deep link transformer for mobile templates
+        const computeExpoDeepLink = this.state.templateRenderMode === 'mobile'
+            ? (previewURL: string): string | undefined => {
+                try {
+                    const url = new URL(previewURL);
+                    return `exp://${url.hostname}:80`;
+                } catch {
+                    return undefined;
+                }
+            }
+            : undefined;
             
         // Invalidate static analysis cache
         this.staticAnalysisCache = null;
@@ -1123,7 +1150,10 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                     this.broadcast(WebSocketMessageResponses.DEPLOYMENT_STARTED, data);
                 },
                 onCompleted: (data) => {
-                    this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, data);
+                    const broadcastData = computeExpoDeepLink && data.previewURL
+                        ? { ...data, expoDeepLink: computeExpoDeepLink(data.previewURL) }
+                        : data;
+                    this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, broadcastData);
                 },
                 onError: (data) => {
                     this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, data);

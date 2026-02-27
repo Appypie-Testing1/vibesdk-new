@@ -147,6 +147,8 @@ export default function Chat() {
 		projectType,
 		// Template metadata
 		templateDetails,
+		// Mobile preview
+		expoDeepLink,
 	} = useChat({
 		chatId: urlChatId,
 		query: userQuery,
@@ -785,6 +787,8 @@ export default function Chat() {
 										deploymentError={deploymentError}
 										appId={app?.id || chatId}
 										appVisibility={app?.visibility}
+										templateRenderMode={templateDetails?.renderMode}
+										expoDeepLink={expoDeepLink}
 										isGenerating={
 											isGenerating ||
 											isGeneratingBlueprint

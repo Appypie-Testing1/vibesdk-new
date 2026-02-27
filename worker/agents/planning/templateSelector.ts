@@ -35,11 +35,12 @@ async function predictProjectType(
 
 ## PROJECT TYPES:
 
-**app** - Full-stack web applications
+**app** - Full-stack web applications and mobile apps
 - Interactive websites with frontend and backend
 - Dashboards, games, social platforms, e-commerce sites
 - Any application requiring user interface and interactivity
-- Examples: "Build a todo app", "Create a gaming dashboard", "Make a blog platform"
+- Mobile apps, iOS apps, Android apps, React Native apps, phone apps
+- Examples: "Build a todo app", "Create a gaming dashboard", "Make a blog platform", "Build a mobile app for iOS"
 
 **workflow** - Backend workflows and APIs
 - Server-side logic without UI
@@ -143,9 +144,10 @@ Reasoning: "Social template provides user interactions, content sharing, and com
 
 ## SELECTION CRITERIA:
 1. **Feature Alignment** - Templates with similar core functionality
-2. **Tech Stack Match** - Compatible frameworks and dependencies  
+2. **Tech Stack Match** - Compatible frameworks and dependencies
 3. **Architecture Fit** - Similar application structure and patterns
 4. **Minimal Modification** - Template requiring least changes
+5. **Platform Match** - For mobile/native app requests (iOS, Android, phone, mobile app), prefer templates with renderMode "mobile" (e.g., expo-starter) over web templates
 
 ## STYLE GUIDE:
 - **Minimalist Design**: Clean, simple interfaces

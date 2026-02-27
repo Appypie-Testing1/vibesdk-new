@@ -128,6 +128,9 @@ export function useChat({
 	
 	// Preview deployment state
 	const [isPreviewDeploying, setIsPreviewDeploying] = useState(false);
+
+	// Expo mobile preview state
+	const [expoDeepLink, setExpoDeepLink] = useState<string>();
 	
 	// Redeployment state - tracks when redeploy button should be enabled
 	const [isRedeployReady, setIsRedeployReady] = useState(false);
@@ -212,6 +215,7 @@ export function useChat({
 			setIsDeploying,
 			setCloudflareDeploymentUrl,
 			setDeploymentError,
+			setExpoDeepLink,
 			setIsGenerationPaused,
 			setIsGenerating,
 			setIsPhaseProgressActive,
@@ -775,5 +779,7 @@ export function useChat({
 		projectType: internalProjectType,
 		templateDetails,
 		allFiles,
+		// Mobile preview
+		expoDeepLink,
 	};
 }

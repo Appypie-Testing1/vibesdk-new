@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { apiClient } from '../../../lib/api-client';
 import { toast } from 'sonner';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface DeploymentControlsProps {
 	// Deployment state
@@ -23,6 +24,10 @@ interface DeploymentControlsProps {
 	isGenerating: boolean;
 	isPaused: boolean;
 	
+	// Mobile preview
+	templateRenderMode?: string;
+	expoDeepLink?: string;
+
 	// Actions
 	onDeploy: (instanceId: string) => void;
 	onStopGeneration: () => void;
@@ -49,6 +54,8 @@ export function DeploymentControls({
 	deploymentError,
 	appId,
 	appVisibility = 'private',
+	templateRenderMode,
+	expoDeepLink,
 	onDeploy,
 	onVisibilityUpdate,
 }: DeploymentControlsProps) {
@@ -336,6 +343,26 @@ export function DeploymentControls({
 							</Button>
 						</div>
 					</div>
+
+					{/* Expo QR Code - shown for mobile projects */}
+					{templateRenderMode === 'mobile' && expoDeepLink && (
+						<div className="bg-bg-3/60 dark:bg-bg-4/60 border border-green-200/40 dark:border-green-800/20 rounded-md p-4 mb-3">
+							<div className="text-xs text-green-600 dark:text-green-400 font-medium mb-2">Scan with Expo Go:</div>
+							<div className="flex items-center gap-4">
+								<div className="bg-white p-2 rounded-lg">
+									<QRCodeSVG value={expoDeepLink} size={120} level="M" />
+								</div>
+								<div className="flex-1 min-w-0">
+									<code className="block text-xs font-mono text-green-800 dark:text-green-200 bg-green-50/50 dark:bg-green-950/30 px-2 py-1 rounded break-all">
+										{expoDeepLink}
+									</code>
+									<p className="text-xs text-text-tertiary mt-2">
+										Open the Expo Go app and scan to preview on your device
+									</p>
+								</div>
+							</div>
+						</div>
+					)}
 
 					{/* Shareable Link - Always shown for owner, editable */}
 					{appId && (

@@ -61,6 +61,10 @@ export interface BaseProjectState {
     pendingUserInputs: string[];
     projectUpdatesAccumulator: string[];
     
+    // Template metadata
+    templateInitCommand?: string;
+    templateRenderMode?: 'sandbox' | 'browser' | 'mobile';
+
     // Deep debug
     lastDeepDebugTranscript: string | null;
 

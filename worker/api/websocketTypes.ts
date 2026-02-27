@@ -97,6 +97,7 @@ export type DeploymentCompletedMessage = {
 	tunnelURL: string;
 	instanceId: string;
 	message: string;
+	expoDeepLink?: string;
 };
 
 type PreviewForceRefreshMessage = {
