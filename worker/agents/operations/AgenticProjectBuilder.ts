@@ -158,13 +158,20 @@ export class AgenticProjectBuilderOperation extends AgentOperationWithTools<
         const hasPlan = isAgenticBlueprint(blueprint) && blueprint.plan.length > 0;
         const hasTemplate = !!selectedTemplate;
         const isPresentationProject = projectType === 'presentation';
+        const isMobileProject = context.templateDetails?.renderMode === 'mobile';
         const needsSandbox = !isPresentationProject && (hasTSX || projectType === 'app');
 
         const dynamicHints = [
             !hasPlan
                 ? '- No plan detected: Start with generate_blueprint (optionally with prompt parameter) to establish PRD (title, projectName, description, colorPalette, frameworks, plan).'
                 : '- Plan detected: proceed to implement milestones using generate_files/regenerate_file.',
-            needsSandbox && !hasTemplate
+            isMobileProject
+                ? '- MOBILE PROJECT (Expo/React Native): Template files already exist (app.json, app/_layout.tsx, app/index.tsx, package.json). Build on them. Do NOT create web files (wrangler.jsonc, vite.config, index.html). Use React Native components (View, Text, etc.), NOT HTML. Do NOT call init_suitable_template() - template is already set up.'
+                : '',
+            isMobileProject && !hasPlan
+                ? '- Mobile app: After blueprint, generate screens in app/ directory and components in components/. Use expo-router for navigation.'
+                : '',
+            needsSandbox && !hasTemplate && !isMobileProject
                 ? '- Interactive project without template: Use init_suitable_template() to let AI select and import best matching template before first deploy.'
                 : '',
             isPresentationProject && !hasTemplate
@@ -213,7 +220,7 @@ export class AgenticProjectBuilderOperation extends AgentOperationWithTools<
             });
         }
 
-        let systemPrompt = getSystemPrompt(inputs.projectType, session.dynamicHints);
+        let systemPrompt = getSystemPrompt(inputs.projectType, session.dynamicHints, options.context.templateDetails?.renderMode);
 
         if (historyMessages.length > 0) {
             systemPrompt += `\n\n# Conversation History\nYou are being provided with the full conversation history from your previous interactions. Review it to understand context and avoid repeating work.`;
