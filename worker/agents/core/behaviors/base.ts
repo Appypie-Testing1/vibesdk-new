@@ -16,7 +16,7 @@ import { FileRegenerationOperation } from '../../operations/FileRegeneration';
 // Database schema imports removed - using zero-storage OAuth flow
 import { BaseSandboxService } from '../../../services/sandbox/BaseSandboxService';
 import { getTemplateImportantFiles } from '../../../services/sandbox/utils';
-import { createScratchTemplateDetails } from '../../utils/templates';
+import { createScratchTemplateDetails, createExpoScratchTemplateDetails } from '../../utils/templates';
 import { WebSocketMessageData, WebSocketMessageType } from '../../../api/websocketTypes';
 import { AgentActionKey, InferenceContext, InferenceRuntimeOverrides, ModelConfig } from '../../inferutils/config.types';
 import { ModelConfigService } from '../../../database/services/ModelConfigService';
@@ -144,11 +144,15 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
     onStateUpdate(_state: TState, _source: "server" | Connection) {}
 
+    private isScratchTemplate(): boolean {
+        return this.state.templateName === 'scratch' || this.state.templateName === 'expo-scratch';
+    }
+
     async ensureTemplateDetails() {
-        // Skip fetching details for "scratch" baseline
+        // Skip fetching details for scratch baselines (web and expo)
         if (!this.templateDetailsCache) {
-            if (this.state.templateName === 'scratch') {
-                this.logger.info('Skipping template details fetch for scratch baseline');
+            if (this.isScratchTemplate()) {
+                this.logger.info(`Skipping template details fetch for ${this.state.templateName} baseline`);
                 return;
             }
             this.logger.info(`Loading template details for: ${this.state.templateName}`);
@@ -196,9 +200,21 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
     public getTemplateDetails(): TemplateDetails {
         if (!this.templateDetailsCache) {
-            // Synthesize a minimal scratch template when starting from scratch
+            // Synthesize scratch templates when starting from scratch
             if (this.state.templateName === 'scratch') {
                 this.templateDetailsCache = createScratchTemplateDetails();
+                return this.templateDetailsCache;
+            }
+            if (this.state.templateName === 'expo-scratch') {
+                this.templateDetailsCache = createExpoScratchTemplateDetails();
+                // Persist mobile template metadata to state if not already set
+                if (!this.state.templateRenderMode) {
+                    this.setState({
+                        ...this.state,
+                        templateRenderMode: 'mobile',
+                        templateInitCommand: this.templateDetailsCache.initCommand,
+                    });
+                }
                 return this.templateDetailsCache;
             }
             this.ensureTemplateDetails();

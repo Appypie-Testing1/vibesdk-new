@@ -93,7 +93,8 @@ export class AgenticCodingBehavior extends BaseCodingBehavior<AgenticState> impl
             behaviorType: 'agentic'
         });
         
-        if (templateInfo && templateInfo.templateDetails.name !== 'scratch') {
+        const isScratchTemplate = !templateInfo || templateInfo.templateDetails.name === 'scratch' || templateInfo.templateDetails.name === 'expo-scratch';
+        if (templateInfo && !isScratchTemplate) {
             // Customize template files (package.json, wrangler.jsonc, .bootstrap.js, .gitignore)
             const customizedFiles = customizeTemplateFiles(
                 templateInfo.templateDetails.allFiles,

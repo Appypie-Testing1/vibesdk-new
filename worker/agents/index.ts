@@ -5,7 +5,7 @@ import { InferenceContext } from './inferutils/config.types';
 import { SandboxSdkClient } from '../services/sandbox/sandboxSdkClient';
 import { selectTemplate } from './planning/templateSelector';
 import { TemplateDetails } from '../services/sandbox/sandboxTypes';
-import { createScratchTemplateDetails } from './utils/templates';
+import { createScratchTemplateDetails, createExpoScratchTemplateDetails } from './utils/templates';
 import { TemplateSelection } from './schemas';
 import type { ImageAttachment } from '../types/image-attachment';
 import { BaseSandboxService } from 'worker/services/sandbox/BaseSandboxService';
@@ -110,7 +110,15 @@ export async function getTemplateForQuery(
     logger.info('Selected template', { selectedTemplate: analyzeQueryResponse });
             
     if (!analyzeQueryResponse.selectedTemplateName) {
-        // For non-general requests when no template is selected, fall back to scratch
+        // Check if the query is asking for a mobile/native app
+        const mobileKeywords = /\b(mobile\s*app|ios\s*app|android\s*app|react\s*native|expo|phone\s*app|native\s*app|iphone|smartphone)\b/i;
+        if (mobileKeywords.test(query)) {
+            logger.info('No template found but query looks mobile; falling back to expo-scratch');
+            const expoScratch: TemplateDetails = createExpoScratchTemplateDetails();
+            return { templateDetails: expoScratch, selection: analyzeQueryResponse, projectType: analyzeQueryResponse.projectType };
+        }
+
+        // For non-general requests when no template is selected, fall back to web scratch
         logger.warn('No suitable template found; falling back to scratch');
         const scratch: TemplateDetails = createScratchTemplateDetails();
         return { templateDetails: scratch, selection: analyzeQueryResponse, projectType: analyzeQueryResponse.projectType };
