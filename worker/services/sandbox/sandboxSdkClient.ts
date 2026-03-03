@@ -627,15 +627,20 @@ export class SandboxSdkClient extends BaseSandboxService {
         return false;
     }
 
-    private async startDevServer(instanceId: string, initCommand: string, port: number): Promise<string> {
+    private async startDevServer(instanceId: string, initCommand: string, port: number, extraEnvVars?: Record<string, string>): Promise<string> {
         try {
             // Use session-based process management
             // Note: Environment variables should already be set via setLocalEnvVars
             const session = await this.getOrCreateSession(`${instanceId}-dev`, `/workspace/${instanceId}`);
-            
+
+            // Build env vars prefix (extra env vars are inherited by the child process)
+            const extraEnvPrefix = extraEnvVars
+                ? Object.entries(extraEnvVars).map(([k, v]) => `${k}=${v}`).join(' ') + ' '
+                : '';
+
             // Start process with env vars inline for those not in .dev.vars
             const process = await session.startProcess(
-                `VITE_LOGGER_TYPE=json PORT=${port} monitor-cli process start --instance-id ${instanceId} --port ${port} -- ${initCommand}`
+                `${extraEnvPrefix}VITE_LOGGER_TYPE=json PORT=${port} monitor-cli process start --instance-id ${instanceId} --port ${port} -- ${initCommand}`
             );
             this.logger.info('Development server started', { instanceId, processId: process.id });
             
@@ -948,17 +953,15 @@ export class SandboxSdkClient extends BaseSandboxService {
                     if (localEnvVars) {
                         await this.setLocalEnvVars(instanceId, localEnvVars);
                     }
-                    // Start dev server on allocated port
-                    const processId = await this.startDevServer(instanceId, initCommand, allocatedPort);
-                    this.logger.info('Instance created successfully', { instanceId, processId, port: allocatedPort });
-                        
-                    // Expose the same port for preview URL
+
+                    // Expose port first to determine the public URL
+                    // This is needed before starting the dev server so that Expo/Metro
+                    // can generate correct manifest URLs (via REACT_NATIVE_PACKAGER_HOSTNAME)
                     const previewResult = await sandbox.exposePort(allocatedPort, { hostname: getPreviewDomain(env) });
                     let previewURL = previewResult.url;
                     if (!isDev(env)) {
                         const previewDomain = getPreviewDomain(env);
                         if (previewDomain) {
-                            // Replace CUSTOM_DOMAIN with previewDomain in previewURL
                             previewURL = previewURL.replace(env.CUSTOM_DOMAIN, previewDomain);
                         }
                     }
@@ -967,9 +970,28 @@ export class SandboxSdkClient extends BaseSandboxService {
                         this.logger.info('Using tunnel url instead for preview as configured', { instanceId, tunnelURL });
                         previewURL = tunnelURL;
                     }
-                        
+
                     this.logger.info('Preview URL exposed', { instanceId, previewURL });
-                        
+
+                    // For Expo/React Native projects, set REACT_NATIVE_PACKAGER_HOSTNAME
+                    // so Metro generates manifest URLs pointing to the public proxy hostname
+                    // instead of the container's internal IP
+                    let devServerEnvVars: Record<string, string> | undefined;
+                    const isExpoProject = initCommand.includes('expo');
+                    if (isExpoProject && previewURL) {
+                        try {
+                            const publicHost = new URL(previewURL).host;
+                            devServerEnvVars = { REACT_NATIVE_PACKAGER_HOSTNAME: publicHost };
+                            this.logger.info('Set REACT_NATIVE_PACKAGER_HOSTNAME for Expo project', { publicHost });
+                        } catch (urlError) {
+                            this.logger.warn('Could not derive public hostname for Expo', urlError);
+                        }
+                    }
+
+                    // Start dev server on allocated port
+                    const processId = await this.startDevServer(instanceId, initCommand, allocatedPort, devServerEnvVars);
+                    this.logger.info('Instance created successfully', { instanceId, processId, port: allocatedPort });
+
                     return { previewURL, tunnelURL, processId, allocatedPort };
                 } catch (error) {
                     this.logger.warn('Failed to start dev server', error);
