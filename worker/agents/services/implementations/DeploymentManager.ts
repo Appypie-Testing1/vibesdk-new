@@ -479,6 +479,15 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
             }
 
             logger.info('Files written to sandbox instance', { instanceId: sandboxInstanceId, files: filesToWrite.map(f => f.filePath) });
+
+            // For Expo/mobile projects, auto-install any missing third-party dependencies.
+            // The LLM may generate code that imports packages not in the template's package.json
+            // (e.g. date-fns, react-native-svg, zustand). Metro bundler will crash with
+            // "Unable to resolve module" if these aren't installed.
+            const state = this.getState();
+            if (state.templateRenderMode === 'mobile') {
+                await this.autoInstallMissingDependencies(sandboxInstanceId);
+            }
         }
 
         // Clear logs if requested
@@ -794,6 +803,97 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         }));
 
         return DeploymentManager.sanitizeFiles(files, state.templateRenderMode);
+    }
+
+    /**
+     * Extract third-party package names from import/require statements in source files.
+     * Handles standard imports, scoped packages (@scope/pkg), and require() calls.
+     * Filters out relative imports (./), path aliases (@/), and Node/RN built-ins.
+     */
+    private static extractThirdPartyPackages(files: Array<{ filePath: string; fileContents: string }>): string[] {
+        const packages = new Set<string>();
+        const importRegex = /(?:from|require\()\s*['"]([^'"./][^'"]*)['"]/g;
+
+        for (const file of files) {
+            if (!/\.(tsx?|jsx?)$/.test(file.filePath)) continue;
+            let match;
+            while ((match = importRegex.exec(file.fileContents)) !== null) {
+                const specifier = match[1];
+                // Skip path aliases (@/ prefix used by tsconfig paths)
+                if (specifier.startsWith('@/')) continue;
+
+                // Extract the bare package name (handle @scope/pkg/subpath)
+                let pkgName: string;
+                if (specifier.startsWith('@')) {
+                    const parts = specifier.split('/');
+                    pkgName = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : specifier;
+                } else {
+                    pkgName = specifier.split('/')[0];
+                }
+                packages.add(pkgName);
+            }
+        }
+        return Array.from(packages);
+    }
+
+    /** Packages pre-installed in the Expo scratch template (no need to auto-install) */
+    private static readonly EXPO_PREINSTALLED = new Set([
+        'expo', 'expo-constants', 'expo-font', 'expo-linking', 'expo-router',
+        'expo-splash-screen', 'expo-status-bar', 'expo-system-ui',
+        'react', 'react-native', 'react-native-gesture-handler',
+        'react-native-reanimated', 'react-native-safe-area-context',
+        'react-native-screens', 'react-native-web',
+        '@types/react', 'typescript', '@babel/core',
+        // Expo Router internals
+        'expo-router/entry',
+    ]);
+
+    /**
+     * Auto-detect and install missing third-party dependencies for Expo projects.
+     * Scans all generated files for import statements, compares against pre-installed
+     * packages + whatever is already in the project's package.json, and runs
+     * `bun add` for anything missing.
+     */
+    private async autoInstallMissingDependencies(sandboxInstanceId: string): Promise<void> {
+        const logger = this.getLog();
+        const state = this.getState();
+
+        try {
+            const allFiles = Object.values(state.generatedFilesMap);
+            const detectedPackages = DeploymentManager.extractThirdPartyPackages(allFiles);
+            if (detectedPackages.length === 0) return;
+
+            // Build the set of known/installed packages from pre-installed list + package.json deps
+            const knownPackages = new Set(DeploymentManager.EXPO_PREINSTALLED);
+
+            // Also read dependencies from the generated package.json (LLM may have added some)
+            const pkgJsonFile = allFiles.find(f => f.filePath === 'package.json');
+            if (pkgJsonFile) {
+                try {
+                    const pkgJson = JSON.parse(pkgJsonFile.fileContents);
+                    for (const key of ['dependencies', 'devDependencies', 'peerDependencies']) {
+                        if (pkgJson[key]) {
+                            Object.keys(pkgJson[key]).forEach(dep => knownPackages.add(dep));
+                        }
+                    }
+                } catch {
+                    // Malformed package.json, proceed with pre-installed list only
+                }
+            }
+
+            const missingPackages = detectedPackages.filter(pkg => !knownPackages.has(pkg));
+            if (missingPackages.length === 0) return;
+
+            logger.info('Auto-installing missing Expo dependencies', { packages: missingPackages });
+            const client = this.getClient();
+            await client.executeCommands(sandboxInstanceId, [
+                `bun add ${missingPackages.join(' ')}`
+            ]);
+            logger.info('Auto-installed missing Expo dependencies', { count: missingPackages.length });
+        } catch (error) {
+            logger.warn('Failed to auto-install missing dependencies (non-blocking)', error);
+            // Non-blocking: deployment continues even if auto-install fails
+        }
     }
 
     /**
