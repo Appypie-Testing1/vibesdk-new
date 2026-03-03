@@ -439,6 +439,8 @@ To build a valid, previewable Expo/React Native project, follow these rules:
 5. All UI must use React Native components (View, Text, TouchableOpacity, etc.), NOT HTML elements.
 
 6. These packages are already installed: expo, expo-router, expo-constants, expo-font, expo-linking, expo-splash-screen, expo-status-bar, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens. Do NOT add them again with exec_commands.
+
+7. **CRITICAL**: If your code imports ANY package not listed above, you MUST install it with exec_commands("bun add <package>") BEFORE calling deploy_preview. Missing dependencies cause Metro bundler to crash with "Unable to resolve module" errors. Common packages that need explicit installation: date-fns, react-native-svg, zustand, @react-native-async-storage/async-storage, expo-image, expo-linear-gradient, lottie-react-native, etc.
 `;
 
 /**

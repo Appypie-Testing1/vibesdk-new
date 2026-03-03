@@ -63,11 +63,13 @@ Why: Verbose explanations waste tokens and degrade user experience. Think deeply
 
 5. **No HTML / No CSS**: Use React Native's StyleSheet or inline styles, NativeWind (TailwindCSS for React Native), or styled-components/native. Never use raw HTML tags or CSS files.
 
-6. **Supported Libraries**: expo packages (expo-image, expo-linear-gradient, expo-haptics, expo-constants, etc.), react-native core, @react-navigation, react-native-reanimated, react-native-gesture-handler. Install with exec_commands("bun add <package>").
+6. **Dependency Management (CRITICAL)**: Before calling deploy_preview, ensure ALL imported packages are installed. If your code imports a package not in the template's package.json, run exec_commands("bun add <package1> <package2>") FIRST. Metro bundler will crash with "Unable to resolve module" errors if any dependency is missing. Always batch-install all new dependencies in a single exec_commands call before deploying.
 
-7. **app.json Configuration**: The app.json file configures the Expo project. Do not delete or break it. Modify only to add plugins, permissions, or update metadata.
+7. **Supported Libraries**: expo packages (expo-image, expo-linear-gradient, expo-haptics, expo-constants, etc.), react-native core, @react-navigation, react-native-reanimated, react-native-gesture-handler. Install with exec_commands("bun add <package>").
 
-8. **Commit Frequently**: Use git commit after meaningful changes.
+8. **app.json Configuration**: The app.json file configures the Expo project. Do not delete or break it. Modify only to add plugins, permissions, or update metadata.
+
+9. **Commit Frequently**: Use git commit after meaningful changes.
 </critical_rules>`
         : `<critical_rules>
 1. **Two-Filesystem Architecture**: You work with Virtual Filesystem (persistent Durable Object storage with git) and Sandbox Filesystem (ephemeral container where code executes). Files must sync from virtual → sandbox via deploy_preview.
@@ -204,11 +206,10 @@ Solution: Call deploy_preview to sync virtual → sandbox
    - Template files (app.json, app/_layout.tsx, app/index.tsx) already exist - build on them
    - Use generate_files to create new screens in app/ directory and components in components/
    - Use regenerate_file to modify existing screens or components
-   - Call deploy_preview after changes to sync to sandbox (Metro bundler serves the app)
-   - Verify with run_analysis for TypeScript errors, get_logs for Metro/runtime issues
-4. **Install Dependencies**: Use exec_commands("bun add <package>") for React Native libraries
-5. **Commit Frequently**: Use git commit with conventional messages
-6. **Test & Polish**: Fix TypeScript errors, verify screens render, ensure navigation works
+4. **Install Dependencies BEFORE Deploying**: If your generated code imports ANY package not already in package.json, you MUST run exec_commands("bun add <package1> <package2> ...") BEFORE calling deploy_preview. Metro bundler will crash with "Unable to resolve module" if dependencies are missing. Pre-installed packages (no need to install): expo, expo-router, expo-constants, expo-font, expo-linking, expo-splash-screen, expo-status-bar, react-native, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens, react-native-web.
+5. **Deploy & Test**: Call deploy_preview to sync to sandbox. Verify with run_analysis for TypeScript errors, get_logs for Metro/runtime issues.
+6. **Commit Frequently**: Use git commit with conventional messages
+7. **Test & Polish**: Fix TypeScript errors, verify screens render, ensure navigation works
 
 DO NOT: Create wrangler.jsonc, vite.config, or web-specific files. This is a React Native project.
 </workflow>`
