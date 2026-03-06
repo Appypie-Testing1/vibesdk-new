@@ -1,19 +1,18 @@
 /**
- * Expo QR Code Preview Component
+ * Expo QR Code Overlay
  *
  * Compact floating QR code panel for scanning with Expo Go.
- * Shown alongside the web preview iframe for mobile projects.
+ * Overlays the web preview iframe for mobile projects.
  */
 
 import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { Smartphone, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Smartphone, X, ChevronUp, ChevronDown, Copy, Check } from 'lucide-react';
 
 interface ExpoQRPreviewProps {
 	expoDeepLink: string;
 	previewUrl?: string;
-	className?: string;
 }
 
 export function ExpoQRPreview({ expoDeepLink, previewUrl }: ExpoQRPreviewProps) {
@@ -29,7 +28,7 @@ export function ExpoQRPreview({ expoDeepLink, previewUrl }: ExpoQRPreviewProps) 
 				className="absolute bottom-4 right-4 z-20 flex items-center gap-1.5 px-3 py-2 bg-bg-1/95 backdrop-blur-sm border border-text/10 rounded-lg shadow-lg text-xs text-text-primary hover:bg-bg-2 transition-colors"
 			>
 				<Smartphone className="size-3.5" />
-				<span>QR Code</span>
+				<span>Show QR</span>
 			</button>
 		);
 	}
@@ -39,7 +38,7 @@ export function ExpoQRPreview({ expoDeepLink, previewUrl }: ExpoQRPreviewProps) 
 			{/* Header */}
 			<div className="flex items-center justify-between px-3 py-2 border-b border-text/5">
 				<div className="flex items-center gap-1.5">
-					<Smartphone className="size-3.5 text-text-tertiary" />
+					<Smartphone className="size-3.5 text-accent" />
 					<span className="text-xs font-medium text-text-primary">Test on Device</span>
 				</div>
 				<div className="flex items-center gap-1">
@@ -47,7 +46,10 @@ export function ExpoQRPreview({ expoDeepLink, previewUrl }: ExpoQRPreviewProps) 
 						onClick={() => setIsExpanded(!isExpanded)}
 						className="p-0.5 hover:bg-bg-3 rounded transition-colors"
 					>
-						{isExpanded ? <ChevronDown className="size-3.5 text-text-tertiary" /> : <ChevronUp className="size-3.5 text-text-tertiary" />}
+						{isExpanded
+							? <ChevronDown className="size-3.5 text-text-tertiary" />
+							: <ChevronUp className="size-3.5 text-text-tertiary" />
+						}
 					</button>
 					<button
 						onClick={() => setIsDismissed(true)}
@@ -59,7 +61,7 @@ export function ExpoQRPreview({ expoDeepLink, previewUrl }: ExpoQRPreviewProps) 
 			</div>
 
 			{isExpanded && (
-				<div className="p-3 space-y-3">
+				<div className="p-3 space-y-2.5">
 					{/* QR Code */}
 					<div className="flex justify-center">
 						<div className="p-2 bg-white rounded-lg">
@@ -73,7 +75,7 @@ export function ExpoQRPreview({ expoDeepLink, previewUrl }: ExpoQRPreviewProps) 
 					</div>
 
 					<p className="text-[10px] text-text-tertiary text-center">
-						Scan with Expo Go app
+						Scan with Expo Go app on your device
 					</p>
 
 					{/* Deep Link */}
@@ -83,8 +85,9 @@ export function ExpoQRPreview({ expoDeepLink, previewUrl }: ExpoQRPreviewProps) 
 						</code>
 						<button
 							onClick={() => copyDeepLink(expoDeepLink)}
-							className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded border border-text/10 bg-bg-3 text-text-primary hover:bg-bg-4 transition-colors"
+							className="flex-shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded border border-text/10 bg-bg-3 text-text-primary hover:bg-bg-4 transition-colors"
 						>
+							{deepLinkCopied ? <Check className="w-2.5 h-2.5 text-green-500" /> : <Copy className="w-2.5 h-2.5" />}
 							{deepLinkCopied ? 'Copied' : 'Copy'}
 						</button>
 					</div>
@@ -97,8 +100,9 @@ export function ExpoQRPreview({ expoDeepLink, previewUrl }: ExpoQRPreviewProps) 
 							</code>
 							<button
 								onClick={() => copyUrl(previewUrl)}
-								className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded border border-text/10 bg-bg-3 text-text-primary hover:bg-bg-4 transition-colors"
+								className="flex-shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded border border-text/10 bg-bg-3 text-text-primary hover:bg-bg-4 transition-colors"
 							>
+								{urlCopied ? <Check className="w-2.5 h-2.5 text-green-500" /> : <Copy className="w-2.5 h-2.5" />}
 								{urlCopied ? 'Copied' : 'Copy'}
 							</button>
 						</div>
