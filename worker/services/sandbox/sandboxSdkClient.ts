@@ -978,13 +978,19 @@ export class SandboxSdkClient extends BaseSandboxService {
                     // instead of the container's internal IP
                     let devServerEnvVars: Record<string, string> | undefined;
                     const isExpoProject = initCommand.includes('expo');
-                    if (isExpoProject && previewURL) {
-                        try {
-                            const publicHost = new URL(previewURL).host;
-                            devServerEnvVars = { REACT_NATIVE_PACKAGER_HOSTNAME: publicHost };
-                            this.logger.info('Set REACT_NATIVE_PACKAGER_HOSTNAME for Expo project', { publicHost });
-                        } catch (urlError) {
-                            this.logger.warn('Could not derive public hostname for Expo', urlError);
+                    if (isExpoProject) {
+                        devServerEnvVars = {
+                            CI: '1',
+                            EXPO_NO_TELEMETRY: '1',
+                        };
+                        if (previewURL) {
+                            try {
+                                const publicHost = new URL(previewURL).host;
+                                devServerEnvVars.REACT_NATIVE_PACKAGER_HOSTNAME = publicHost;
+                                this.logger.info('Set Expo env vars for container', { publicHost, CI: '1' });
+                            } catch (urlError) {
+                                this.logger.warn('Could not derive public hostname for Expo', urlError);
+                            }
                         }
                     }
 
