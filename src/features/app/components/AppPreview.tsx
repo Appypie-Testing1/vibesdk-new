@@ -38,22 +38,27 @@ export const AppPreview = forwardRef<HTMLIFrameElement, PreviewComponentProps>(
 
 		// Mobile (Expo) projects: show web preview iframe + floating QR code for real device testing.
 		// The iframe loads the web version via react-native-web (Metro serves both native and web).
+		// We append ?platform=web so Metro serves HTML instead of the native manifest JSON.
 		// MobilePreviewWrapper (parent) provides the phone frame when mobile view is toggled on.
 		if (templateDetails?.renderMode === 'mobile') {
 			let expoDeepLink: string;
+			let webPreviewUrl: string;
 			try {
 				const url = new URL(previewUrl);
 				const scheme = url.protocol === 'https:' ? 'exps' : 'exp';
 				expoDeepLink = `${scheme}://${url.host}`;
+				url.searchParams.set('platform', 'web');
+				webPreviewUrl = url.toString();
 			} catch {
 				expoDeepLink = previewUrl;
+				webPreviewUrl = previewUrl;
 			}
 
 			return (
 				<div className={`${className ?? ''} relative`}>
 					<PreviewIframe
 						ref={ref ?? previewRef}
-						src={previewUrl}
+						src={webPreviewUrl}
 						className="w-full h-full border-0"
 						title="Mobile App Preview"
 						shouldRefreshPreview={shouldRefreshPreview}
