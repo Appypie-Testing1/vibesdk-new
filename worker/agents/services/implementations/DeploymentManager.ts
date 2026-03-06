@@ -840,7 +840,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
     private static readonly EXPO_PREINSTALLED = new Set([
         'expo', 'expo-constants', 'expo-font', 'expo-linking', 'expo-router',
         'expo-splash-screen', 'expo-status-bar', 'expo-system-ui',
-        'react', 'react-native', 'react-native-gesture-handler',
+        'react', 'react-dom', 'react-native', 'react-native-gesture-handler',
         'react-native-reanimated', 'react-native-safe-area-context',
         'react-native-screens', 'react-native-web',
         '@types/react', 'typescript', '@babel/core',
@@ -849,10 +849,19 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
     ]);
 
     /**
+     * Packages required for Expo projects that may not be detectable via import scanning.
+     * These are needed by the framework internals (expo-router/entry uses react-dom for web).
+     * Auto-install ensures these are present even in existing sandboxes.
+     */
+    private static readonly EXPO_REQUIRED_PACKAGES = [
+        'react-dom',
+    ];
+
+    /**
      * Auto-detect and install missing third-party dependencies for Expo projects.
-     * Scans all generated files for import statements, compares against pre-installed
-     * packages + whatever is already in the project's package.json, and runs
-     * `bun add` for anything missing.
+     * 1. Ensures framework-required packages (react-dom) are always installed.
+     * 2. Scans all generated files for import statements and installs any third-party
+     *    packages not in the template or package.json.
      */
     private async autoInstallMissingDependencies(sandboxInstanceId: string): Promise<void> {
         const logger = this.getLog();
@@ -860,8 +869,6 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
 
         try {
             const allFiles = Object.values(state.generatedFilesMap);
-            const detectedPackages = DeploymentManager.extractThirdPartyPackages(allFiles);
-            if (detectedPackages.length === 0) return;
 
             // Build the set of known/installed packages from pre-installed list + package.json deps
             const knownPackages = new Set(DeploymentManager.EXPO_PREINSTALLED);
@@ -881,15 +888,26 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
                 }
             }
 
-            const missingPackages = detectedPackages.filter(pkg => !knownPackages.has(pkg));
-            if (missingPackages.length === 0) return;
+            // Detect missing packages from import scanning
+            const detectedPackages = DeploymentManager.extractThirdPartyPackages(allFiles);
+            const missingFromImports = detectedPackages.filter(pkg => !knownPackages.has(pkg));
 
-            logger.info('Auto-installing missing Expo dependencies', { packages: missingPackages });
+            // Also include framework-required packages that may not be in existing sandboxes
+            // (e.g. react-dom is needed by expo-router for web but isn't imported by user code)
+            const allRequired = new Set(missingFromImports);
+            for (const pkg of DeploymentManager.EXPO_REQUIRED_PACKAGES) {
+                allRequired.add(pkg);
+            }
+
+            const packagesToInstall = Array.from(allRequired);
+            if (packagesToInstall.length === 0) return;
+
+            logger.info('Auto-installing Expo dependencies', { packages: packagesToInstall });
             const client = this.getClient();
             await client.executeCommands(sandboxInstanceId, [
-                `bun add ${missingPackages.join(' ')}`
+                `bun add ${packagesToInstall.join(' ')}`
             ]);
-            logger.info('Auto-installed missing Expo dependencies', { count: missingPackages.length });
+            logger.info('Auto-installed Expo dependencies', { count: packagesToInstall.length });
         } catch (error) {
             logger.warn('Failed to auto-install missing dependencies (non-blocking)', error);
             // Non-blocking: deployment continues even if auto-install fails
@@ -919,6 +937,18 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         
         logger.info('Starting Cloudflare deployment', { target });
 
+        // Mobile (Expo/React Native) projects cannot be deployed to Cloudflare Workers.
+        // They don't have wrangler.jsonc or a Worker entry point.
+        if (state.templateRenderMode === 'mobile') {
+            logger.info('Skipping Cloudflare deployment for mobile project');
+            callbacks?.onError?.({
+                message: 'Mobile apps cannot be deployed to Cloudflare Workers. Use Expo Go or EAS Build to distribute your app.',
+                instanceId: state.sandboxInstanceId ?? '',
+                error: 'Mobile projects are not supported for Cloudflare Workers deployment'
+            });
+            return { deploymentUrl: null };
+        }
+
         // Check if we have generated files
         if (!state.generatedFilesMap || Object.keys(state.generatedFilesMap).length === 0) {
             logger.error('No generated files available for deployment');
@@ -940,12 +970,6 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
             sandboxInstanceId: state.sandboxInstanceId,
             fileCount: Object.keys(state.generatedFilesMap).length
         });
-
-        // For Expo projects, ensure all imported dependencies are installed before export.
-        // The sandbox may have been recreated since the last deploy, losing auto-installed packages.
-        if (state.templateRenderMode === 'mobile') {
-            await this.autoInstallMissingDependencies(state.sandboxInstanceId);
-        }
 
         // Deploy to Cloudflare
         const deploymentResult = await client.deployToCloudflareWorkers(
