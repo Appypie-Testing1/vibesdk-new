@@ -419,12 +419,12 @@ bun run deploy
 }
 
 const EXPO_SCRATCH_TEMPLATE_INSTRUCTIONS = `
-To build a valid, previewable Expo/React Native project, follow these rules:
+To build a valid, previewable Expo/React Native project (SDK 54, React Native 0.81), follow these rules:
 
 1. The package.json **MUST** have a dev script using expo start:
 \`\`\`
 "scripts": {
-    "dev": "npx expo start --port \${PORT:-8001}",
+    "dev": "npx expo start --port \${PORT:-8001} --host lan",
     "build": "npx expo export",
     "lint": "npx eslint . --ext .ts,.tsx"
 }
@@ -438,9 +438,9 @@ To build a valid, previewable Expo/React Native project, follow these rules:
 
 5. All UI must use React Native components (View, Text, TouchableOpacity, etc.), NOT HTML elements.
 
-6. These packages are already installed: expo, expo-router, expo-constants, expo-font, expo-linking, expo-splash-screen, expo-status-bar, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens. Do NOT add them again with exec_commands.
+6. These packages are already installed: expo, expo-router, expo-constants, expo-font, expo-linking, expo-status-bar, expo-system-ui, react-native, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens, react-native-web. Do NOT add them again with exec_commands.
 
-7. **CRITICAL**: If your code imports ANY package not listed above, you MUST install it with exec_commands("bun add <package>") BEFORE calling deploy_preview. Missing dependencies cause Metro bundler to crash with "Unable to resolve module" errors. Common packages that need explicit installation: date-fns, react-native-svg, zustand, @react-native-async-storage/async-storage, expo-image, expo-linear-gradient, lottie-react-native, etc.
+7. **CRITICAL**: If your code imports ANY package not listed above, you MUST install it with exec_commands("bun add <package>") BEFORE calling deploy_preview. Missing dependencies cause Metro bundler to crash with "Unable to resolve module" errors. Common packages that need explicit installation: date-fns, react-native-svg, zustand, @react-native-async-storage/async-storage, expo-image, expo-linear-gradient, expo-splash-screen, lottie-react-native, etc.
 `;
 
 /**
@@ -520,12 +520,12 @@ const styles = StyleSheet.create({
             },
             dependencies: {
                 'expo': '~54.0.0',
-                'expo-constants': '~18.0.0',
-                'expo-font': '~14.0.0',
-                'expo-linking': '~8.0.0',
-                'expo-router': '~6.0.0',
-                'expo-status-bar': '~3.0.0',
-                'expo-system-ui': '~6.0.0',
+                'expo-constants': '~18.0.9',
+                'expo-font': '~14.0.9',
+                'expo-linking': '~8.0.8',
+                'expo-router': '~6.0.14',
+                'expo-status-bar': '~3.0.8',
+                'expo-system-ui': '~6.0.7',
                 'react': '19.1.0',
                 'react-dom': '19.1.0',
                 'react-native': '0.81.5',
@@ -534,9 +534,10 @@ const styles = StyleSheet.create({
                 'react-native-safe-area-context': '~5.6.0',
                 'react-native-screens': '~4.11.0',
                 'react-native-web': '~0.21.0',
-                'react-native-worklets': '~0.4.0',
+                'react-native-worklets': '~0.5.0',
             },
             devDependencies: {
+                '@babel/core': '^7.25.0',
                 '@types/react': '~19.1.0',
                 'typescript': '~5.9.0',
             },
@@ -585,7 +586,7 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
         },
         allFiles: expoFiles,
         language: 'typescript',
-        deps: { 'expo': '~54.0.0', 'react-native': '0.81.5', 'react-native-gesture-handler': '~2.28.0', 'react-native-reanimated': '~4.1.0', 'expo-router': '~6.0.0' },
+        deps: { 'expo': '~54.0.0', 'react-native': '0.81.5', 'react-native-gesture-handler': '~2.28.0', 'react-native-reanimated': '~4.1.0', 'expo-router': '~6.0.14' },
         projectType: 'app',
         renderMode: 'mobile',
         initCommand: 'npx expo start --port ${PORT:-8001} --host lan',
