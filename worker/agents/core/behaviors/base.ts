@@ -1146,10 +1146,9 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             ? (previewURL: string): string | undefined => {
                 try {
                     const url = new URL(previewURL);
-                    const isSecure = url.protocol === 'https:';
-                    const scheme = isSecure ? 'exps' : 'exp';
-                    // Use .hostname (no port) — proxy serves on standard port 443
-                    return `${scheme}://${url.hostname}`;
+                    // Use original protocol (https://) directly — Expo Go SDK 54
+                    // handles HTTPS URLs natively without needing exps:// scheme
+                    return `${url.protocol}//${url.hostname}`;
                 } catch {
                     return undefined;
                 }

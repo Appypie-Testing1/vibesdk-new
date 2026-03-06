@@ -32,8 +32,10 @@ const MobilePreview = forwardRef<HTMLIFrameElement, {
 	let webPreviewSrc: string;
 	try {
 		const url = new URL(previewUrl);
-		const scheme = url.protocol === 'https:' ? 'exps' : 'exp';
-		expoDeepLink = `${scheme}://${url.hostname}`;
+		// Use the original protocol (https://) directly — Expo Go SDK 54 handles
+		// HTTPS URLs natively. The exps:// scheme causes "Expected URL scheme http
+		// or https" errors in some environments.
+		expoDeepLink = `${url.protocol}//${url.hostname}`;
 		url.pathname = '/web-preview.html';
 		webPreviewSrc = url.toString();
 	} catch {
