@@ -842,7 +842,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         'expo-status-bar', 'expo-system-ui',
         'react', 'react-dom', 'react-native', 'react-native-gesture-handler',
         'react-native-reanimated', 'react-native-safe-area-context',
-        'react-native-screens', 'react-native-web',
+        'react-native-screens', 'react-native-web', 'react-native-worklets',
         '@types/react', 'typescript',
         // Expo Router internals
         'expo-router/entry',

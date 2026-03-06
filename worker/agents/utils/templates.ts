@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
             version: '1.0.0',
             main: 'expo-router/entry',
             scripts: {
-                dev: 'npx expo start --port ${PORT:-8001} --host lan --web',
+                dev: 'npx expo start --port ${PORT:-8001} --host lan',
                 build: 'npx expo export',
                 lint: 'npx eslint . --ext .ts,.tsx',
             },
@@ -534,6 +534,7 @@ const styles = StyleSheet.create({
                 'react-native-safe-area-context': '~5.6.0',
                 'react-native-screens': '~4.11.0',
                 'react-native-web': '~0.21.0',
+                'react-native-worklets': '~0.4.0',
             },
             devDependencies: {
                 '@types/react': '~19.1.0',
@@ -587,7 +588,7 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
         deps: { 'expo': '~54.0.0', 'react-native': '0.81.5', 'react-native-gesture-handler': '~2.28.0', 'react-native-reanimated': '~4.1.0', 'expo-router': '~6.0.0' },
         projectType: 'app',
         renderMode: 'mobile',
-        initCommand: 'npx expo start --port ${PORT:-8001} --host lan --web',
+        initCommand: 'npx expo start --port ${PORT:-8001} --host lan',
         frameworks: ['react-native', 'expo', 'expo-router'],
         importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'package.json', 'app.json'],
         dontTouchFiles: ['app.json'],
