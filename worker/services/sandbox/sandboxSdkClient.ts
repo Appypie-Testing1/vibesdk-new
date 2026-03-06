@@ -636,12 +636,11 @@ export class SandboxSdkClient extends BaseSandboxService {
             // Note: Environment variables should already be set via setLocalEnvVars
             const session = await this.getOrCreateSession(`${instanceId}-dev`, `/workspace/${instanceId}`);
 
-            // Build env vars prefix (extra env vars are inherited by the child process)
+            // Build env vars prefix (none of the values contain shell-special characters)
             const extraEnvPrefix = extraEnvVars
                 ? Object.entries(extraEnvVars).map(([k, v]) => `${k}=${v}`).join(' ') + ' '
                 : '';
 
-            // Start process with env vars inline for those not in .dev.vars
             const process = await session.startProcess(
                 `${extraEnvPrefix}VITE_LOGGER_TYPE=json PORT=${port} monitor-cli process start --instance-id ${instanceId} --port ${port} -- ${initCommand}`
             );
@@ -990,16 +989,14 @@ export class SandboxSdkClient extends BaseSandboxService {
                             try {
                                 const parsedUrl = new URL(previewURL);
                                 const publicHostname = parsedUrl.hostname;
-                                const publicOrigin = `${parsedUrl.protocol}//${publicHostname}`;
+                                // REACT_NATIVE_PACKAGER_HOSTNAME sets the hostname in manifest fields
+                                // (hostUri, debuggerHost). In dev mode, Expo Go constructs bundle URLs
+                                // from debuggerHost (not launchAsset.url), so this is sufficient.
+                                // Note: EXPO_PACKAGER_PROXY_URL causes Metro crashes (Invalid URL)
+                                // and is NOT used — Expo Go infers protocol from the manifest fetch.
                                 devServerEnvVars.REACT_NATIVE_PACKAGER_HOSTNAME = publicHostname;
-                                // EXPO_PACKAGER_PROXY_URL overrides the FULL origin (protocol+host+port)
-                                // in all Metro-generated manifest/bundle URLs. Without this, Metro always
-                                // appends its listening port (:8001) which is unreachable externally —
-                                // only the HTTPS proxy on port 443 is accessible.
-                                devServerEnvVars.EXPO_PACKAGER_PROXY_URL = publicOrigin;
                                 this.logger.info('Set Expo env vars for container', {
                                     publicHostname,
-                                    EXPO_PACKAGER_PROXY_URL: publicOrigin,
                                     CI: '1',
                                 });
                             } catch (urlError) {
