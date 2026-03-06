@@ -424,7 +424,7 @@ To build a valid, previewable Expo/React Native project, follow these rules:
 1. The package.json **MUST** have a dev script using expo start:
 \`\`\`
 "scripts": {
-    "dev": "npx expo start --port \${PORT:-8001}",
+    "dev": "npx expo start --port \${PORT:-8001} --web",
     "build": "npx expo export",
     "lint": "npx eslint . --ext .ts,.tsx"
 }
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
             version: '1.0.0',
             main: 'expo-router/entry',
             scripts: {
-                dev: 'npx expo start --port ${PORT:-8001}',
+                dev: 'npx expo start --port ${PORT:-8001} --web',
                 build: 'npx expo export',
                 lint: 'npx eslint . --ext .ts,.tsx',
             },
@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
         deps: { 'expo': '~52.0.0', 'react-native': '0.76.6', 'react-native-gesture-handler': '~2.20.0', 'react-native-reanimated': '~3.16.0', 'expo-router': '~4.0.0' },
         projectType: 'app',
         renderMode: 'mobile',
-        initCommand: 'npx expo start --port ${PORT:-8001}',
+        initCommand: 'npx expo start --port ${PORT:-8001} --web',
         frameworks: ['react-native', 'expo', 'expo-router'],
         importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'package.json', 'app.json'],
         dontTouchFiles: ['app.json'],

@@ -941,6 +941,12 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
             fileCount: Object.keys(state.generatedFilesMap).length
         });
 
+        // For Expo projects, ensure all imported dependencies are installed before export.
+        // The sandbox may have been recreated since the last deploy, losing auto-installed packages.
+        if (state.templateRenderMode === 'mobile') {
+            await this.autoInstallMissingDependencies(state.sandboxInstanceId);
+        }
+
         // Deploy to Cloudflare
         const deploymentResult = await client.deployToCloudflareWorkers(
             state.sandboxInstanceId,
