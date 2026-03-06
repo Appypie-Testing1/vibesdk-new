@@ -1148,7 +1148,8 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                     const url = new URL(previewURL);
                     const isSecure = url.protocol === 'https:';
                     const scheme = isSecure ? 'exps' : 'exp';
-                    return `${scheme}://${url.host}`;
+                    // Use .hostname (no port) — proxy serves on standard port 443
+                    return `${scheme}://${url.hostname}`;
                 } catch {
                     return undefined;
                 }

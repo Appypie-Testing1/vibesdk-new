@@ -45,7 +45,8 @@ export const AppPreview = forwardRef<HTMLIFrameElement, PreviewComponentProps>(
 			try {
 				const url = new URL(previewUrl);
 				const scheme = url.protocol === 'https:' ? 'exps' : 'exp';
-				expoDeepLink = `${scheme}://${url.host}`;
+				// Use .hostname (no port) — proxy serves on standard port 443, not :8001
+				expoDeepLink = `${scheme}://${url.hostname}`;
 				url.pathname = '/web-preview.html';
 				webPreviewSrc = url.toString();
 			} catch {

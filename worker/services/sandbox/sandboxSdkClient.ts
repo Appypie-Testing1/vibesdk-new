@@ -988,9 +988,20 @@ export class SandboxSdkClient extends BaseSandboxService {
                         };
                         if (previewURL) {
                             try {
-                                const publicHost = new URL(previewURL).host;
-                                devServerEnvVars.REACT_NATIVE_PACKAGER_HOSTNAME = publicHost;
-                                this.logger.info('Set Expo env vars for container', { publicHost, CI: '1' });
+                                const parsedUrl = new URL(previewURL);
+                                // Use .hostname (without port) — the proxy serves on standard HTTPS port 443.
+                                // .host includes :8001 which is NOT reachable externally.
+                                const publicHostname = parsedUrl.hostname;
+                                const publicOrigin = `${parsedUrl.protocol}//${publicHostname}`;
+                                devServerEnvVars.REACT_NATIVE_PACKAGER_HOSTNAME = publicHostname;
+                                // EXPO_DEV_SERVER_ORIGIN tells Metro the full public origin for all URLs
+                                // (manifest, bundles, assets). Without this, Metro appends :8001 to URLs.
+                                devServerEnvVars.EXPO_DEV_SERVER_ORIGIN = publicOrigin;
+                                this.logger.info('Set Expo env vars for container', {
+                                    publicHostname,
+                                    publicOrigin,
+                                    CI: '1',
+                                });
                             } catch (urlError) {
                                 this.logger.warn('Could not derive public hostname for Expo', urlError);
                             }
