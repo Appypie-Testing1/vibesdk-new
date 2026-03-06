@@ -445,6 +445,14 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             reviewingInitiated: true
         });
 
+        // Mobile projects: skip static analysis and runtime error fetching.
+        // Expo/RN containers don't have eslint configured, TypeScript compilation
+        // is very slow with RN types, and runtime errors are only visible on-device.
+        if (this.state.templateRenderMode === 'mobile') {
+            this.logger.info("Mobile project - skipping review cycle (not applicable)");
+            return CurrentDevState.IDLE;
+        }
+
         // If issues/errors found, prompt user if they want to review and cleanup
         const issues = await this.fetchAllIssues(false);
         if (issues.runtimeErrors.length > 0 || issues.staticAnalysis.typecheck.issues.length > 0) {
@@ -456,7 +464,7 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             }
             // Store the message in the conversation history so user's response can trigger the deep debug tool
             this.infrastructure.addConversationMessage(message);
-            
+
             this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
                 message: message.content,
                 conversationId: message.conversationId,
@@ -651,7 +659,9 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
 
         if (safeFiles.length > 0) {
             await this.deployToSandbox(safeFiles, false, phase.name, true);
-            if (postPhaseFixing) {
+            // Skip static analysis/code fixes for mobile — Expo containers don't
+            // have eslint configured and tsc with RN types is extremely slow
+            if (postPhaseFixing && this.state.templateRenderMode !== 'mobile') {
                 await this.applyDeterministicCodeFixes();
                 if (this.getInferenceContext().enableFastSmartCodeFix) {
                     await this.applyFastSmartCodeFixes();

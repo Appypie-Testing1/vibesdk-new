@@ -904,9 +904,10 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
 
             logger.info('Auto-installing Expo dependencies', { packages: packagesToInstall });
             const client = this.getClient();
+            // 30s timeout to prevent hanging during deployment
             await client.executeCommands(sandboxInstanceId, [
                 `bun add ${packagesToInstall.join(' ')}`
-            ]);
+            ], 30000);
             logger.info('Auto-installed Expo dependencies', { count: packagesToInstall.length });
         } catch (error) {
             logger.warn('Failed to auto-install missing dependencies (non-blocking)', error);
