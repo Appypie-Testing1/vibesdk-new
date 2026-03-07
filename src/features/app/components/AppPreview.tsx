@@ -8,6 +8,7 @@
 
 import { forwardRef, useState, useEffect, useCallback, useRef } from 'react';
 import { PreviewIframe } from '@/routes/chat/components/preview-iframe';
+import { useMobileView } from '@/contexts/mobile-view-context';
 import { QRCodeSVG } from 'qrcode.react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { Smartphone, Copy, Check, RefreshCw, Monitor } from 'lucide-react';
@@ -189,6 +190,8 @@ export const AppPreview = forwardRef<HTMLIFrameElement, PreviewComponentProps>(
 		},
 		ref,
 	) => {
+		const { isMobilePreview } = useMobileView();
+
 		if (!previewUrl) {
 			return (
 				<div className={`${className ?? ''} flex items-center justify-center bg-bg-3 border border-text/10 rounded-lg`}>
@@ -202,6 +205,31 @@ export const AppPreview = forwardRef<HTMLIFrameElement, PreviewComponentProps>(
 		}
 
 		if (templateDetails?.renderMode === 'mobile') {
+			// When inside phone frame (MobilePreviewWrapper), render a simple iframe
+			// showing the web preview. The phone frame IS the mobile preview.
+			// When NOT in phone frame, render MobilePreview with QR code + tabs.
+			if (isMobilePreview) {
+				let webPreviewSrc: string;
+				try {
+					const url = new URL(previewUrl);
+					url.pathname = '/web-preview.html';
+					webPreviewSrc = url.toString();
+				} catch {
+					webPreviewSrc = previewUrl;
+				}
+				return (
+					<PreviewIframe
+						ref={ref ?? previewRef}
+						src={webPreviewSrc}
+						className={className}
+						title="Mobile App Preview"
+						shouldRefreshPreview={shouldRefreshPreview}
+						manualRefreshTrigger={manualRefreshTrigger}
+						webSocket={websocket}
+					/>
+				);
+			}
+
 			return (
 				<MobilePreview
 					ref={ref ?? previewRef}
