@@ -484,8 +484,10 @@ export default function Chat() {
 			hasSeenPreview.current = true;
 		} else if (previewUrl) {
 			const isExistingChat = urlChatId !== 'new';
+			const isMobile = templateDetails?.renderMode === 'mobile';
 			const shouldSwitch =
 				behaviorType === 'agentic' ||
+				isMobile ||
 				(behaviorType === 'phasic' && isPhase1Complete) ||
 				(isExistingChat && behaviorType !== 'phasic');
 
@@ -501,7 +503,7 @@ export default function Chat() {
 
 		// Update ref for next comparison
 		prevMarkdownCountRef.current = markdownFiles.length;
-	}, [previewUrl, isPhase1Complete, isStaticContent, files, activeFilePath, behaviorType, hasDocumentation, projectType, urlChatId]);
+	}, [previewUrl, isPhase1Complete, isStaticContent, files, activeFilePath, behaviorType, hasDocumentation, projectType, urlChatId, templateDetails]);
 
 	useEffect(() => {
 		if (chatId) {

@@ -22,7 +22,7 @@ const MobilePreview = forwardRef<HTMLIFrameElement, {
 	shouldRefreshPreview?: boolean;
 	manualRefreshTrigger?: number;
 }>(({ previewUrl, className, shouldRefreshPreview, manualRefreshTrigger }, ref) => {
-	const [viewMode, setViewMode] = useState<MobileViewMode>('device');
+	const [viewMode, setViewMode] = useState<MobileViewMode>('web');
 	const [iframeLoaded, setIframeLoaded] = useState(false);
 	const [iframeKey, setIframeKey] = useState(0);
 	const iframeRef = useRef<HTMLIFrameElement | null>(null);
