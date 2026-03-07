@@ -549,6 +549,31 @@ const styles = StyleSheet.create({
                 paths: { '@/*': ['./*'] },
             },
         }, null, 2),
+        'metro.config.js': `const { getDefaultConfig } = require('expo/metro-config');
+
+const config = getDefaultConfig(__dirname);
+
+// Sanitize proxy headers to prevent Metro 0.83.x "TypeError: Invalid URL".
+// Behind nested proxies (e.g. Cloudflare -> sandbox), x-forwarded-proto can
+// contain comma-separated duplicates like "https, https". Metro constructs
+// new URL(path, protocol + "://" + host) which fails with invalid base URL.
+config.server = {
+  ...config.server,
+  enhanceMiddleware: (middleware) => {
+    return (req, res, next) => {
+      if (req.headers['x-forwarded-proto']) {
+        req.headers['x-forwarded-proto'] = req.headers['x-forwarded-proto'].split(',')[0].trim();
+      }
+      if (req.headers['x-forwarded-host']) {
+        req.headers['x-forwarded-host'] = req.headers['x-forwarded-host'].split(',')[0].trim();
+      }
+      return middleware(req, res, next);
+    };
+  },
+};
+
+module.exports = config;
+`,
         'public/web-preview.html': `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -582,6 +607,7 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
                 { path: 'package.json', type: 'file' },
                 { path: 'app.json', type: 'file' },
                 { path: 'tsconfig.json', type: 'file' },
+                { path: 'metro.config.js', type: 'file' },
             ]
         },
         allFiles: expoFiles,
@@ -592,7 +618,7 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
         initCommand: 'npx expo start --port ${PORT:-8001} --host lan',
         frameworks: ['react-native', 'expo', 'expo-router'],
         importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'package.json', 'app.json'],
-        dontTouchFiles: ['app.json'],
+        dontTouchFiles: ['app.json', 'metro.config.js'],
         redactedFiles: [],
         disabled: false,
     };
