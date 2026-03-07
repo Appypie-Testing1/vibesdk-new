@@ -480,12 +480,12 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
 
             logger.info('Files written to sandbox instance', { instanceId: sandboxInstanceId, files: filesToWrite.map(f => f.filePath) });
 
-            // For Expo/mobile projects, auto-install any missing third-party dependencies.
-            // The LLM may generate code that imports packages not in the template's package.json
-            // (e.g. date-fns, react-native-svg, zustand). Metro bundler will crash with
-            // "Unable to resolve module" if these aren't installed.
+            // For Expo/mobile projects:
+            // 1. Ensure metro.config.js exists (sanitizes proxy headers to prevent Metro crashes)
+            // 2. Auto-install any missing third-party dependencies
             const state = this.getState();
             if (state.templateRenderMode === 'mobile') {
+                await this.ensureMetroConfig(sandboxInstanceId);
                 await this.autoInstallMissingDependencies(sandboxInstanceId);
             }
         }
@@ -847,6 +847,48 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         // Expo Router internals
         'expo-router/entry',
     ]);
+
+    /**
+     * Metro config that sanitizes proxy headers to prevent "TypeError: Invalid URL".
+     * Metro 0.83.x constructs URLs from x-forwarded-proto + host headers. Behind nested
+     * proxies, x-forwarded-proto can contain comma-separated duplicates ("https, https")
+     * which produces an invalid base URL.
+     */
+    private static readonly METRO_CONFIG_CONTENT = `const { getDefaultConfig } = require('expo/metro-config');
+const config = getDefaultConfig(__dirname);
+config.server = {
+  ...config.server,
+  enhanceMiddleware: (middleware) => {
+    return (req, res, next) => {
+      if (req.headers['x-forwarded-proto']) {
+        req.headers['x-forwarded-proto'] = req.headers['x-forwarded-proto'].split(',')[0].trim();
+      }
+      if (req.headers['x-forwarded-host']) {
+        req.headers['x-forwarded-host'] = req.headers['x-forwarded-host'].split(',')[0].trim();
+      }
+      return middleware(req, res, next);
+    };
+  },
+};
+module.exports = config;
+`;
+
+    /**
+     * Ensure metro.config.js exists in the sandbox for mobile projects.
+     * This config sanitizes proxy headers that cause Metro to crash with "TypeError: Invalid URL".
+     * Written on every deploy so it's present even for projects created before this fix.
+     */
+    private async ensureMetroConfig(sandboxInstanceId: string): Promise<void> {
+        const logger = this.getLog();
+        try {
+            await this.getClient().writeFiles(sandboxInstanceId, [
+                { filePath: 'metro.config.js', fileContents: DeploymentManager.METRO_CONFIG_CONTENT }
+            ]);
+            logger.info('Ensured metro.config.js exists in sandbox');
+        } catch (error) {
+            logger.warn('Failed to write metro.config.js (non-blocking)', error);
+        }
+    }
 
     /**
      * Packages required for Expo projects that may not be detectable via import scanning.
