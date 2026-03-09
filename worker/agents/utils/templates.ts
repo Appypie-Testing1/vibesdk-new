@@ -438,7 +438,7 @@ To build a valid, previewable Expo/React Native project (SDK 54, React Native 0.
 
 5. All UI must use React Native components (View, Text, TouchableOpacity, etc.), NOT HTML elements.
 
-6. These packages are already installed: expo, expo-constants, expo-font, expo-haptics, expo-linear-gradient, expo-linking, expo-router, expo-status-bar, expo-system-ui, react-native, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens, react-native-svg, react-native-web. Do NOT add them again with exec_commands.
+6. These packages are already installed: expo, expo-router, expo-constants, expo-font, expo-linking, expo-status-bar, expo-system-ui, react-native, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens, react-native-web. Do NOT add them again with exec_commands.
 
 7. **CRITICAL**: If your code imports ANY package not listed above, you MUST install it with exec_commands("bun add <package>") BEFORE calling deploy_preview. Missing dependencies cause Metro bundler to crash with "Unable to resolve module" errors. Common packages that need explicit installation: date-fns, react-native-svg, zustand, @react-native-async-storage/async-storage, expo-image, expo-linear-gradient, expo-splash-screen, lottie-react-native, etc.
 `;
@@ -522,8 +522,6 @@ const styles = StyleSheet.create({
                 'expo': '~54.0.0',
                 'expo-constants': '~18.0.9',
                 'expo-font': '~14.0.9',
-                'expo-haptics': '~14.0.3',
-                'expo-linear-gradient': '~14.0.3',
                 'expo-linking': '~8.0.8',
                 'expo-router': '~6.0.14',
                 'expo-status-bar': '~3.0.8',
@@ -535,7 +533,6 @@ const styles = StyleSheet.create({
                 'react-native-reanimated': '~4.1.0',
                 'react-native-safe-area-context': '~5.6.0',
                 'react-native-screens': '~4.11.0',
-                'react-native-svg': '~16.0.0',
                 'react-native-web': '~0.21.0',
                 'react-native-worklets': '~0.5.0',
             },
