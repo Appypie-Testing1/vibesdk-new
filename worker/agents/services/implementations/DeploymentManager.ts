@@ -856,6 +856,10 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
      */
     private static readonly METRO_CONFIG_CONTENT = `const { getDefaultConfig } = require('expo/metro-config');
 const config = getDefaultConfig(__dirname);
+// Disable package exports to fix React 19 web bundling.
+// Metro incorrectly transforms React 19 module exports for web platform,
+// causing "(0, _react.createContext) is not a function" errors.
+config.resolver.unstable_enablePackageExports = false;
 config.server = {
   ...config.server,
   enhanceMiddleware: (middleware) => {

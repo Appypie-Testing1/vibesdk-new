@@ -553,6 +553,11 @@ const styles = StyleSheet.create({
 
 const config = getDefaultConfig(__dirname);
 
+// Disable package exports to fix React 19 web bundling.
+// Metro incorrectly transforms React 19 module exports for web platform,
+// causing "(0, _react.createContext) is not a function" errors.
+config.resolver.unstable_enablePackageExports = false;
+
 // Sanitize proxy headers to prevent Metro 0.83.x "TypeError: Invalid URL".
 // Behind nested proxies (e.g. Cloudflare -> sandbox), x-forwarded-proto can
 // contain comma-separated duplicates like "https, https". Metro constructs
