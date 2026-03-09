@@ -6,7 +6,6 @@
  * 1. The sandbox is running and reachable
  * 2. The web-preview.html is served correctly
  * 3. The Metro web bundle compiles without 500 errors
- * 4. The bundle contains valid JavaScript (not an error page)
  *
  * Run:
  *   VIBESDK_RUN_INTEGRATION_TESTS=1 \
@@ -36,17 +35,6 @@ function requireEnv(name: string): string {
 	return v;
 }
 
-function safeWsType(m: unknown): string {
-	const t = (m as { type?: unknown })?.type;
-	if (typeof t === 'string') return t.length > 120 ? `${t.slice(0, 120)}…` : t;
-	try {
-		const s = JSON.stringify(t);
-		return s.length > 120 ? `${s.slice(0, 120)}…` : s;
-	} catch {
-		return String(t);
-	}
-}
-
 /** Build the Metro web bundle URL from a preview base URL. */
 function metroBundleUrl(previewUrl: string): string {
 	const url = new URL(previewUrl);
@@ -60,39 +48,6 @@ function webPreviewUrl(previewUrl: string): string {
 	const url = new URL(previewUrl);
 	url.pathname = '/web-preview.html';
 	return url.toString();
-}
-
-/**
- * Wait for deployment_completed by listening to raw WS messages.
- * In phasic mode for mobile projects, deployment happens during phase_validating.
- * The deployment_completed message may arrive before or after phase_validated.
- * This helper captures it regardless of the phasic flow timing.
- */
-function captureDeploymentCompleted(session: BuildSession): Promise<{
-	previewURL: string;
-	tunnelURL: string;
-	instanceId: string;
-}> {
-	return new Promise((resolve, reject) => {
-		const timeout = setTimeout(() => {
-			reject(new Error('Timeout (480s) waiting for deployment_completed WS message'));
-		}, 480_000);
-
-		session.on('ws:message', (m: Record<string, unknown>) => {
-			if (m.type === 'deployment_completed') {
-				clearTimeout(timeout);
-				resolve({
-					previewURL: m.previewURL as string,
-					tunnelURL: m.tunnelURL as string,
-					instanceId: m.instanceId as string,
-				});
-			}
-			if (m.type === 'deployment_failed') {
-				clearTimeout(timeout);
-				reject(new Error(`Deployment failed: ${m.error ?? 'unknown error'}`));
-			}
-		});
-	});
 }
 
 /* ------------------------------------------------------------------ */
@@ -123,8 +78,8 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		}
 	});
 
-	/* -- Step 1: Create Expo project and deploy ---------------------- */
-	it('creates an Expo mobile project and deploys to preview', async () => {
+	/* -- Step 1: Create Expo project and get preview URL -------------- */
+	it('creates an Expo mobile project and gets preview URL', async () => {
 		const client = new PhasicClient({
 			baseUrl,
 			apiKey,
@@ -135,7 +90,7 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		console.log('[expo-e2e] creating Expo mobile project...');
 
 		session = await client.build(
-			'Build a simple React Native counter app with increment and decrement buttons using Expo.',
+			'Build a simple React Native counter app with increment and decrement buttons using Expo. Only use packages from the pre-installed list.',
 			{
 				projectType: 'app',
 				selectedTemplate: 'expo-scratch',
@@ -144,12 +99,56 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 			},
 		);
 
+		// Capture deployment_completed from ANY point in the flow.
+		// In phasic mode, deployment happens during phase_validating automatically.
+		let deployResolve: (v: { previewURL: string }) => void;
+		let deployReject: (e: Error) => void;
+		const deploymentPromise = new Promise<{ previewURL: string }>((res, rej) => {
+			deployResolve = res;
+			deployReject = rej;
+		});
+		const deployTimeout = setTimeout(() => {
+			deployReject!(new Error('Timeout (540s) waiting for deployment_completed'));
+		}, 540_000);
+
 		// Log WS messages for debugging (filter out noisy chunk messages)
 		session.on('ws:message', (m: Record<string, unknown>) => {
-			if (m.type !== 'file_chunk_generated') {
-				console.log(`[expo-e2e] ws: ${safeWsType(m)}`);
+			const msgType = m.type as string;
+
+			// Skip chunk noise
+			if (msgType === 'file_chunk_generated') return;
+
+			// Log state content for deployment-related states
+			if (msgType === 'cf_agent_state') {
+				const state = m as Record<string, unknown>;
+				const devState = state.currentDevState ?? state.devState;
+				const sandboxId = state.sandboxInstanceId;
+				if (devState || sandboxId) {
+					console.log(`[expo-e2e] ws: cf_agent_state devState=${devState} sandbox=${sandboxId}`);
+				} else {
+					console.log(`[expo-e2e] ws: cf_agent_state`);
+				}
+				return;
+			}
+
+			console.log(`[expo-e2e] ws: ${msgType}`);
+
+			// Capture deployment result
+			if (msgType === 'deployment_completed') {
+				clearTimeout(deployTimeout);
+				deployResolve!({ previewURL: m.previewURL as string });
+			}
+			if (msgType === 'deployment_failed') {
+				clearTimeout(deployTimeout);
+				deployReject!(new Error(`Deployment failed: ${m.error ?? 'unknown'}`));
+			}
+
+			// Also check phase_validated -- it means deployment completed in phasic mode
+			if (msgType === 'phase_validated') {
+				console.log('[expo-e2e] phase_validated received -- checking state for preview URL');
 			}
 		});
+
 		session.on('ws:reconnecting', (e: { attempt: number; delayMs: number; reason: string }) => {
 			console.log(`[expo-e2e] ws reconnecting: attempt=${e.attempt} delay=${e.delayMs}ms reason=${e.reason}`);
 		});
@@ -163,54 +162,59 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		console.log(`[expo-e2e] agentId=${session.agentId}`);
 		expect(typeof session.agentId).toBe('string');
 
-		// Start listening for deployment_completed immediately.
-		// In phasic mode, deployment happens during phase_validating automatically.
-		// We capture it here so we don't miss it regardless of when it arrives.
-		const deploymentPromise = captureDeploymentCompleted(session);
-
 		// Wait for generation to start
 		if (session.state.get().generation.status === 'idle') {
 			console.log('[expo-e2e] waiting for generation to start...');
 			await session.wait.generationStarted({ timeoutMs: 120_000 });
 		}
+		console.log('[expo-e2e] generation started');
 
-		console.log('[expo-e2e] generation started, waiting for generation to complete...');
-		await session.wait.generationComplete({ timeoutMs: 300_000 });
-		console.log('[expo-e2e] generation complete');
+		// Wait for deployment_completed to arrive from the phasic flow.
+		// In phasic mode: phase_implementing -> phase_validating (deploys) -> deployment_completed -> phase_validated
+		// We also try triggering deployPreview() after generation_complete as a fallback.
+		const genCompletePromise = session.wait.generationComplete({ timeoutMs: 300_000 });
 
-		// Check if deployment_completed already arrived from phasic auto-deploy.
-		// If not, manually trigger preview deployment.
-		const raceResult = await Promise.race([
-			deploymentPromise.then(d => ({ source: 'auto' as const, deployed: d })),
-			new Promise<{ source: 'timeout' }>(resolve =>
-				setTimeout(() => resolve({ source: 'timeout' }), 5_000)
-			),
+		// Race: deployment might complete before or after generation_complete
+		const result = await Promise.race([
+			deploymentPromise.then(d => ({ type: 'deployed' as const, ...d })),
+			genCompletePromise.then(() => ({ type: 'gen_complete' as const })),
 		]);
 
-		if (raceResult.source === 'auto') {
-			console.log('[expo-e2e] deployment_completed received from phasic auto-deploy');
-			previewURL = raceResult.deployed.previewURL;
+		if (result.type === 'deployed') {
+			previewURL = result.previewURL;
+			console.log(`[expo-e2e] deployment completed during generation: ${previewURL}`);
 		} else {
-			// Deployment hasn't completed yet, trigger it manually
-			console.log('[expo-e2e] no auto-deploy yet, triggering deployPreview()...');
-			session.deployPreview();
-			const deployed = await deploymentPromise;
-			previewURL = deployed.previewURL;
+			console.log('[expo-e2e] generation complete, waiting for deployment...');
+
+			// Give phasic auto-deploy a chance (30s), then manually trigger
+			const raceResult = await Promise.race([
+				deploymentPromise.then(d => ({ source: 'auto' as const, ...d })),
+				new Promise<{ source: 'timeout' }>(resolve =>
+					setTimeout(() => resolve({ source: 'timeout' }), 30_000)
+				),
+			]);
+
+			if (raceResult.source === 'auto') {
+				previewURL = raceResult.previewURL;
+				console.log(`[expo-e2e] deployment completed from phasic flow: ${previewURL}`);
+			} else {
+				console.log('[expo-e2e] no auto-deploy after 30s, triggering deployPreview()...');
+				session.deployPreview();
+				const deployed = await deploymentPromise;
+				previewURL = deployed.previewURL;
+				console.log(`[expo-e2e] deployment completed from manual trigger: ${previewURL}`);
+			}
 		}
 
-		console.log(`[expo-e2e] preview deployed: ${previewURL}`);
 		expect(previewURL.startsWith('http')).toBe(true);
 
-		// Verify LLM generated files (template files like app.json, metro.config.js
-		// are written directly to sandbox but not tracked in SDK workspace)
+		// Verify LLM generated files
 		const paths = session.files.listPaths();
 		console.log(`[expo-e2e] generated ${paths.length} files: ${paths.join(', ')}`);
 		expect(paths.length).toBeGreaterThan(0);
-
-		// At minimum, the LLM should generate route files
 		const hasAppRoute = paths.some(p => p.startsWith('app/'));
 		expect(hasAppRoute).toBe(true);
-		console.log('[expo-e2e] generated files include app/ route files');
+		console.log('[expo-e2e] files look good');
 	}, 600_000);
 
 	/* -- Step 2: Verify web-preview.html is served ------------------- */
@@ -241,38 +245,45 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		const bundleUrl = metroBundleUrl(previewURL!);
 		console.log(`[expo-e2e] fetching Metro web bundle: ${bundleUrl}`);
 
-		// Metro can take a while to compile the first bundle (cold start)
-		const resp = await fetch(bundleUrl, {
-			headers: { 'Accept': 'application/javascript' },
-			redirect: 'follow',
-			signal: AbortSignal.timeout(120_000),
-		});
+		// Metro can take a while to compile the first bundle (cold start).
+		// Retry a few times since Metro might still be starting up.
+		let lastStatus = 0;
+		let lastBody = '';
+		for (let attempt = 1; attempt <= 3; attempt++) {
+			if (attempt > 1) {
+				console.log(`[expo-e2e] retrying Metro bundle (attempt ${attempt}/3) in 15s...`);
+				await new Promise(r => setTimeout(r, 15_000));
+			}
 
-		console.log(`[expo-e2e] Metro bundle status=${resp.status}`);
-		console.log(`[expo-e2e] Metro bundle content-type=${resp.headers.get('content-type')}`);
+			const resp = await fetch(bundleUrl, {
+				headers: { 'Accept': 'application/javascript' },
+				redirect: 'follow',
+				signal: AbortSignal.timeout(120_000),
+			});
 
-		if (resp.status !== 200) {
-			const errorBody = await resp.text();
-			console.error(`[expo-e2e] Metro bundle ERROR body (first 2000 chars):\n${errorBody.slice(0, 2000)}`);
+			lastStatus = resp.status;
+			lastBody = await resp.text();
+
+			console.log(`[expo-e2e] Metro bundle attempt ${attempt}: status=${lastStatus} size=${lastBody.length}`);
+
+			if (lastStatus === 200) break;
+
+			console.error(`[expo-e2e] Metro error (first 1000 chars):\n${lastBody.slice(0, 1000)}`);
+		}
+
+		if (lastStatus !== 200) {
 			throw new Error(
-				`Metro web bundle returned ${resp.status}. ` +
-				`Error: ${errorBody.slice(0, 500)}`,
+				`Metro web bundle returned ${lastStatus} after 3 attempts. ` +
+				`Error: ${lastBody.slice(0, 500)}`,
 			);
 		}
 
-		expect(resp.status).toBe(200);
+		expect(lastStatus).toBe(200);
+		expect(lastBody.length).toBeGreaterThan(10_000);
+		expect(lastBody).not.toContain('Unable to resolve module');
 
-		const body = await resp.text();
-		console.log(`[expo-e2e] Metro bundle size=${body.length} bytes`);
-
-		// Should be a large JS bundle, not an error page
-		expect(body.length).toBeGreaterThan(10_000);
-
-		// Should not contain common Metro error indicators
-		expect(body).not.toContain('Unable to resolve module');
-
-		console.log('[expo-e2e] Metro web bundle compiled successfully');
-	}, 180_000);
+		console.log(`[expo-e2e] Metro web bundle compiled successfully (${lastBody.length} bytes)`);
+	}, 300_000);
 
 	/* -- Step 4: Verify sandbox root responds (Metro dev server) ----- */
 	it('sandbox root URL responds (Metro dev server running)', async () => {

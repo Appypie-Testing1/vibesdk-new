@@ -912,15 +912,29 @@ module.exports = config;
     private async autoInstallMissingDependencies(sandboxInstanceId: string): Promise<void> {
         const logger = this.getLog();
         const state = this.getState();
+        const client = this.getClient();
 
         try {
             const allFiles = Object.values(state.generatedFilesMap);
 
-            // Build the set of known/installed packages from pre-installed list + package.json deps
-            const knownPackages = new Set(DeploymentManager.EXPO_PREINSTALLED);
-
-            // Also read dependencies from the generated package.json (LLM may have added some)
+            // Step 1: Run `bun install` to sync node_modules with the LLM's package.json.
+            // The LLM often adds packages to package.json (e.g. expo-linear-gradient)
+            // that weren't in the original template. Without this step, those packages
+            // exist in package.json but are never installed in node_modules.
             const pkgJsonFile = allFiles.find(f => f.filePath === 'package.json');
+            if (pkgJsonFile) {
+                logger.info('Running bun install to sync package.json dependencies');
+                try {
+                    await client.executeCommands(sandboxInstanceId, ['bun install'], 90_000);
+                    logger.info('bun install completed');
+                } catch (error) {
+                    logger.error('bun install failed', { error });
+                }
+            }
+
+            // Step 2: Detect imports that aren't in package.json at all (LLM forgot to add them).
+            // Compare against pre-installed set + whatever is in the generated package.json.
+            const knownPackages = new Set(DeploymentManager.EXPO_PREINSTALLED);
             if (pkgJsonFile) {
                 try {
                     const pkgJson = JSON.parse(pkgJsonFile.fileContents);
@@ -934,12 +948,10 @@ module.exports = config;
                 }
             }
 
-            // Detect missing packages from import scanning
             const detectedPackages = DeploymentManager.extractThirdPartyPackages(allFiles);
             const missingFromImports = detectedPackages.filter(pkg => !knownPackages.has(pkg));
 
-            // Also include framework-required packages that may not be in existing sandboxes
-            // (e.g. react-dom is needed by expo-router for web but isn't imported by user code)
+            // Also include framework-required packages
             const allRequired = new Set(missingFromImports);
             for (const pkg of DeploymentManager.EXPO_REQUIRED_PACKAGES) {
                 allRequired.add(pkg);
@@ -948,14 +960,11 @@ module.exports = config;
             const packagesToInstall = Array.from(allRequired);
             if (packagesToInstall.length === 0) return;
 
-            logger.info('Auto-installing Expo dependencies', { packages: packagesToInstall });
-            const client = this.getClient();
-            // 90s timeout: Expo packages with native deps (expo-linear-gradient, moti, etc.)
-            // can take 30-60s to install. Previous 30s timeout caused silent failures.
+            logger.info('Auto-installing additional Expo dependencies not in package.json', { packages: packagesToInstall });
             await client.executeCommands(sandboxInstanceId, [
                 `bun add ${packagesToInstall.join(' ')}`
             ], 90_000);
-            logger.info('Auto-installed Expo dependencies', { count: packagesToInstall.length });
+            logger.info('Auto-installed additional Expo dependencies', { count: packagesToInstall.length });
         } catch (error) {
             logger.error('Failed to auto-install missing Expo dependencies', { error });
             // Continue deployment -- Metro will surface the missing module error
