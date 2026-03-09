@@ -838,11 +838,14 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
 
     /** Packages pre-installed in the Expo scratch template (no need to auto-install) */
     private static readonly EXPO_PREINSTALLED = new Set([
-        'expo', 'expo-constants', 'expo-font', 'expo-linking', 'expo-router',
-        'expo-status-bar', 'expo-system-ui',
+        'expo', 'expo-blur', 'expo-constants', 'expo-font', 'expo-haptics',
+        'expo-image', 'expo-linear-gradient', 'expo-linking', 'expo-router',
+        'expo-splash-screen', 'expo-status-bar', 'expo-system-ui',
+        'lucide-react-native',
         'react', 'react-dom', 'react-native', 'react-native-gesture-handler',
         'react-native-reanimated', 'react-native-safe-area-context',
-        'react-native-screens', 'react-native-web', 'react-native-worklets',
+        'react-native-screens', 'react-native-svg', 'react-native-web',
+        'react-native-worklets',
         '@types/react', '@babel/core', 'typescript',
         // Expo Router internals
         'expo-router/entry',
