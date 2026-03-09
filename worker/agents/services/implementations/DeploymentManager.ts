@@ -950,14 +950,16 @@ module.exports = config;
 
             logger.info('Auto-installing Expo dependencies', { packages: packagesToInstall });
             const client = this.getClient();
-            // 30s timeout to prevent hanging during deployment
+            // 90s timeout: Expo packages with native deps (expo-linear-gradient, moti, etc.)
+            // can take 30-60s to install. Previous 30s timeout caused silent failures.
             await client.executeCommands(sandboxInstanceId, [
                 `bun add ${packagesToInstall.join(' ')}`
-            ], 30000);
+            ], 90_000);
             logger.info('Auto-installed Expo dependencies', { count: packagesToInstall.length });
         } catch (error) {
-            logger.warn('Failed to auto-install missing dependencies (non-blocking)', error);
-            // Non-blocking: deployment continues even if auto-install fails
+            logger.error('Failed to auto-install missing Expo dependencies', { error });
+            // Continue deployment -- Metro will surface the missing module error
+            // which the deep debugger or user can address.
         }
     }
 
