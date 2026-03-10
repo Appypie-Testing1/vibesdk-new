@@ -990,14 +990,17 @@ export class SandboxSdkClient extends BaseSandboxService {
                                 const parsedUrl = new URL(previewURL);
                                 const publicHostname = parsedUrl.hostname;
                                 // REACT_NATIVE_PACKAGER_HOSTNAME sets the hostname in manifest fields
-                                // (hostUri, debuggerHost). In dev mode, Expo Go constructs bundle URLs
-                                // from debuggerHost (not launchAsset.url), so this is sufficient.
-                                // Note: EXPO_PACKAGER_PROXY_URL causes Metro crashes (Invalid URL)
-                                // and is NOT used — Expo Go infers protocol from the manifest fetch.
+                                // (hostUri, debuggerHost). Expo Go constructs bundle URLs from debuggerHost.
                                 devServerEnvVars.REACT_NATIVE_PACKAGER_HOSTNAME = publicHostname;
+                                // EXPO_PACKAGER_PROXY_URL tells the Expo manifest handler to use this
+                                // URL as the base for launchAsset.url, bypassing header-based URL
+                                // construction. Without this, duplicated x-forwarded-proto headers
+                                // (e.g. "https, https") produce malformed manifest URLs.
+                                // Metro's enhanceMiddleware separately sanitizes headers for bundle requests.
+                                devServerEnvVars.EXPO_PACKAGER_PROXY_URL = previewURL;
                                 this.logger.info('Set Expo env vars for container', {
                                     publicHostname,
-                                    CI: '1',
+                                    EXPO_PACKAGER_PROXY_URL: previewURL,
                                 });
                             } catch (urlError) {
                                 this.logger.warn('Could not derive public hostname for Expo', urlError);
