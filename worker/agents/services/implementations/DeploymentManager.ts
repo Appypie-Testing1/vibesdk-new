@@ -954,12 +954,25 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
     }
 
     /**
-     * Packages required for Expo projects that may not be detectable via import scanning.
-     * These are needed by the framework internals (expo-router/entry uses react-dom for web).
-     * Auto-install ensures these are present even in existing sandboxes.
+     * Packages that MUST be installed for Expo projects, regardless of what the LLM
+     * puts in package.json. The LLM often generates its own package.json that omits
+     * template dependencies (e.g. react-native-safe-area-context), causing Metro to
+     * fail with "Unable to resolve module" errors on the device.
      */
     private static readonly EXPO_REQUIRED_PACKAGES = [
         'react-dom',
+        'react-native-safe-area-context',
+        'react-native-screens',
+        'react-native-gesture-handler',
+        'react-native-reanimated',
+        'react-native-web',
+        'react-native-worklets',
+        'expo-router',
+        'expo-constants',
+        'expo-font',
+        'expo-linking',
+        'expo-status-bar',
+        'expo-system-ui',
     ];
 
     /**

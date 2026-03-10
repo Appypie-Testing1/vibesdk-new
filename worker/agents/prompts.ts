@@ -984,7 +984,7 @@ export const MOBILE_STRATEGIES = {
         * **Icons:** Use ONLY @expo/vector-icons (MaterialIcons, Ionicons, FontAwesome -- included with Expo). NEVER use lucide-react-native or any other icon library.
         * **Images:** Use Image from react-native with external URLs (unsplash, placeholder services).
         * **State:** Use React useState/useReducer/useContext. For complex state, suggest installing zustand.
-        * **package.json modifications:** You MAY add dependencies to package.json if the app needs them. Use installCommands to run "bun add <package>" for any new packages.
+        * **package.json:** When generating package.json, KEEP ALL existing dependencies from the template. You may ADD new dependencies but NEVER remove existing ones (react-native-safe-area-context, react-native-screens, react-native-gesture-handler, react-native-reanimated, expo-router, etc. are all required).
         * **DO NOT modify:** app.json, metro.config.js, tsconfig.json -- these are pre-configured.
         * **DO NOT create:** wrangler.jsonc, vite.config.js, tailwind.config.js, or any web-specific config files. This is a mobile project.
     </PHASE GENERATION CONSTRAINTS>
