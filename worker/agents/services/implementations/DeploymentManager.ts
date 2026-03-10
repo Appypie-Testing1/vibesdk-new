@@ -954,27 +954,35 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
     }
 
     /**
-     * Packages that MUST be installed for Expo projects, regardless of what the LLM
-     * puts in package.json. The LLM often generates its own package.json that omits
-     * template dependencies (e.g. react-native-safe-area-context), causing Metro to
-     * fail with "Unable to resolve module" errors on the device.
+     * Canonical template dependencies with pinned versions from the expo-scratch template.
+     * Before running `bun install`, these are merged INTO the LLM's package.json so that
+     * all template deps (with correct versions) are always present. The LLM frequently
+     * drops or changes template dependencies, causing Metro "Unable to resolve module" errors.
+     * Using exact versions prevents bun from resolving different transitive dep trees.
      */
-    private static readonly EXPO_REQUIRED_PACKAGES = [
-        'react-dom',
-        'react-native-safe-area-context',
-        'react-native-screens',
-        'react-native-gesture-handler',
-        'react-native-reanimated',
-        'react-native-web',
-        'react-native-worklets',
-        'expo-router',
-        'expo-constants',
-        'expo-font',
-        'expo-linking',
-        'expo-status-bar',
-        'expo-system-ui',
-        '@expo/vector-icons',
-    ];
+    private static readonly EXPO_TEMPLATE_DEPS: Record<string, string> = {
+        'expo': '~54.0.0',
+        'expo-constants': '~18.0.9',
+        'expo-font': '~14.0.9',
+        'expo-linking': '~8.0.8',
+        'expo-router': '~6.0.14',
+        'expo-status-bar': '~3.0.8',
+        'expo-system-ui': '~6.0.7',
+        'react': '19.1.0',
+        'react-dom': '19.1.0',
+        'react-native': '0.81.5',
+        'react-native-gesture-handler': '~2.28.0',
+        'react-native-reanimated': '~4.1.0',
+        'react-native-safe-area-context': '~5.6.0',
+        'react-native-screens': '~4.11.0',
+        'react-native-web': '~0.21.0',
+        'react-native-worklets': '~0.5.0',
+    };
+    private static readonly EXPO_TEMPLATE_DEV_DEPS: Record<string, string> = {
+        '@babel/core': '^7.25.0',
+        '@types/react': '~19.1.0',
+        'typescript': '~5.9.0',
+    };
 
     /**
      * Auto-detect and install missing third-party dependencies for Expo projects.
@@ -1010,13 +1018,36 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 }
             }
 
-            // Step 1: Run `bun install` to sync node_modules with the LLM's package.json.
-            // The LLM often adds packages to package.json (e.g. expo-linear-gradient)
-            // that weren't in the original template. Without this step, those packages
-            // exist in package.json but are never installed in node_modules.
+            // Step 1: Merge template dependencies into the LLM's package.json.
+            // The LLM frequently drops or changes template dependency versions, causing
+            // Metro "Unable to resolve module" errors for transitive deps like @expo/log-box.
+            // By restoring template deps with pinned versions, `bun install` resolves the
+            // same dependency tree as the original template.
             const pkgJsonFile = allFiles.find(f => f.filePath === 'package.json');
             if (pkgJsonFile) {
-                logger.info('Running bun install to sync package.json dependencies');
+                try {
+                    const pkgJson = JSON.parse(pkgJsonFile.fileContents);
+                    if (!pkgJson.dependencies) pkgJson.dependencies = {};
+                    if (!pkgJson.devDependencies) pkgJson.devDependencies = {};
+
+                    // Template deps take precedence (restore pinned versions)
+                    for (const [pkg, ver] of Object.entries(DeploymentManager.EXPO_TEMPLATE_DEPS)) {
+                        pkgJson.dependencies[pkg] = ver;
+                    }
+                    for (const [pkg, ver] of Object.entries(DeploymentManager.EXPO_TEMPLATE_DEV_DEPS)) {
+                        pkgJson.devDependencies[pkg] = ver;
+                    }
+
+                    const mergedJson = JSON.stringify(pkgJson, null, 2);
+                    pkgJsonFile.fileContents = mergedJson;
+                    await client.writeFiles(sandboxInstanceId, [{ filePath: 'package.json', fileContents: mergedJson }]);
+                    logger.info('Merged template dependencies into package.json');
+                } catch (error) {
+                    logger.error('Failed to merge template deps into package.json', { error });
+                }
+
+                // Now run bun install with the corrected package.json
+                logger.info('Running bun install with merged package.json');
                 try {
                     await client.executeCommands(sandboxInstanceId, ['bun install'], 90_000);
                     logger.info('bun install completed');
@@ -1025,8 +1056,8 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 }
             }
 
-            // Step 2: Detect imports that aren't in package.json at all (LLM forgot to add them).
-            // Compare against pre-installed set + whatever is in the generated package.json.
+            // Step 2: Detect imports that aren't in package.json (LLM used a package
+            // without adding it to dependencies). Install these separately.
             const knownPackages = new Set(DeploymentManager.EXPO_PREINSTALLED);
             if (pkgJsonFile) {
                 try {
@@ -1043,21 +1074,13 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
 
             const detectedPackages = DeploymentManager.extractThirdPartyPackages(allFiles);
             const missingFromImports = detectedPackages.filter(pkg => !knownPackages.has(pkg));
+            if (missingFromImports.length === 0) return;
 
-            // Also include framework-required packages
-            const allRequired = new Set(missingFromImports);
-            for (const pkg of DeploymentManager.EXPO_REQUIRED_PACKAGES) {
-                allRequired.add(pkg);
-            }
-
-            const packagesToInstall = Array.from(allRequired);
-            if (packagesToInstall.length === 0) return;
-
-            logger.info('Auto-installing additional Expo dependencies not in package.json', { packages: packagesToInstall });
+            logger.info('Auto-installing additional Expo dependencies not in package.json', { packages: missingFromImports });
             await client.executeCommands(sandboxInstanceId, [
-                `bun add ${packagesToInstall.join(' ')}`
+                `bun add ${missingFromImports.join(' ')}`
             ], 90_000);
-            logger.info('Auto-installed additional Expo dependencies', { count: packagesToInstall.length });
+            logger.info('Auto-installed additional Expo dependencies', { count: missingFromImports.length });
         } catch (error) {
             logger.error('Failed to auto-install missing Expo dependencies', { error });
             // Continue deployment -- Metro will surface the missing module error
