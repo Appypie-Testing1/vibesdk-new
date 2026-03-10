@@ -292,33 +292,40 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		const bundleUrl = metroBundleUrl(previewURL!, 'android');
 		console.log(`[expo-e2e] fetching Metro Android bundle: ${bundleUrl}`);
 
+		// Android bundle cold-compile can take 3-5 minutes on first request.
+		// Use a long per-fetch timeout and fewer retries.
 		let lastStatus = 0;
 		let lastBody = '';
-		for (let attempt = 1; attempt <= 3; attempt++) {
+		for (let attempt = 1; attempt <= 2; attempt++) {
 			if (attempt > 1) {
-				console.log(`[expo-e2e] retrying Android bundle (attempt ${attempt}/3) in 15s...`);
-				await new Promise(r => setTimeout(r, 15_000));
+				console.log(`[expo-e2e] retrying Android bundle (attempt ${attempt}/2) in 20s...`);
+				await new Promise(r => setTimeout(r, 20_000));
 			}
 
-			const resp = await fetch(bundleUrl, {
-				headers: { 'Accept': 'application/javascript' },
-				redirect: 'follow',
-				signal: AbortSignal.timeout(120_000),
-			});
+			try {
+				const resp = await fetch(bundleUrl, {
+					headers: { 'Accept': 'application/javascript' },
+					redirect: 'follow',
+					signal: AbortSignal.timeout(240_000),
+				});
 
-			lastStatus = resp.status;
-			lastBody = await resp.text();
+				lastStatus = resp.status;
+				lastBody = await resp.text();
 
-			console.log(`[expo-e2e] Android bundle attempt ${attempt}: status=${lastStatus} size=${lastBody.length}`);
+				console.log(`[expo-e2e] Android bundle attempt ${attempt}: status=${lastStatus} size=${lastBody.length}`);
 
-			if (lastStatus === 200) break;
+				if (lastStatus === 200) break;
 
-			console.error(`[expo-e2e] Android bundle error (first 1000 chars):\n${lastBody.slice(0, 1000)}`);
+				console.error(`[expo-e2e] Android bundle error (first 1000 chars):\n${lastBody.slice(0, 1000)}`);
+			} catch (fetchErr) {
+				console.error(`[expo-e2e] Android bundle attempt ${attempt} fetch error:`, fetchErr);
+				lastStatus = 0;
+			}
 		}
 
 		if (lastStatus !== 200) {
 			throw new Error(
-				`Metro Android bundle returned ${lastStatus} after 3 attempts. ` +
+				`Metro Android bundle returned ${lastStatus} after 2 attempts. ` +
 				`Error: ${lastBody.slice(0, 500)}`,
 			);
 		}
@@ -328,7 +335,7 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		expect(lastBody).not.toContain('Unable to resolve module');
 
 		console.log(`[expo-e2e] Metro Android bundle compiled successfully (${lastBody.length} bytes)`);
-	}, 300_000);
+	}, 540_000);
 
 	/* -- Step 5: Verify sandbox root responds (Metro dev server) ----- */
 	it('sandbox root responds (Metro dev server running)', async () => {
