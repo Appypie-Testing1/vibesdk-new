@@ -600,6 +600,7 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
 // these headers can contain comma-separated duplicates like "https, https"
 // which cause Expo to construct malformed manifest URLs.
 const http = require('http');
+const net = require('net');
 const { spawn } = require('child_process');
 
 const PUBLIC_PORT = parseInt(process.env.PORT || '8001', 10);
@@ -613,37 +614,48 @@ const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--
 expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); process.exit(1); });
 expo.on('exit', (code) => { process.exit(code || 0); });
 
-// Proxy server on public port -- sanitize headers, forward to Expo
-const server = http.createServer((clientReq, clientRes) => {
-  // Sanitize duplicated proxy headers
-  const headers = { ...clientReq.headers };
-  if (headers['x-forwarded-proto']) {
-    headers['x-forwarded-proto'] = headers['x-forwarded-proto'].split(',')[0].trim();
-  }
-  if (headers['x-forwarded-host']) {
-    headers['x-forwarded-host'] = headers['x-forwarded-host'].split(',')[0].trim();
-  }
+function sanitizeHeaders(headers) {
+  const h = { ...headers };
+  if (h['x-forwarded-proto']) h['x-forwarded-proto'] = h['x-forwarded-proto'].split(',')[0].trim();
+  if (h['x-forwarded-host']) h['x-forwarded-host'] = h['x-forwarded-host'].split(',')[0].trim();
+  return h;
+}
 
+// HTTP proxy -- sanitize headers, forward to Expo
+const server = http.createServer((clientReq, clientRes) => {
   const proxyReq = http.request(
-    { hostname: '127.0.0.1', port: INTERNAL_PORT, path: clientReq.url, method: clientReq.method, headers },
+    { hostname: '127.0.0.1', port: INTERNAL_PORT, path: clientReq.url, method: clientReq.method, headers: sanitizeHeaders(clientReq.headers) },
     (proxyRes) => {
       clientRes.writeHead(proxyRes.statusCode, proxyRes.headers);
       proxyRes.pipe(clientRes, { end: true });
     }
   );
-  proxyReq.on('error', (err) => {
-    // Expo might not be ready yet -- return 503
+  proxyReq.on('error', () => {
     clientRes.writeHead(503, { 'Content-Type': 'text/plain' });
     clientRes.end('Expo dev server starting...');
   });
   clientReq.pipe(proxyReq, { end: true });
 });
 
+// WebSocket proxy -- Metro uses WS for HMR / hot reload
+server.on('upgrade', (req, socket, head) => {
+  const proxySocket = net.connect(INTERNAL_PORT, '127.0.0.1', () => {
+    const sanitized = sanitizeHeaders(req.headers);
+    const headerLines = Object.entries(sanitized).map(([k, v]) => k + ': ' + v).join('\\r\\n');
+    proxySocket.write(
+      req.method + ' ' + req.url + ' HTTP/1.1\\r\\n' + headerLines + '\\r\\n\\r\\n'
+    );
+    if (head && head.length) proxySocket.write(head);
+    socket.pipe(proxySocket).pipe(socket);
+  });
+  proxySocket.on('error', () => socket.destroy());
+  socket.on('error', () => proxySocket.destroy());
+});
+
 server.listen(PUBLIC_PORT, '0.0.0.0', () => {
   console.log('[proxy] Listening on port ' + PUBLIC_PORT + ', forwarding to Expo on port ' + INTERNAL_PORT);
 });
 
-// Cleanup
 process.on('SIGTERM', () => { expo.kill(); server.close(); });
 process.on('SIGINT', () => { expo.kill(); server.close(); });
 `,

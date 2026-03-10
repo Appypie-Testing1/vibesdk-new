@@ -884,6 +884,7 @@ module.exports = config;
      * This proxy wraps all traffic so both manifest and bundle URLs are clean.
      */
     private static readonly EXPO_PROXY_CONTENT = `const http = require('http');
+const net = require('net');
 const { spawn } = require('child_process');
 const PUBLIC_PORT = parseInt(process.env.PORT || '8001', 10);
 const INTERNAL_PORT = PUBLIC_PORT + 1;
@@ -893,16 +894,15 @@ const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--
 });
 expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); process.exit(1); });
 expo.on('exit', (code) => { process.exit(code || 0); });
+function sanitizeHeaders(headers) {
+  const h = { ...headers };
+  if (h['x-forwarded-proto']) h['x-forwarded-proto'] = h['x-forwarded-proto'].split(',')[0].trim();
+  if (h['x-forwarded-host']) h['x-forwarded-host'] = h['x-forwarded-host'].split(',')[0].trim();
+  return h;
+}
 const server = http.createServer((clientReq, clientRes) => {
-  const headers = { ...clientReq.headers };
-  if (headers['x-forwarded-proto']) {
-    headers['x-forwarded-proto'] = headers['x-forwarded-proto'].split(',')[0].trim();
-  }
-  if (headers['x-forwarded-host']) {
-    headers['x-forwarded-host'] = headers['x-forwarded-host'].split(',')[0].trim();
-  }
   const proxyReq = http.request(
-    { hostname: '127.0.0.1', port: INTERNAL_PORT, path: clientReq.url, method: clientReq.method, headers },
+    { hostname: '127.0.0.1', port: INTERNAL_PORT, path: clientReq.url, method: clientReq.method, headers: sanitizeHeaders(clientReq.headers) },
     (proxyRes) => {
       clientRes.writeHead(proxyRes.statusCode, proxyRes.headers);
       proxyRes.pipe(clientRes, { end: true });
@@ -913,6 +913,17 @@ const server = http.createServer((clientReq, clientRes) => {
     clientRes.end('Expo dev server starting...');
   });
   clientReq.pipe(proxyReq, { end: true });
+});
+server.on('upgrade', (req, socket, head) => {
+  const proxySocket = net.connect(INTERNAL_PORT, '127.0.0.1', () => {
+    const sanitized = sanitizeHeaders(req.headers);
+    const headerLines = Object.entries(sanitized).map(([k, v]) => k + ': ' + v).join('\\r\\n');
+    proxySocket.write(req.method + ' ' + req.url + ' HTTP/1.1\\r\\n' + headerLines + '\\r\\n\\r\\n');
+    if (head && head.length) proxySocket.write(head);
+    socket.pipe(proxySocket).pipe(socket);
+  });
+  proxySocket.on('error', () => socket.destroy());
+  socket.on('error', () => proxySocket.destroy());
 });
 server.listen(PUBLIC_PORT, '0.0.0.0', () => {
   console.log('[proxy] Listening on port ' + PUBLIC_PORT + ', forwarding to Expo on port ' + INTERNAL_PORT);
