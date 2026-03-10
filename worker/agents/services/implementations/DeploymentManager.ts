@@ -973,6 +973,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         'expo-linking',
         'expo-status-bar',
         'expo-system-ui',
+        '@expo/vector-icons',
     ];
 
     /**
