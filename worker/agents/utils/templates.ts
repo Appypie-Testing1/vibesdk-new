@@ -421,10 +421,10 @@ bun run deploy
 const EXPO_SCRATCH_TEMPLATE_INSTRUCTIONS = `
 To build a valid, previewable Expo/React Native project (SDK 54, React Native 0.81), follow these rules:
 
-1. The package.json **MUST** have a dev script using expo start:
+1. The package.json **MUST** have a dev script:
 \`\`\`
 "scripts": {
-    "dev": "npx expo start --port \${PORT:-8001} --host lan",
+    "dev": "node _expo-proxy.cjs",
     "build": "npx expo export",
     "lint": "npx eslint . --ext .ts,.tsx"
 }
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
             version: '1.0.0',
             main: 'expo-router/entry',
             scripts: {
-                dev: 'npx expo start --port ${PORT:-8001} --host lan',
+                dev: 'node _expo-proxy.cjs',
                 build: 'npx expo export',
                 lint: 'npx eslint . --ext .ts,.tsx',
             },
@@ -595,6 +595,58 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
 <script src="/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&transform.routerRoot=app"></script>
 </body>
 </html>`,
+        '_expo-proxy.cjs': `// Reverse proxy that sanitizes duplicated x-forwarded-* headers before they
+// reach the Expo dev server. Behind nested proxies (Cloudflare -> sandbox),
+// these headers can contain comma-separated duplicates like "https, https"
+// which cause Expo to construct malformed manifest URLs.
+const http = require('http');
+const { spawn } = require('child_process');
+
+const PUBLIC_PORT = parseInt(process.env.PORT || '8001', 10);
+const INTERNAL_PORT = PUBLIC_PORT + 1;
+
+// Start Expo dev server on internal port
+const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
+  stdio: 'inherit',
+  env: { ...process.env, PORT: String(INTERNAL_PORT) },
+});
+expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); process.exit(1); });
+expo.on('exit', (code) => { process.exit(code || 0); });
+
+// Proxy server on public port -- sanitize headers, forward to Expo
+const server = http.createServer((clientReq, clientRes) => {
+  // Sanitize duplicated proxy headers
+  const headers = { ...clientReq.headers };
+  if (headers['x-forwarded-proto']) {
+    headers['x-forwarded-proto'] = headers['x-forwarded-proto'].split(',')[0].trim();
+  }
+  if (headers['x-forwarded-host']) {
+    headers['x-forwarded-host'] = headers['x-forwarded-host'].split(',')[0].trim();
+  }
+
+  const proxyReq = http.request(
+    { hostname: '127.0.0.1', port: INTERNAL_PORT, path: clientReq.url, method: clientReq.method, headers },
+    (proxyRes) => {
+      clientRes.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(clientRes, { end: true });
+    }
+  );
+  proxyReq.on('error', (err) => {
+    // Expo might not be ready yet -- return 503
+    clientRes.writeHead(503, { 'Content-Type': 'text/plain' });
+    clientRes.end('Expo dev server starting...');
+  });
+  clientReq.pipe(proxyReq, { end: true });
+});
+
+server.listen(PUBLIC_PORT, '0.0.0.0', () => {
+  console.log('[proxy] Listening on port ' + PUBLIC_PORT + ', forwarding to Expo on port ' + INTERNAL_PORT);
+});
+
+// Cleanup
+process.on('SIGTERM', () => { expo.kill(); server.close(); });
+process.on('SIGINT', () => { expo.kill(); server.close(); });
+`,
     };
 
     return {
@@ -613,6 +665,7 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
                 { path: 'app.json', type: 'file' },
                 { path: 'tsconfig.json', type: 'file' },
                 { path: 'metro.config.js', type: 'file' },
+                { path: '_expo-proxy.cjs', type: 'file' },
             ]
         },
         allFiles: expoFiles,
@@ -620,10 +673,10 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
         deps: { 'expo': '~54.0.0', 'react-native': '0.81.5', 'react-native-gesture-handler': '~2.28.0', 'react-native-reanimated': '~4.1.0', 'expo-router': '~6.0.14' },
         projectType: 'app',
         renderMode: 'mobile',
-        initCommand: 'npx expo start --port ${PORT:-8001} --host lan',
+        initCommand: 'node _expo-proxy.cjs',
         frameworks: ['react-native', 'expo', 'expo-router'],
         importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'package.json', 'app.json'],
-        dontTouchFiles: ['app.json', 'metro.config.js'],
+        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs'],
         redactedFiles: [],
         disabled: false,
     };

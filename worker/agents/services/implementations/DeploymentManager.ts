@@ -878,19 +878,63 @@ module.exports = config;
 `;
 
     /**
-     * Ensure metro.config.js exists in the sandbox for mobile projects.
-     * This config sanitizes proxy headers that cause Metro to crash with "TypeError: Invalid URL".
-     * Written on every deploy so it's present even for projects created before this fix.
+     * Reverse proxy that sanitizes duplicated x-forwarded-* headers before they
+     * reach the Expo dev server. The enhanceMiddleware in metro.config.js only covers
+     * Metro's middleware, but the Expo manifest endpoint (/) is handled separately.
+     * This proxy wraps all traffic so both manifest and bundle URLs are clean.
+     */
+    private static readonly EXPO_PROXY_CONTENT = `const http = require('http');
+const { spawn } = require('child_process');
+const PUBLIC_PORT = parseInt(process.env.PORT || '8001', 10);
+const INTERNAL_PORT = PUBLIC_PORT + 1;
+const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
+  stdio: 'inherit',
+  env: { ...process.env, PORT: String(INTERNAL_PORT) },
+});
+expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); process.exit(1); });
+expo.on('exit', (code) => { process.exit(code || 0); });
+const server = http.createServer((clientReq, clientRes) => {
+  const headers = { ...clientReq.headers };
+  if (headers['x-forwarded-proto']) {
+    headers['x-forwarded-proto'] = headers['x-forwarded-proto'].split(',')[0].trim();
+  }
+  if (headers['x-forwarded-host']) {
+    headers['x-forwarded-host'] = headers['x-forwarded-host'].split(',')[0].trim();
+  }
+  const proxyReq = http.request(
+    { hostname: '127.0.0.1', port: INTERNAL_PORT, path: clientReq.url, method: clientReq.method, headers },
+    (proxyRes) => {
+      clientRes.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(clientRes, { end: true });
+    }
+  );
+  proxyReq.on('error', () => {
+    clientRes.writeHead(503, { 'Content-Type': 'text/plain' });
+    clientRes.end('Expo dev server starting...');
+  });
+  clientReq.pipe(proxyReq, { end: true });
+});
+server.listen(PUBLIC_PORT, '0.0.0.0', () => {
+  console.log('[proxy] Listening on port ' + PUBLIC_PORT + ', forwarding to Expo on port ' + INTERNAL_PORT);
+});
+process.on('SIGTERM', () => { expo.kill(); server.close(); });
+process.on('SIGINT', () => { expo.kill(); server.close(); });
+`;
+
+    /**
+     * Ensure metro.config.js and _expo-proxy.cjs exist in the sandbox for mobile projects.
+     * Written on every deploy so they're present even for projects created before this fix.
      */
     private async ensureMetroConfig(sandboxInstanceId: string): Promise<void> {
         const logger = this.getLog();
         try {
             await this.getClient().writeFiles(sandboxInstanceId, [
-                { filePath: 'metro.config.js', fileContents: DeploymentManager.METRO_CONFIG_CONTENT }
+                { filePath: 'metro.config.js', fileContents: DeploymentManager.METRO_CONFIG_CONTENT },
+                { filePath: '_expo-proxy.cjs', fileContents: DeploymentManager.EXPO_PROXY_CONTENT },
             ]);
-            logger.info('Ensured metro.config.js exists in sandbox');
+            logger.info('Ensured metro.config.js and _expo-proxy.cjs exist in sandbox');
         } catch (error) {
-            logger.warn('Failed to write metro.config.js (non-blocking)', error);
+            logger.warn('Failed to write metro config files (non-blocking)', error);
         }
     }
 

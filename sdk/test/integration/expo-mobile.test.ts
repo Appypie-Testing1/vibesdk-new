@@ -299,4 +299,49 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		expect(resp.ok).toBe(true);
 		console.log('[expo-e2e] sandbox root is reachable');
 	}, 30_000);
+
+	/* -- Step 5: Verify Expo manifest has clean URLs (no duplicated protocol) */
+	it('Expo manifest has valid launchAsset URL (no duplicated protocol)', async () => {
+		expect(previewURL).not.toBeNull();
+
+		console.log(`[expo-e2e] fetching Expo manifest from root URL`);
+		const resp = await fetch(previewURL!, {
+			headers: {
+				'Accept': 'application/json',
+				'Expo-Platform': 'ios',
+			},
+			redirect: 'follow',
+			signal: AbortSignal.timeout(15_000),
+		});
+
+		console.log(`[expo-e2e] manifest status=${resp.status}`);
+		expect(resp.ok).toBe(true);
+
+		const manifest = await resp.json() as Record<string, unknown>;
+		const launchAsset = manifest.launchAsset as Record<string, unknown> | undefined;
+
+		if (launchAsset?.url) {
+			const assetUrl = launchAsset.url as string;
+			console.log(`[expo-e2e] launchAsset.url=${assetUrl.slice(0, 120)}...`);
+			// Must not contain duplicated protocol "https, https://"
+			expect(assetUrl).not.toContain('https, https');
+			expect(assetUrl).not.toContain('http, http');
+			// Must start with a valid protocol
+			expect(assetUrl.startsWith('http://') || assetUrl.startsWith('https://')).toBe(true);
+			console.log('[expo-e2e] manifest launchAsset.url is valid');
+		} else {
+			console.log('[expo-e2e] no launchAsset.url in manifest (dev mode may omit it)');
+		}
+
+		// Verify hostUri doesn't have redundant port
+		const extra = manifest.extra as Record<string, unknown> | undefined;
+		const expoClient = extra?.expoClient as Record<string, unknown> | undefined;
+		if (expoClient?.hostUri) {
+			const hostUri = expoClient.hostUri as string;
+			console.log(`[expo-e2e] hostUri=${hostUri}`);
+			// Should not end with :8001 or :8002 (port is in subdomain)
+			expect(hostUri).not.toMatch(/:800[0-9]$/);
+			console.log('[expo-e2e] hostUri is clean');
+		}
+	}, 30_000);
 });
