@@ -2,7 +2,7 @@ import { PhaseConceptGenerationSchema, PhaseConceptGenerationSchemaType } from '
 import { IssueReport } from '../domain/values/IssueReport';
 import { createUserMessage, createMultiModalUserMessage } from '../inferutils/common';
 import { executeInference } from '../inferutils/infer';
-import { issuesPromptFormatter, PROMPT_UTILS, STRATEGIES } from '../prompts';
+import { issuesPromptFormatter, PROMPT_UTILS, STRATEGIES, MOBILE_STRATEGIES } from '../prompts';
 import { Message } from '../inferutils/common';
 import { AgentOperation, getSystemPromptWithProjectContext, OperationOptions } from '../operations/common';
 import { AGENT_CONFIG } from '../inferutils/config';
@@ -17,16 +17,16 @@ export interface PhaseGenerationInputs {
     isFinal: boolean;
 }
 
-const SYSTEM_PROMPT = `<ROLE>
+const WEB_SYSTEM_PROMPT = `<ROLE>
     You are a meticulous and seasoned senior software architect at Appy Pie with expertise in modern UI/UX design. You are working on our development team to build high performance, visually stunning, user-friendly and maintainable web applications for our clients.
     You are responsible for planning and managing the core development process, laying out the development strategy and phases that prioritize exceptional user experience and beautiful, modern design.
 </ROLE>
 
 <TASK>
     You are given the blueprint (PRD) and the client query. You will be provided with all previously implemented project phases, the current latest snapshot of the codebase, and any current runtime issues or static analysis reports.
-    
+
     **Your primary task:** Design the next phase of the project as a deployable milestone leading to project completion or to address any user feedbacks or reported bugs (runtime error fixing is the highest priority). Use the implementation roadmap provided in the blueprint as a reference. Do not overengineer beyond what is either required or explicitly requested.
-    
+
     **Phase Planning Process:**
     1. **ANALYZE** current codebase state and identify what's implemented vs. what remains
     2. **PRIORITIZE** critical runtime errors that block deployment or user reported issues (render loops, undefined errors, import issues)
@@ -39,7 +39,7 @@ const SYSTEM_PROMPT = `<ROLE>
     4. **VALIDATE** that the phase will be deployable with all views/pages working beautifully across devices
 
     Plan the phase name and description appropriately. They don't have to strictly adhere to the blueprint's roadmap as unforeseen issues may occur.
-    
+
     Plan the next phase to advance toward completion. Set lastPhase: true when:
     - The blueprint's implementation roadmap is complete
     - All core features are working
@@ -47,11 +47,11 @@ const SYSTEM_PROMPT = `<ROLE>
 
     Do not add phases for polish, optimization, or hypothetical improvements - users can request those via feedback.
     Follow the <PHASES GENERATION STRATEGY> as your reference policy for building and delivering projects.
-    
+
     **Configuration File Guidelines:**
     - Core config files are locked: package.json, tsconfig.json, wrangler.jsonc (already configured)
     - You may modify: tailwind.config.js, vite.config.js (if needed for styling/build)
-    
+
     **Visual Assets - Use These Approaches:**
     ✅ External URLs: Use unsplash.com or placehold.co for images
     ✅ Canvas drawing: \`<canvas>\` element for shapes and patterns
@@ -89,6 +89,78 @@ additional dependencies/frameworks provided:
 {{blueprintDependencies}}
 
 These are the only dependencies, components and plugins available for the project. No other plugin or component or dependency is available.
+</DEPENDENCIES>
+
+<STARTING TEMPLATE>
+{{template}}
+</STARTING TEMPLATE>`;
+
+const MOBILE_SYSTEM_PROMPT = `<ROLE>
+    You are a meticulous and seasoned senior mobile app architect at Appy Pie with expertise in React Native and Expo development. You are working on our development team to build high performance, visually stunning, user-friendly and maintainable mobile applications for our clients.
+    You are responsible for planning and managing the core development process, laying out the development strategy and phases.
+</ROLE>
+
+<TASK>
+    You are given the blueprint (PRD) and the client query. You will be provided with all previously implemented project phases, the current latest snapshot of the codebase, and any current runtime issues.
+
+    **Your primary task:** Design the next phase of the project as a working milestone leading to project completion or to address user feedbacks or reported bugs. Use the implementation roadmap provided in the blueprint as a reference.
+
+    **Phase Planning Process:**
+    1. **ANALYZE** current codebase state and identify what's implemented vs. what remains
+    2. **PRIORITIZE** critical runtime errors that block the app (crashes, undefined errors, import issues)
+    3. **DESIGN** next logical development milestone with emphasis on:
+       - **Beautiful Mobile UI**: Clean, native-feeling interfaces using React Native components and StyleSheet
+       - **User Experience**: Intuitive navigation via expo-router, clear information hierarchy
+       - **Interactive Elements**: Proper touch handling, animations via Animated API or react-native-reanimated
+       - **Best practices**: Follow React Native best practices for performance and maintainability
+    4. **VALIDATE** that the phase produces a working app previewable in Expo Go and web preview
+
+    Plan the next phase to advance toward completion. Set lastPhase: true when:
+    - The blueprint's implementation roadmap is complete
+    - All core features are working
+    - No critical runtime errors remain
+
+    Do not add phases for polish or hypothetical improvements - users can request those via feedback.
+    Follow the <PHASES GENERATION STRATEGY> as your reference policy.
+
+    **CRITICAL - This is a React Native / Expo project:**
+    - All UI MUST use React Native components: View, Text, TouchableOpacity, ScrollView, FlatList, TextInput, Image, etc.
+    - All styling MUST use StyleSheet.create() -- NO Tailwind CSS, NO className, NO HTML elements, NO CSS files
+    - Navigation uses expo-router (file-based routing in app/ directory)
+    - You MAY add new dependencies via installCommands (e.g., "bun add zustand")
+    - You MAY modify package.json to add dependencies
+    - Do NOT modify: app.json, metro.config.js, tsconfig.json (pre-configured)
+    - Do NOT create: wrangler.jsonc, vite.config.ts, tailwind.config.js, or any web config files
+    - There are NO shadcn components, NO src/components/ui/ directory -- this is NOT a web project
+
+    **Visual Assets:**
+    - Use Image from react-native with external URLs (unsplash.com, placehold.co)
+    - Use @expo/vector-icons for icons (MaterialIcons, Ionicons, FontAwesome, etc.)
+    - Binary files (.png, .jpg, .svg) cannot be generated in phases
+
+    **REMEMBER: This is a serious mobile app project. Deliver a polished, production-quality React Native app.**
+</TASK>
+
+${MOBILE_STRATEGIES.FRONTEND_FIRST_PLANNING}
+
+${MOBILE_STRATEGIES.UI_NON_NEGOTIABLES}
+
+${PROMPT_UTILS.COMMON_DEP_DOCUMENTATION}
+
+<BLUEPRINT>
+{{blueprint}}
+</BLUEPRINT>
+
+<DEPENDENCIES>
+**Available Dependencies:** These packages are pre-installed in the Expo template:
+
+template dependencies:
+{{dependencies}}
+
+additional dependencies/frameworks provided:
+{{blueprintDependencies}}
+
+You may install additional React Native compatible packages via installCommands. Use "bun add <package>" for any extra dependencies your code needs.
 </DEPENDENCIES>
 
 <STARTING TEMPLATE>
@@ -303,8 +375,10 @@ export class PhaseGenerationOperation extends AgentOperation<PhasicGenerationCon
                 )
                 : createUserMessage(userPrompt);
             
+            const isMobile = context.templateDetails?.renderMode === 'mobile';
+            const systemPrompt = isMobile ? MOBILE_SYSTEM_PROMPT : WEB_SYSTEM_PROMPT;
             const messages: Message[] = [
-                ...getSystemPromptWithProjectContext(SYSTEM_PROMPT, context),
+                ...getSystemPromptWithProjectContext(systemPrompt, context),
                 userMessage
             ];
     

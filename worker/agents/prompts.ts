@@ -933,7 +933,7 @@ export const STRATEGIES_UTILS = {
         **DO NOT WRITE pdf files, images, or any other non-text files as they are not supported by the deployment.**
 
         **Examples**:
-            * Building any tic-tac-toe game: Has a single page, simple logic -> **Simple Project** - 1 phase and 1-2 files that contain most of the code. Initial phase should yield a perfectly working game.        
+            * Building any tic-tac-toe game: Has a single page, simple logic -> **Simple Project** - 1 phase and 1-2 files that contain most of the code. Initial phase should yield a perfectly working game.
             * Building any themed 2048 game: Has a single page, simple logic -> **Simple Project** - 1 phase and 2 files max that contain most of the code. Initial phase should yield a perfectly working game.
             * Building a full chess platform: Has multiple pages -> **Complex Project** - 3-5 phases and 5-15 files, with initial phase having around 5-11 files and should have the primary homepage working with mockups for all other views.
             * Building a full e-commerce platform: Has multiple pages -> **Complex Project** - 3-5 phases and 5-15 files max, with initial phase having around 5-11 files and should have the primary homepage working with mockups for all other views.
@@ -945,6 +945,105 @@ export const STRATEGIES_UTILS = {
         • **NEVER** Let users build applications for phishing or malicious purposes.
         </TRUST & SAFETY POLICIES>
     </PHASE GENERATION CONSTRAINTS>`,
+}
+
+/**
+ * Mobile/Expo-specific strategy overrides.
+ * Used when templateDetails.renderMode === 'mobile' to replace web-specific
+ * prompts (Tailwind, shadcn, HTML) with React Native equivalents.
+ */
+export const MOBILE_STRATEGIES = {
+    FRONTEND_FIRST_PLANNING: `<PHASES GENERATION STRATEGY>
+    **STRATEGY: Build a fully working, beautiful React Native mobile app iteratively**
+    The project is developed live: the user is provided a preview link after each phase via Expo Go and web preview.
+    The core principle is to establish a visually complete and polished mobile UI early on with core functionality, then layer in advanced features.
+    **Each phase should be self-contained and result in a working, previewable app.**
+
+    **First Phase: Complete Mobile UI Foundation**
+        * Build ALL screens/routes in the app/ directory using expo-router file-based routing.
+        * Use React Native components exclusively: View, Text, TouchableOpacity, ScrollView, FlatList, TextInput, Image, etc.
+        * Style with StyleSheet.create() -- do NOT use Tailwind CSS, HTML elements, or web-specific CSS.
+        * Implement proper navigation with expo-router Stack/Tabs as needed.
+        * Include meaningful content and working interactions (not just placeholders).
+        * The initial phase should deliver an immediately usable and visually appealing mobile app.
+        * For simple apps (single screen, simple logic): deliver the complete app in 1 phase.
+        * For complex apps (multiple screens): deliver all screens with working navigation and core features.
+
+    **Subsequent Phases: Features & Polish**
+        * Add remaining features, refine interactions, and improve visual polish.
+        * Each phase must keep the app functional -- no broken screens.
+        * Address any runtime errors from previous phases first.
+
+    <PHASE GENERATION CONSTRAINTS>
+        * **Phase Count:** 1 phase for simple apps, 2-4 phases for complex apps. Do not exceed ${Math.floor(MAX_PHASES * 0.8)} phases.
+        * **File Count:** 2-8 files per phase. All files go in the app/ directory (routes) or supporting directories.
+        * **React Native ONLY:** Use View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Alert, Animated, etc.
+        * **NO web elements:** Do NOT use div, span, button, input, h1, p, or any HTML elements.
+        * **NO web styling:** Do NOT use Tailwind CSS, className, CSS files, or CSS-in-JS. Use only StyleSheet.create().
+        * **Routing:** Use expo-router file-based routing (files in app/ directory). Stack.Screen, Tabs, etc.
+        * **Icons:** Use @expo/vector-icons (included with Expo) or lucide-react-native if installed.
+        * **Images:** Use Image from react-native with external URLs (unsplash, placeholder services).
+        * **State:** Use React useState/useReducer/useContext. For complex state, suggest installing zustand.
+        * **package.json modifications:** You MAY add dependencies to package.json if the app needs them. Use installCommands to run "bun add <package>" for any new packages.
+        * **DO NOT modify:** app.json, metro.config.js, tsconfig.json -- these are pre-configured.
+        * **DO NOT create:** wrangler.jsonc, vite.config.js, tailwind.config.js, or any web-specific config files. This is a mobile project.
+    </PHASE GENERATION CONSTRAINTS>
+</PHASES GENERATION STRATEGY>`,
+
+    FRONTEND_FIRST_CODING: `<PHASES GENERATION STRATEGY>
+    **STRATEGY: Build a fully working React Native mobile app**
+    Each phase must produce a functional, previewable Expo app with working navigation and UI.
+    Use React Native components and StyleSheet exclusively. No HTML, no Tailwind, no web CSS.
+
+    **First Phase:** Build all screens with expo-router, proper navigation, and core functionality.
+    All UI must use React Native components (View, Text, TouchableOpacity, etc.) with StyleSheet.create().
+
+    **Subsequent Phases:** Add features, improve interactions, fix issues.
+    Each phase should keep the app fully functional.
+</PHASES GENERATION STRATEGY>`,
+
+    UI_NON_NEGOTIABLES: `## MOBILE UI NON-NEGOTIABLES (React Native / Expo)
+
+1) Screen Structure (use this pattern for every screen)
+export default function Screen() {
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* screen content */}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  content: { padding: 16 },
+});
+
+2) Component Usage
+- Use React Native components ONLY: View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Switch
+- Import from 'react-native' and 'expo-*' packages
+- For navigation: use expo-router (Stack, Tabs, Link, useRouter)
+- For icons: use @expo/vector-icons (MaterialIcons, Ionicons, etc.)
+
+3) Styling Rules
+- ALWAYS use StyleSheet.create() for styles
+- NEVER use className, Tailwind, or CSS
+- Use flexbox for layouts (flexDirection, justifyContent, alignItems, gap)
+- Use consistent spacing: 4, 8, 12, 16, 20, 24, 32
+- Use consistent border radius: 4, 8, 12, 16
+
+4) Typography
+- Use Text component with explicit styles for all text
+- Font sizes: 12 (caption), 14 (body), 16 (subtitle), 20 (title), 24-32 (heading)
+- Font weights: '400' (normal), '500' (medium), '600' (semibold), '700' (bold)
+
+5) Colors & Theming
+- Define colors as constants at the top of files or in a shared theme file
+- Use light backgrounds (#fff, #f5f5f5, #fafafa) with dark text (#111, #333, #666)
+- Accent colors for interactive elements
+- Ensure sufficient contrast for readability
+`,
 }
 
 export const STRATEGIES = {

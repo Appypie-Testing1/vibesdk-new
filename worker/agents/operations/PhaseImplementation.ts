@@ -13,6 +13,7 @@ import { imagesToBase64 } from '../../utils/images';
 import { PhasicGenerationContext } from '../domain/values/GenerationContext';
 import {
 	PHASE_IMPLEMENTATION_SYSTEM_PROMPT,
+	MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT,
 	buildPhaseImplementationUserPrompt,
 } from './prompts/phaseImplementationPrompts';
 
@@ -46,8 +47,10 @@ export class PhaseImplementationOperation extends AgentOperation<PhasicGeneratio
 
         const codeGenerationFormat = new SCOFFormat();
 
-        // Build messages for generation
-        const messages = getSystemPromptWithProjectContext(PHASE_IMPLEMENTATION_SYSTEM_PROMPT, context, CodeSerializerType.SCOF, false);
+        // Build messages for generation -- use mobile-specific prompt for Expo/RN projects
+        const isMobile = context.templateDetails?.renderMode === 'mobile';
+        const systemPrompt = isMobile ? MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT : PHASE_IMPLEMENTATION_SYSTEM_PROMPT;
+        const messages = getSystemPromptWithProjectContext(systemPrompt, context, CodeSerializerType.SCOF, false);
 
         // Create user message with optional images
         const userPrompt = buildPhaseImplementationUserPrompt({ phase, issues, userContext }) + codeGenerationFormat.formatInstructions();

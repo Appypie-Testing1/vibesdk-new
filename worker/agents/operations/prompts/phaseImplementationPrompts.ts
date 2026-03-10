@@ -2,7 +2,7 @@ import { TemplateRegistry } from '../../inferutils/schemaFormatters';
 import { PhaseConceptSchema, type PhaseConceptType } from '../../schemas';
 import type { IssueReport } from '../../domain/values/IssueReport';
 import type { UserContext } from '../../core/types';
-import { issuesPromptFormatter, PROMPT_UTILS } from '../../prompts';
+import { issuesPromptFormatter, PROMPT_UTILS, MOBILE_STRATEGIES } from '../../prompts';
 
 export const PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase in a React + TypeScript codebase.
 
@@ -21,6 +21,51 @@ export const PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase 
 </RELIABILITY>
 
 ${PROMPT_UTILS.UI_NON_NEGOTIABLES_V3}
+
+${PROMPT_UTILS.COMMON_PITFALLS}
+
+${PROMPT_UTILS.COMMON_DEP_DOCUMENTATION}
+
+<DEPENDENCIES>
+{{dependencies}}
+
+{{blueprintDependencies}}
+</DEPENDENCIES>
+
+{{template}}
+
+<BLUEPRINT>
+{{blueprint}}
+</BLUEPRINT>`;
+
+export const MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase in a React Native / Expo mobile app codebase.
+
+<MOBILE_UX_RUBRIC>
+- Layout: proper use of flexbox, consistent padding/margins, clear visual hierarchy.
+- Interaction: proper touch targets (min 44pt), press feedback via TouchableOpacity/Pressable.
+- States: loading/empty/error handled with appropriate React Native components.
+- Navigation: expo-router file-based routing, proper Stack/Tabs configuration.
+</MOBILE_UX_RUBRIC>
+
+<RELIABILITY>
+- No TS errors.
+- No hooks violations.
+- No render loops.
+- No whole-store selectors.
+- All imports must resolve to installed packages.
+</RELIABILITY>
+
+<CRITICAL_MOBILE_RULES>
+- Use ONLY React Native components: View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Switch, ActivityIndicator, SafeAreaView, etc.
+- NEVER use HTML elements: div, span, button, input, h1, p, a, ul, li, etc.
+- NEVER use Tailwind CSS or className prop. Use ONLY StyleSheet.create() for all styling.
+- NEVER import from 'react-dom' or use web-specific APIs (document, window.location, etc.)
+- Navigation: use expo-router (Link, useRouter, Stack, Tabs) -- NOT @react-navigation directly.
+- Icons: use @expo/vector-icons (MaterialIcons, Ionicons, FontAwesome) or lucide-react-native.
+- Images: use Image from 'react-native' with external URLs.
+</CRITICAL_MOBILE_RULES>
+
+${MOBILE_STRATEGIES.UI_NON_NEGOTIABLES}
 
 ${PROMPT_UTILS.COMMON_PITFALLS}
 
