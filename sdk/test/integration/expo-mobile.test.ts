@@ -4,8 +4,13 @@
  * Programmatically creates an Expo/React Native project via the SDK,
  * waits for deployment, then verifies that:
  * 1. The sandbox is running and reachable
- * 2. The web-preview.html is served correctly
- * 3. The Metro web bundle compiles without 500 errors
+ * 2. The Expo manifest has valid URLs
+ * 3. The Android bundle compiles (Expo Go use case)
+ * 4. The web preview works
+ *
+ * Tests are ordered to match real Expo Go flow: manifest first, then
+ * Android bundle (before web bundle) to avoid memory pressure from
+ * compiling multiple platforms simultaneously.
  *
  * Run:
  *   VIBESDK_RUN_INTEGRATION_TESTS=1 \
@@ -35,7 +40,7 @@ function requireEnv(name: string): string {
 	return v;
 }
 
-/** Build the Metro web bundle URL from a preview base URL. */
+/** Build the Metro bundle URL from a preview base URL. */
 function metroBundleUrl(previewUrl: string, platform: 'web' | 'ios' | 'android' = 'web'): string {
 	const url = new URL(previewUrl);
 	url.pathname = '/node_modules/expo-router/entry.bundle';
@@ -64,7 +69,7 @@ const describeExpo =
 /*  Tests                                                             */
 /* ------------------------------------------------------------------ */
 
-describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () => {
+describeExpo('Expo mobile E2E: create project, deploy, verify bundles', () => {
 	const apiKey = requireEnv('VIBESDK_INTEGRATION_API_KEY');
 	const baseUrl = process.env.VIBESDK_INTEGRATION_BASE_URL ?? 'http://localhost:5173';
 	const wsFactory = createNodeWebSocketFactory();
@@ -100,7 +105,6 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		);
 
 		// Capture deployment_completed from ANY point in the flow.
-		// In phasic mode, deployment happens during phase_validating automatically.
 		let deployResolve: (v: { previewURL: string }) => void;
 		let deployReject: (e: Error) => void;
 		const deploymentPromise = new Promise<{ previewURL: string }>((res, rej) => {
@@ -143,7 +147,6 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 				deployReject!(new Error(`Deployment failed: ${m.error ?? 'unknown'}`));
 			}
 
-			// Also check phase_validated -- it means deployment completed in phasic mode
 			if (msgType === 'phase_validated') {
 				console.log('[expo-e2e] phase_validated received -- checking state for preview URL');
 			}
@@ -169,9 +172,6 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		}
 		console.log('[expo-e2e] generation started');
 
-		// Wait for deployment_completed to arrive from the phasic flow.
-		// In phasic mode: phase_implementing -> phase_validating (deploys) -> deployment_completed -> phase_validated
-		// We also try triggering deployPreview() after generation_complete as a fallback.
 		const genCompletePromise = session.wait.generationComplete({ timeoutMs: 300_000 });
 
 		// Race: deployment might complete before or after generation_complete
@@ -186,7 +186,6 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		} else {
 			console.log('[expo-e2e] generation complete, waiting for deployment...');
 
-			// Give phasic auto-deploy a chance (30s), then manually trigger
 			const raceResult = await Promise.race([
 				deploymentPromise.then(d => ({ source: 'auto' as const, ...d })),
 				new Promise<{ source: 'timeout' }>(resolve =>
@@ -217,83 +216,77 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		console.log('[expo-e2e] files look good');
 	}, 600_000);
 
-	/* -- Step 2: Verify web-preview.html is served ------------------- */
-	it('serves web-preview.html from the sandbox', async () => {
+	/* -- Step 2: Verify sandbox root responds (Metro dev server) ----- */
+	it('sandbox root responds (Metro dev server running)', async () => {
 		expect(previewURL).not.toBeNull();
 
-		const url = webPreviewUrl(previewURL!);
-		console.log(`[expo-e2e] fetching web-preview.html: ${url}`);
-
-		const resp = await fetch(url, {
-			headers: { 'Accept': 'text/html' },
+		console.log(`[expo-e2e] fetching sandbox root: ${previewURL}`);
+		const resp = await fetch(previewURL!, {
 			redirect: 'follow',
+			signal: AbortSignal.timeout(15_000),
 		});
 
-		console.log(`[expo-e2e] web-preview.html status=${resp.status}`);
-		expect(resp.status).toBe(200);
-
-		const body = await resp.text();
-		expect(body).toContain('expo-router/entry.bundle');
-		expect(body).toContain('<div id="root">');
-		console.log('[expo-e2e] web-preview.html content is valid');
+		console.log(`[expo-e2e] sandbox root status=${resp.status}`);
+		expect(resp.ok).toBe(true);
+		console.log('[expo-e2e] sandbox root is reachable');
 	}, 30_000);
 
-	/* -- Step 3: Verify Metro web bundle compiles (no 500) ----------- */
-	it('Metro web bundle compiles without 500 error', async () => {
+	/* -- Step 3: Verify Expo manifest has clean URLs ------------------ */
+	it('Expo manifest has valid URLs (no duplicated protocol, HTTPS)', async () => {
 		expect(previewURL).not.toBeNull();
 
-		const bundleUrl = metroBundleUrl(previewURL!);
-		console.log(`[expo-e2e] fetching Metro web bundle: ${bundleUrl}`);
+		console.log(`[expo-e2e] fetching Expo manifest from root URL`);
+		const resp = await fetch(previewURL!, {
+			headers: {
+				'Accept': 'application/json',
+				'Expo-Platform': 'android',
+			},
+			redirect: 'follow',
+			signal: AbortSignal.timeout(15_000),
+		});
 
-		// Metro can take a while to compile the first bundle (cold start).
-		// Retry a few times since Metro might still be starting up.
-		let lastStatus = 0;
-		let lastBody = '';
-		for (let attempt = 1; attempt <= 3; attempt++) {
-			if (attempt > 1) {
-				console.log(`[expo-e2e] retrying Metro bundle (attempt ${attempt}/3) in 15s...`);
-				await new Promise(r => setTimeout(r, 15_000));
-			}
+		console.log(`[expo-e2e] manifest status=${resp.status}`);
+		expect(resp.ok).toBe(true);
 
-			const resp = await fetch(bundleUrl, {
-				headers: { 'Accept': 'application/javascript' },
-				redirect: 'follow',
-				signal: AbortSignal.timeout(120_000),
-			});
+		const manifest = await resp.json() as Record<string, unknown>;
+		const launchAsset = manifest.launchAsset as Record<string, unknown> | undefined;
 
-			lastStatus = resp.status;
-			lastBody = await resp.text();
-
-			console.log(`[expo-e2e] Metro bundle attempt ${attempt}: status=${lastStatus} size=${lastBody.length}`);
-
-			if (lastStatus === 200) break;
-
-			console.error(`[expo-e2e] Metro error (first 1000 chars):\n${lastBody.slice(0, 1000)}`);
+		if (launchAsset?.url) {
+			const assetUrl = launchAsset.url as string;
+			console.log(`[expo-e2e] launchAsset.url=${assetUrl.slice(0, 120)}...`);
+			// Must not contain duplicated protocol "https, https://"
+			expect(assetUrl).not.toContain('https, https');
+			expect(assetUrl).not.toContain('http, http');
+			// Must use HTTPS (proxy forces x-forwarded-proto: https)
+			expect(assetUrl.startsWith('https://')).toBe(true);
+			console.log('[expo-e2e] manifest launchAsset.url is valid HTTPS');
+		} else {
+			console.log('[expo-e2e] no launchAsset.url in manifest (dev mode may omit it)');
 		}
 
-		if (lastStatus !== 200) {
-			throw new Error(
-				`Metro web bundle returned ${lastStatus} after 3 attempts. ` +
-				`Error: ${lastBody.slice(0, 500)}`,
-			);
+		// Verify hostUri doesn't have redundant port
+		const extra = manifest.extra as Record<string, unknown> | undefined;
+		const expoClient = extra?.expoClient as Record<string, unknown> | undefined;
+		if (expoClient?.hostUri) {
+			const hostUri = expoClient.hostUri as string;
+			console.log(`[expo-e2e] hostUri=${hostUri}`);
+			// Should not end with :8001 or :8002 (port is in subdomain)
+			expect(hostUri).not.toMatch(/:800[0-9]$/);
+			console.log('[expo-e2e] hostUri is clean');
 		}
+	}, 30_000);
 
-		expect(lastStatus).toBe(200);
-		expect(lastBody.length).toBeGreaterThan(10_000);
-		expect(lastBody).not.toContain('Unable to resolve module');
-
-		console.log(`[expo-e2e] Metro web bundle compiled successfully (${lastBody.length} bytes)`);
-	}, 300_000);
-
-	/* -- Step 4: Verify Android bundle compiles (Expo Go bundle) ----- */
+	/* -- Step 4: Verify Android bundle compiles (Expo Go flow) ------- */
+	/* This is tested BEFORE the web bundle to avoid Metro OOM from
+	   compiling both platforms. In real usage, Expo Go requests this
+	   bundle first and is the primary use case for mobile projects. */
 	it('Metro Android bundle compiles without errors', async () => {
 		expect(previewURL).not.toBeNull();
 
 		const bundleUrl = metroBundleUrl(previewURL!, 'android');
 		console.log(`[expo-e2e] fetching Metro Android bundle: ${bundleUrl}`);
 
-		// Android bundle cold-compile can take 3-5 minutes on first request.
-		// Use a long per-fetch timeout and fewer retries.
+		// Android bundle cold-compile can take 2-4 minutes on first request.
 		let lastStatus = 0;
 		let lastBody = '';
 		for (let attempt = 1; attempt <= 2; attempt++) {
@@ -337,63 +330,74 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		console.log(`[expo-e2e] Metro Android bundle compiled successfully (${lastBody.length} bytes)`);
 	}, 540_000);
 
-	/* -- Step 5: Verify sandbox root responds (Metro dev server) ----- */
-	it('sandbox root responds (Metro dev server running)', async () => {
+	/* -- Step 5: Verify web-preview.html is served ------------------- */
+	it('serves web-preview.html from the sandbox', async () => {
 		expect(previewURL).not.toBeNull();
 
-		console.log(`[expo-e2e] fetching sandbox root: ${previewURL}`);
-		const resp = await fetch(previewURL!, {
+		const url = webPreviewUrl(previewURL!);
+		console.log(`[expo-e2e] fetching web-preview.html: ${url}`);
+
+		const resp = await fetch(url, {
+			headers: { 'Accept': 'text/html' },
 			redirect: 'follow',
-			signal: AbortSignal.timeout(15_000),
 		});
 
-		console.log(`[expo-e2e] sandbox root status=${resp.status}`);
-		expect(resp.ok).toBe(true);
-		console.log('[expo-e2e] sandbox root is reachable');
+		console.log(`[expo-e2e] web-preview.html status=${resp.status}`);
+		expect(resp.status).toBe(200);
+
+		const body = await resp.text();
+		expect(body).toContain('expo-router/entry.bundle');
+		expect(body).toContain('<div id="root">');
+		console.log('[expo-e2e] web-preview.html content is valid');
 	}, 30_000);
 
-	/* -- Step 6: Verify Expo manifest has clean URLs (no duplicated protocol) */
-	it('Expo manifest has valid launchAsset URL (no duplicated protocol)', async () => {
+	/* -- Step 6: Verify Metro web bundle compiles -------------------- */
+	it('Metro web bundle compiles without 500 error', async () => {
 		expect(previewURL).not.toBeNull();
 
-		console.log(`[expo-e2e] fetching Expo manifest from root URL`);
-		const resp = await fetch(previewURL!, {
-			headers: {
-				'Accept': 'application/json',
-				'Expo-Platform': 'android',
-			},
-			redirect: 'follow',
-			signal: AbortSignal.timeout(15_000),
-		});
+		const bundleUrl = metroBundleUrl(previewURL!);
+		console.log(`[expo-e2e] fetching Metro web bundle: ${bundleUrl}`);
 
-		console.log(`[expo-e2e] manifest status=${resp.status}`);
-		expect(resp.ok).toBe(true);
+		let lastStatus = 0;
+		let lastBody = '';
+		for (let attempt = 1; attempt <= 3; attempt++) {
+			if (attempt > 1) {
+				console.log(`[expo-e2e] retrying Metro bundle (attempt ${attempt}/3) in 15s...`);
+				await new Promise(r => setTimeout(r, 15_000));
+			}
 
-		const manifest = await resp.json() as Record<string, unknown>;
-		const launchAsset = manifest.launchAsset as Record<string, unknown> | undefined;
+			try {
+				const resp = await fetch(bundleUrl, {
+					headers: { 'Accept': 'application/javascript' },
+					redirect: 'follow',
+					signal: AbortSignal.timeout(120_000),
+				});
 
-		if (launchAsset?.url) {
-			const assetUrl = launchAsset.url as string;
-			console.log(`[expo-e2e] launchAsset.url=${assetUrl.slice(0, 120)}...`);
-			// Must not contain duplicated protocol "https, https://"
-			expect(assetUrl).not.toContain('https, https');
-			expect(assetUrl).not.toContain('http, http');
-			// Must use HTTPS (proxy forces x-forwarded-proto: https)
-			expect(assetUrl.startsWith('https://')).toBe(true);
-			console.log('[expo-e2e] manifest launchAsset.url is valid HTTPS');
-		} else {
-			console.log('[expo-e2e] no launchAsset.url in manifest (dev mode may omit it)');
+				lastStatus = resp.status;
+				lastBody = await resp.text();
+
+				console.log(`[expo-e2e] Metro bundle attempt ${attempt}: status=${lastStatus} size=${lastBody.length}`);
+
+				if (lastStatus === 200) break;
+
+				console.error(`[expo-e2e] Metro error (first 1000 chars):\n${lastBody.slice(0, 1000)}`);
+			} catch (fetchErr) {
+				console.error(`[expo-e2e] Web bundle attempt ${attempt} fetch error:`, fetchErr);
+				lastStatus = 0;
+			}
 		}
 
-		// Verify hostUri doesn't have redundant port
-		const extra = manifest.extra as Record<string, unknown> | undefined;
-		const expoClient = extra?.expoClient as Record<string, unknown> | undefined;
-		if (expoClient?.hostUri) {
-			const hostUri = expoClient.hostUri as string;
-			console.log(`[expo-e2e] hostUri=${hostUri}`);
-			// Should not end with :8001 or :8002 (port is in subdomain)
-			expect(hostUri).not.toMatch(/:800[0-9]$/);
-			console.log('[expo-e2e] hostUri is clean');
+		if (lastStatus !== 200) {
+			throw new Error(
+				`Metro web bundle returned ${lastStatus} after 3 attempts. ` +
+				`Error: ${lastBody.slice(0, 500)}`,
+			);
 		}
-	}, 30_000);
+
+		expect(lastStatus).toBe(200);
+		expect(lastBody.length).toBeGreaterThan(10_000);
+		expect(lastBody).not.toContain('Unable to resolve module');
+
+		console.log(`[expo-e2e] Metro web bundle compiled successfully (${lastBody.length} bytes)`);
+	}, 300_000);
 });
