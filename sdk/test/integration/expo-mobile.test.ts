@@ -36,10 +36,10 @@ function requireEnv(name: string): string {
 }
 
 /** Build the Metro web bundle URL from a preview base URL. */
-function metroBundleUrl(previewUrl: string): string {
+function metroBundleUrl(previewUrl: string, platform: 'web' | 'ios' | 'android' = 'web'): string {
 	const url = new URL(previewUrl);
 	url.pathname = '/node_modules/expo-router/entry.bundle';
-	url.search = '?platform=web&dev=true&hot=false&transform.routerRoot=app';
+	url.search = `?platform=${platform}&dev=true&hot=false&transform.routerRoot=app`;
 	return url.toString();
 }
 
@@ -285,8 +285,53 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		console.log(`[expo-e2e] Metro web bundle compiled successfully (${lastBody.length} bytes)`);
 	}, 300_000);
 
-	/* -- Step 4: Verify sandbox root responds (Metro dev server) ----- */
-	it('sandbox root URL responds (Metro dev server running)', async () => {
+	/* -- Step 4: Verify Android bundle compiles (Expo Go bundle) ----- */
+	it('Metro Android bundle compiles without errors', async () => {
+		expect(previewURL).not.toBeNull();
+
+		const bundleUrl = metroBundleUrl(previewURL!, 'android');
+		console.log(`[expo-e2e] fetching Metro Android bundle: ${bundleUrl}`);
+
+		let lastStatus = 0;
+		let lastBody = '';
+		for (let attempt = 1; attempt <= 3; attempt++) {
+			if (attempt > 1) {
+				console.log(`[expo-e2e] retrying Android bundle (attempt ${attempt}/3) in 15s...`);
+				await new Promise(r => setTimeout(r, 15_000));
+			}
+
+			const resp = await fetch(bundleUrl, {
+				headers: { 'Accept': 'application/javascript' },
+				redirect: 'follow',
+				signal: AbortSignal.timeout(120_000),
+			});
+
+			lastStatus = resp.status;
+			lastBody = await resp.text();
+
+			console.log(`[expo-e2e] Android bundle attempt ${attempt}: status=${lastStatus} size=${lastBody.length}`);
+
+			if (lastStatus === 200) break;
+
+			console.error(`[expo-e2e] Android bundle error (first 1000 chars):\n${lastBody.slice(0, 1000)}`);
+		}
+
+		if (lastStatus !== 200) {
+			throw new Error(
+				`Metro Android bundle returned ${lastStatus} after 3 attempts. ` +
+				`Error: ${lastBody.slice(0, 500)}`,
+			);
+		}
+
+		expect(lastStatus).toBe(200);
+		expect(lastBody.length).toBeGreaterThan(10_000);
+		expect(lastBody).not.toContain('Unable to resolve module');
+
+		console.log(`[expo-e2e] Metro Android bundle compiled successfully (${lastBody.length} bytes)`);
+	}, 300_000);
+
+	/* -- Step 5: Verify sandbox root responds (Metro dev server) ----- */
+	it('sandbox root responds (Metro dev server running)', async () => {
 		expect(previewURL).not.toBeNull();
 
 		console.log(`[expo-e2e] fetching sandbox root: ${previewURL}`);
@@ -300,7 +345,7 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		console.log('[expo-e2e] sandbox root is reachable');
 	}, 30_000);
 
-	/* -- Step 5: Verify Expo manifest has clean URLs (no duplicated protocol) */
+	/* -- Step 6: Verify Expo manifest has clean URLs (no duplicated protocol) */
 	it('Expo manifest has valid launchAsset URL (no duplicated protocol)', async () => {
 		expect(previewURL).not.toBeNull();
 
@@ -308,7 +353,7 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 		const resp = await fetch(previewURL!, {
 			headers: {
 				'Accept': 'application/json',
-				'Expo-Platform': 'ios',
+				'Expo-Platform': 'android',
 			},
 			redirect: 'follow',
 			signal: AbortSignal.timeout(15_000),
@@ -326,9 +371,9 @@ describeExpo('Expo mobile E2E: create project, deploy, verify web bundle', () =>
 			// Must not contain duplicated protocol "https, https://"
 			expect(assetUrl).not.toContain('https, https');
 			expect(assetUrl).not.toContain('http, http');
-			// Must start with a valid protocol
-			expect(assetUrl.startsWith('http://') || assetUrl.startsWith('https://')).toBe(true);
-			console.log('[expo-e2e] manifest launchAsset.url is valid');
+			// Must use HTTPS (proxy forces x-forwarded-proto: https)
+			expect(assetUrl.startsWith('https://')).toBe(true);
+			console.log('[expo-e2e] manifest launchAsset.url is valid HTTPS');
 		} else {
 			console.log('[expo-e2e] no launchAsset.url in manifest (dev mode may omit it)');
 		}

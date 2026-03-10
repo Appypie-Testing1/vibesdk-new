@@ -33,10 +33,10 @@ const MobilePreview = forwardRef<HTMLIFrameElement, {
 	let webPreviewSrc: string;
 	try {
 		const url = new URL(previewUrl);
-		// Use the original protocol (https://) directly — Expo Go SDK 54 handles
-		// HTTPS URLs natively. The exps:// scheme causes "Expected URL scheme http
-		// or https" errors in some environments.
-		expoDeepLink = `${url.protocol}//${url.hostname}`;
+		// Use exp:// scheme so scanning with phone camera opens Expo Go directly
+		// instead of Safari/Chrome (which would show raw JSON manifest).
+		// Expo Go connects via HTTP; Cloudflare redirects to HTTPS transparently.
+		expoDeepLink = `exp://${url.hostname}`;
 		url.pathname = '/web-preview.html';
 		webPreviewSrc = url.toString();
 	} catch {

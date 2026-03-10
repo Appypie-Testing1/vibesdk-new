@@ -616,7 +616,9 @@ expo.on('exit', (code) => { process.exit(code || 0); });
 
 function sanitizeHeaders(headers) {
   const h = { ...headers };
-  if (h['x-forwarded-proto']) h['x-forwarded-proto'] = h['x-forwarded-proto'].split(',')[0].trim();
+  // Always force HTTPS — the public URL is behind Cloudflare TLS termination.
+  // Without this, Expo constructs http:// manifest URLs that break Expo Go.
+  h['x-forwarded-proto'] = 'https';
   if (h['x-forwarded-host']) h['x-forwarded-host'] = h['x-forwarded-host'].split(',')[0].trim();
   return h;
 }
