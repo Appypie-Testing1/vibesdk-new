@@ -981,7 +981,7 @@ export const MOBILE_STRATEGIES = {
         * **NO web elements:** Do NOT use div, span, button, input, h1, p, or any HTML elements.
         * **NO web styling:** Do NOT use Tailwind CSS, className, CSS files, or CSS-in-JS. Use only StyleSheet.create().
         * **Routing:** Use expo-router file-based routing (files in app/ directory). Stack.Screen, Tabs, etc.
-        * **Icons:** Use @expo/vector-icons (included with Expo) or lucide-react-native if installed.
+        * **Icons:** Use ONLY @expo/vector-icons (MaterialIcons, Ionicons, FontAwesome -- included with Expo). NEVER use lucide-react-native or any other icon library.
         * **Images:** Use Image from react-native with external URLs (unsplash, placeholder services).
         * **State:** Use React useState/useReducer/useContext. For complex state, suggest installing zustand.
         * **package.json modifications:** You MAY add dependencies to package.json if the app needs them. Use installCommands to run "bun add <package>" for any new packages.

@@ -844,6 +844,8 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         'react-native-reanimated', 'react-native-safe-area-context',
         'react-native-screens', 'react-native-web', 'react-native-worklets',
         '@types/react', '@babel/core', 'typescript',
+        // Bundled with Expo SDK (no separate install needed)
+        '@expo/vector-icons',
         // Expo Router internals
         'expo-router/entry',
     ]);
