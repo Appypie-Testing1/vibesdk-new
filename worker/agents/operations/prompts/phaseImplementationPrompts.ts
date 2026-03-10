@@ -61,7 +61,7 @@ export const MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a
 - NEVER use Tailwind CSS or className prop. Use ONLY StyleSheet.create() for all styling.
 - NEVER import from 'react-dom' or use web-specific APIs (document, window.location, etc.)
 - Navigation: use expo-router (Link, useRouter, Stack, Tabs) -- NOT @react-navigation directly.
-- Icons: use ONLY @expo/vector-icons (MaterialIcons, Ionicons, FontAwesome). NEVER use lucide-react-native.
+- Icons: use ONLY \`@expo/vector-icons\` (SLASH not hyphen): \`import { MaterialIcons } from '@expo/vector-icons'\`. NEVER write \`@expo-vector-icons\` (wrong package name). NEVER use lucide-react-native.
 - Images: use Image from 'react-native' with external URLs.
 - package.json: KEEP ALL existing template dependencies. NEVER remove react-native-safe-area-context, react-native-screens, react-native-gesture-handler, react-native-reanimated, expo-router, or any other pre-installed package.
 </CRITICAL_MOBILE_RULES>

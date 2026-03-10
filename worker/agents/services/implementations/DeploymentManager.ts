@@ -990,6 +990,26 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         try {
             const allFiles = Object.values(state.generatedFilesMap);
 
+            // Step 0: Fix common LLM import typos in generated source files.
+            // The LLM frequently writes `@expo-vector-icons` instead of `@expo/vector-icons`.
+            const IMPORT_TYPO_FIXES: Record<string, string> = {
+                '@expo-vector-icons': '@expo/vector-icons',
+            };
+            for (const file of allFiles) {
+                if (!file.filePath.match(/\.(tsx?|jsx?)$/)) continue;
+                let fixed = file.fileContents;
+                for (const [wrong, correct] of Object.entries(IMPORT_TYPO_FIXES)) {
+                    if (fixed.includes(wrong)) {
+                        fixed = fixed.replaceAll(wrong, correct);
+                        logger.info('Fixed import typo in generated file', { file: file.filePath, wrong, correct });
+                    }
+                }
+                if (fixed !== file.fileContents) {
+                    file.fileContents = fixed;
+                    await client.writeFiles(sandboxInstanceId, [{ filePath: file.filePath, fileContents: fixed }]);
+                }
+            }
+
             // Step 1: Run `bun install` to sync node_modules with the LLM's package.json.
             // The LLM often adds packages to package.json (e.g. expo-linear-gradient)
             // that weren't in the original template. Without this step, those packages

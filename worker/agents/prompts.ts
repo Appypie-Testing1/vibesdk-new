@@ -981,7 +981,7 @@ export const MOBILE_STRATEGIES = {
         * **NO web elements:** Do NOT use div, span, button, input, h1, p, or any HTML elements.
         * **NO web styling:** Do NOT use Tailwind CSS, className, CSS files, or CSS-in-JS. Use only StyleSheet.create().
         * **Routing:** Use expo-router file-based routing (files in app/ directory). Stack.Screen, Tabs, etc.
-        * **Icons:** Use ONLY @expo/vector-icons (MaterialIcons, Ionicons, FontAwesome -- included with Expo). NEVER use lucide-react-native or any other icon library.
+        * **Icons:** Use ONLY \`@expo/vector-icons\` (with a SLASH, not a hyphen) for icons: \`import { MaterialIcons } from '@expo/vector-icons'\`. NEVER write \`@expo-vector-icons\` (wrong). NEVER use lucide-react-native.
         * **Images:** Use Image from react-native with external URLs (unsplash, placeholder services).
         * **State:** Use React useState/useReducer/useContext. For complex state, suggest installing zustand.
         * **package.json:** When generating package.json, KEEP ALL existing dependencies from the template. You may ADD new dependencies but NEVER remove existing ones (react-native-safe-area-context, react-native-screens, react-native-gesture-handler, react-native-reanimated, expo-router, etc. are all required).
@@ -1024,7 +1024,7 @@ const styles = StyleSheet.create({
 - Use React Native components ONLY: View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Switch
 - Import from 'react-native' and 'expo-*' packages
 - For navigation: use expo-router (Stack, Tabs, Link, useRouter)
-- For icons: use @expo/vector-icons (MaterialIcons, Ionicons, etc.)
+- For icons: use \`@expo/vector-icons\` (SLASH not hyphen): \`import { MaterialIcons } from '@expo/vector-icons'\`. NEVER \`@expo-vector-icons\`.
 
 3) Styling Rules
 - ALWAYS use StyleSheet.create() for styles
