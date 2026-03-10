@@ -609,7 +609,7 @@ const INTERNAL_PORT = PUBLIC_PORT + 1;
 // Start Expo dev server on internal port
 const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
   stdio: 'inherit',
-  env: { ...process.env, PORT: String(INTERNAL_PORT) },
+  env: { ...process.env, PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
 });
 expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); process.exit(1); });
 expo.on('exit', (code) => { process.exit(code || 0); });
