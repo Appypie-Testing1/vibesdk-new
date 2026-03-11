@@ -94,8 +94,12 @@ export async function getTemplateForQuery(
     }
     // Check for mobile/native app requests FIRST -- before LLM template selection
     // This ensures mobile queries always get the Expo template, not a web template
-    const mobileKeywords = /\b(mobile\s*app|ios\s*app|android\s*app|react\s*native|expo|phone\s*app|native\s*app|iphone|smartphone|mobile\s*application)\b/i;
-    if (mobileKeywords.test(query)) {
+    // Match "mobile app", "mobile todo app", "mobile fitness tracker app", etc.
+    // Also matches standalone mobile keywords like "react native", "expo", "iphone"
+    const hasMobileWord = /\bmobile\b/i.test(query) && /\bapp(lication)?\b/i.test(query);
+    const mobileKeywords = /\b(ios\s*app|android\s*app|react\s*native|expo|phone\s*app|native\s*app|iphone|smartphone)\b/i;
+    const isMobileRequest = hasMobileWord || mobileKeywords.test(query);
+    if (isMobileRequest) {
         // Detect if the mobile app needs a backend (database, API, auth, etc.)
         const backendKeywords = /\b(database|api|backend|auth|users|crud|full[\s-]?stack|server|login|signup|register|persist|storage|d1|sqlite|sql)\b/i;
         const needsBackend = backendKeywords.test(query);
