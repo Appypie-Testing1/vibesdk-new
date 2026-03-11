@@ -310,6 +310,40 @@ export async function generateBlueprint(
         if (projectGuidance) {
             systemPrompt = `${systemPrompt}\n\n${projectGuidance}`;
         }
+
+        // Override web-specific guidance for mobile projects
+        const isMobileTemplate = templateDetails?.renderMode === 'mobile' || templateDetails?.renderMode === 'mobile-fullstack';
+        if (isMobileTemplate) {
+            const mobileOverride = `
+## CRITICAL: MOBILE PROJECT OVERRIDE
+This is a React Native / Expo mobile app project. ALL web-specific instructions above are OVERRIDDEN:
+
+**DO NOT USE:**
+- Tailwind CSS, className, or any CSS framework
+- HTML elements (div, span, button, input, h1, p, a, ul, li, etc.)
+- Web-specific libraries: lucide-react, framer-motion, react-router-dom, shadcn/ui, radix-ui
+- CSS files, CSS-in-JS, or any web styling approach
+- \`<canvas>\`, \`<svg>\` inline elements, or web-specific visual patterns
+
+**MUST USE INSTEAD:**
+- React Native components: View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Switch, SafeAreaView
+- StyleSheet.create() for ALL styling (flexbox, spacing, colors, typography)
+- expo-router for navigation (file-based routing in app/ directory)
+- @expo/vector-icons for icons (SLASH not hyphen): import { MaterialIcons } from '@expo/vector-icons'
+- Image from 'react-native' with external URLs for visual assets
+
+**Project Structure:**
+- Frontend screens: app/ directory (expo-router file-based routing)
+- Styling: StyleSheet.create() with React Native flexbox
+${templateDetails?.renderMode === 'mobile-fullstack' ? `- Backend API: api/src/index.ts (Hono with D1 database)
+- API client: lib/api-client.ts
+- All API routes under /api/* prefix
+- Database: D1 via c.env.DB.prepare() with parameterized queries` : '- No backend/API -- this is a frontend-only mobile app'}
+
+**Dependencies to suggest:** React Native compatible packages only. Common useful packages: zustand, @react-native-async-storage/async-storage, expo-image, date-fns, react-native-svg.
+Do NOT suggest: tailwindcss, framer-motion, lucide-react, react-router-dom, shadcn, or any web-only library.`;
+            systemPrompt = `${systemPrompt}\n\n${mobileOverride}`;
+        }
         
         const systemPromptMessage = createSystemMessage(generalSystemPromptBuilder(systemPrompt, {
             query,

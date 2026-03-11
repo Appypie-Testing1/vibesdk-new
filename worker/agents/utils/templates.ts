@@ -421,11 +421,13 @@ bun run deploy
 const EXPO_SCRATCH_TEMPLATE_INSTRUCTIONS = `
 To build a valid, previewable Expo/React Native project (SDK 54, React Native 0.81), follow these rules:
 
-1. The package.json **MUST** have a dev script:
+1. The package.json **MUST** have these scripts:
 \`\`\`
 "scripts": {
     "dev": "node _expo-proxy.cjs",
-    "build": "npx expo export",
+    "build:web": "bun x expo export --platform web --output-dir dist/client",
+    "build:worker": "bunx esbuild worker.ts --outfile=dist/index.js --format=esm --bundle",
+    "build": "npm run build:web && npm run build:worker",
     "lint": "npx eslint . --ext .ts,.tsx"
 }
 \`\`\`
@@ -434,7 +436,7 @@ To build a valid, previewable Expo/React Native project (SDK 54, React Native 0.
 
 3. Use expo-router for navigation (file-based routing in the app/ directory).
 
-4. Do NOT include wrangler.jsonc or Cloudflare-specific files -- this is a React Native project.
+4. Do NOT modify wrangler.jsonc or worker.ts -- they are pre-configured for web deployment.
 
 5. All UI must use React Native components (View, Text, TouchableOpacity, etc.), NOT HTML elements.
 
@@ -504,9 +506,20 @@ const styles = StyleSheet.create({
                 version: '1.0.0',
                 orientation: 'portrait',
                 scheme: 'expo-app',
-                platforms: ['ios', 'android'],
+                platforms: ['ios', 'android', 'web'],
                 web: { bundler: 'metro' },
                 plugins: ['expo-router'],
+            }
+        }, null, 2),
+        'worker.ts': `export default { fetch() { return new Response('Not Found', { status: 404 }); } };\n`,
+        'wrangler.jsonc': JSON.stringify({
+            "name": "expo-app",
+            "main": "worker.ts",
+            "compatibility_date": "2025-01-15",
+            "assets": {
+                "directory": "dist/client",
+                "not_found_handling": "single-page-application",
+                "binding": "ASSETS"
             }
         }, null, 2),
         'package.json': JSON.stringify({
@@ -515,7 +528,9 @@ const styles = StyleSheet.create({
             main: 'expo-router/entry',
             scripts: {
                 dev: 'node _expo-proxy.cjs',
-                build: 'npx expo export',
+                'build:web': 'bun x expo export --platform web --output-dir dist/client',
+                'build:worker': 'bunx esbuild worker.ts --outfile=dist/index.js --format=esm --bundle',
+                build: 'npm run build:web && npm run build:worker',
                 lint: 'npx eslint . --ext .ts,.tsx',
             },
             dependencies: {
@@ -680,6 +695,8 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 { path: 'tsconfig.json', type: 'file' },
                 { path: 'metro.config.js', type: 'file' },
                 { path: '_expo-proxy.cjs', type: 'file' },
+                { path: 'wrangler.jsonc', type: 'file' },
+                { path: 'worker.ts', type: 'file' },
             ]
         },
         allFiles: expoFiles,
@@ -690,7 +707,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         initCommand: 'node _expo-proxy.cjs',
         frameworks: ['react-native', 'expo', 'expo-router'],
         importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'package.json', 'app.json'],
-        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs'],
+        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'wrangler.jsonc', 'worker.ts'],
         redactedFiles: [],
         disabled: false,
     };
@@ -703,9 +720,10 @@ To build a valid, previewable Expo/React Native + Cloudflare Workers fullstack p
 \`\`\`
 "scripts": {
     "dev": "node _expo-proxy.cjs",
-    "build:web": "npx expo export --platform web --output-dir dist/web",
-    "build": "npm run build:web",
-    "deploy": "npm run build:web && wrangler deploy",
+    "build:web": "bun x expo export --platform web --output-dir dist/client",
+    "build:worker": "bunx esbuild api/src/index.ts --outfile=dist/index.js --format=esm --bundle --external:cloudflare:* --external:node:*",
+    "build": "npm run build:web && npm run build:worker",
+    "deploy": "npm run build && wrangler deploy",
     "lint": "npx eslint . --ext .ts,.tsx"
 }
 \`\`\`
@@ -936,7 +954,7 @@ export const apiClient = {
                 version: '1.0.0',
                 orientation: 'portrait',
                 scheme: 'expo-fullstack-app',
-                platforms: ['ios', 'android'],
+                platforms: ['ios', 'android', 'web'],
                 web: { bundler: 'metro' },
                 plugins: ['expo-router'],
             }
@@ -947,7 +965,7 @@ export const apiClient = {
             main: 'expo-router/entry',
             scripts: {
                 dev: 'node _expo-proxy.cjs',
-                'build:web': 'npx expo export --platform web --output-dir dist/web',
+                'build:web': 'bun x expo export --platform web --output-dir dist/web',
                 build: 'npm run build:web',
                 deploy: 'npm run build:web && wrangler deploy',
                 lint: 'npx eslint . --ext .ts,.tsx',
@@ -994,7 +1012,7 @@ export const apiClient = {
             "compatibility_date": "2025-01-15",
             "compatibility_flags": ["nodejs_compat"],
             "assets": {
-                "directory": "dist/web",
+                "directory": "dist/client",
                 "not_found_handling": "single-page-application",
                 "run_worker_first": ["/api/*"],
                 "binding": "ASSETS"

@@ -771,8 +771,8 @@ export default function Chat() {
 								/>
 							)}
 
-							{/* Deployment and Generation Controls - phasic mode only (mobile projects use sandbox preview + QR code) */}
-							{chatId && behaviorType !== 'agentic' && templateDetails?.renderMode !== 'mobile' && (
+							{/* Deployment and Generation Controls - phasic mode only */}
+							{chatId && behaviorType !== 'agentic' && (
 								<motion.div
 									ref={deploymentControlsRef}
 									initial={{ opacity: 0, y: 20 }}

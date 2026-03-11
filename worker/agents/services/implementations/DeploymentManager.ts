@@ -1111,19 +1111,6 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         
         logger.info('Starting Cloudflare deployment', { target });
 
-        // Pure mobile (Expo/React Native) projects cannot be deployed to Cloudflare Workers.
-        // They don't have wrangler.jsonc or a Worker entry point.
-        // mobile-fullstack projects CAN be deployed (they have wrangler.jsonc + Hono backend).
-        if (state.templateRenderMode === 'mobile') {
-            logger.info('Skipping Cloudflare deployment for pure mobile project');
-            callbacks?.onError?.({
-                message: 'Mobile apps cannot be deployed to Cloudflare Workers. Use Expo Go or EAS Build to distribute your app.',
-                instanceId: state.sandboxInstanceId ?? '',
-                error: 'Mobile projects are not supported for Cloudflare Workers deployment'
-            });
-            return { deploymentUrl: null };
-        }
-
         // Check if we have generated files
         if (!state.generatedFilesMap || Object.keys(state.generatedFilesMap).length === 0) {
             logger.error('No generated files available for deployment');
