@@ -620,26 +620,47 @@ const { spawn } = require('child_process');
 
 const PUBLIC_PORT = parseInt(process.env.PORT || '8001', 10);
 const INTERNAL_PORT = PUBLIC_PORT + 1;
+let metroReady = false;
+let metroDead = false;
+let metroExitCode = null;
 
 // Start Expo dev server on internal port
 const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
-  stdio: 'inherit',
+  stdio: ['inherit', 'pipe', 'pipe'],
   env: { ...process.env, PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
 });
-expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); process.exit(1); });
-expo.on('exit', (code) => { process.exit(code || 0); });
+expo.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); if (/Metro waiting|Bundler is ready|listening on/i.test(s)) { metroReady = true; console.log('[proxy] Metro is ready'); } });
+expo.stderr.on('data', (d) => { process.stderr.write(d); });
+expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); metroDead = true; });
+expo.on('exit', (code) => { console.error('[proxy] Expo exited with code ' + code); metroDead = true; metroExitCode = code; });
+
+// Probe Metro readiness every 3s until ready
+const probe = setInterval(() => {
+  if (metroReady || metroDead) { clearInterval(probe); return; }
+  const req = http.get({ hostname: '127.0.0.1', port: INTERNAL_PORT, path: '/status', timeout: 2000 }, (res) => {
+    if (!metroReady) { metroReady = true; clearInterval(probe); console.log('[proxy] Metro responded on port ' + INTERNAL_PORT); }
+  });
+  req.on('error', () => {});
+  req.on('timeout', () => { req.destroy(); });
+}, 3000);
 
 function sanitizeHeaders(headers) {
   const h = { ...headers };
-  // Always force HTTPS — the public URL is behind Cloudflare TLS termination.
-  // Without this, Expo constructs http:// manifest URLs that break Expo Go.
   h['x-forwarded-proto'] = 'https';
   if (h['x-forwarded-host']) h['x-forwarded-host'] = h['x-forwarded-host'].split(',')[0].trim();
   return h;
 }
 
+const LOADING_PAGE = '<html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3"><style>body{display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui;background:#f5f5f5;color:#333}div{text-align:center}.spin{width:32px;height:32px;border:3px solid #ddd;border-top-color:#666;border-radius:50%;animation:s 0.8s linear infinite;margin:0 auto 16px}@keyframes s{to{transform:rotate(360deg)}}</style></head><body><div><div class="spin"></div><p>Starting Expo dev server...</p><p style="font-size:12px;color:#999">This may take 30-60 seconds on first launch</p></div></body></html>';
+const ERROR_PAGE = '<html><head><meta charset="utf-8"><style>body{display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui;background:#fef2f2;color:#991b1b}div{text-align:center;max-width:400px;padding:24px}</style></head><body><div><h2>Metro Bundler Crashed</h2><p>The Expo dev server exited unexpectedly. Check container logs for details.</p></div></body></html>';
+
 // HTTP proxy -- sanitize headers, forward to Expo
 const server = http.createServer((clientReq, clientRes) => {
+  if (metroDead) {
+    clientRes.writeHead(503, { 'Content-Type': 'text/html' });
+    clientRes.end(ERROR_PAGE);
+    return;
+  }
   const proxyReq = http.request(
     { hostname: '127.0.0.1', port: INTERNAL_PORT, path: clientReq.url, method: clientReq.method, headers: sanitizeHeaders(clientReq.headers) },
     (proxyRes) => {
@@ -648,8 +669,8 @@ const server = http.createServer((clientReq, clientRes) => {
     }
   );
   proxyReq.on('error', () => {
-    clientRes.writeHead(503, { 'Content-Type': 'text/plain' });
-    clientRes.end('Expo dev server starting...');
+    clientRes.writeHead(503, { 'Content-Type': 'text/html' });
+    clientRes.end(LOADING_PAGE);
   });
   clientReq.pipe(proxyReq, { end: true });
 });
@@ -1080,14 +1101,29 @@ const { spawn } = require('child_process');
 
 const PUBLIC_PORT = parseInt(process.env.PORT || '8001', 10);
 const INTERNAL_PORT = PUBLIC_PORT + 1;
+let metroReady = false;
+let metroDead = false;
+let metroExitCode = null;
 
 // Start Expo dev server on internal port
 const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
-  stdio: 'inherit',
+  stdio: ['inherit', 'pipe', 'pipe'],
   env: { ...process.env, PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
 });
-expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); process.exit(1); });
-expo.on('exit', (code) => { process.exit(code || 0); });
+expo.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); if (/Metro waiting|Bundler is ready|listening on/i.test(s)) { metroReady = true; console.log('[proxy] Metro is ready'); } });
+expo.stderr.on('data', (d) => { process.stderr.write(d); });
+expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); metroDead = true; });
+expo.on('exit', (code) => { console.error('[proxy] Expo exited with code ' + code); metroDead = true; metroExitCode = code; });
+
+// Probe Metro readiness every 3s until ready
+const probe = setInterval(() => {
+  if (metroReady || metroDead) { clearInterval(probe); return; }
+  const req = http.get({ hostname: '127.0.0.1', port: INTERNAL_PORT, path: '/status', timeout: 2000 }, (res) => {
+    if (!metroReady) { metroReady = true; clearInterval(probe); console.log('[proxy] Metro responded on port ' + INTERNAL_PORT); }
+  });
+  req.on('error', () => {});
+  req.on('timeout', () => { req.destroy(); });
+}, 3000);
 
 function sanitizeHeaders(headers) {
   const h = { ...headers };
@@ -1096,8 +1132,16 @@ function sanitizeHeaders(headers) {
   return h;
 }
 
+const LOADING_PAGE = '<html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3"><style>body{display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui;background:#f5f5f5;color:#333}div{text-align:center}.spin{width:32px;height:32px;border:3px solid #ddd;border-top-color:#666;border-radius:50%;animation:s 0.8s linear infinite;margin:0 auto 16px}@keyframes s{to{transform:rotate(360deg)}}</style></head><body><div><div class="spin"></div><p>Starting Expo dev server...</p><p style="font-size:12px;color:#999">This may take 30-60 seconds on first launch</p></div></body></html>';
+const ERROR_PAGE = '<html><head><meta charset="utf-8"><style>body{display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui;background:#fef2f2;color:#991b1b}div{text-align:center;max-width:400px;padding:24px}</style></head><body><div><h2>Metro Bundler Crashed</h2><p>The Expo dev server exited unexpectedly. Check container logs for details.</p></div></body></html>';
+
 // HTTP proxy
 const server = http.createServer((clientReq, clientRes) => {
+  if (metroDead) {
+    clientRes.writeHead(503, { 'Content-Type': 'text/html' });
+    clientRes.end(ERROR_PAGE);
+    return;
+  }
   const proxyReq = http.request(
     { hostname: '127.0.0.1', port: INTERNAL_PORT, path: clientReq.url, method: clientReq.method, headers: sanitizeHeaders(clientReq.headers) },
     (proxyRes) => {
@@ -1106,8 +1150,8 @@ const server = http.createServer((clientReq, clientRes) => {
     }
   );
   proxyReq.on('error', () => {
-    clientRes.writeHead(503, { 'Content-Type': 'text/plain' });
-    clientRes.end('Expo dev server starting...');
+    clientRes.writeHead(503, { 'Content-Type': 'text/html' });
+    clientRes.end(LOADING_PAGE);
   });
   clientReq.pipe(proxyReq, { end: true });
 });

@@ -645,20 +645,24 @@ export class SandboxSdkClient extends BaseSandboxService {
                 `${extraEnvPrefix}VITE_LOGGER_TYPE=json PORT=${port} monitor-cli process start --instance-id ${instanceId} --port ${port} -- ${initCommand}`
             );
             this.logger.info('Development server started', { instanceId, processId: process.id });
-            
+
+            // Metro (Expo) takes much longer than Vite to start — give it more time
+            const isExpoServer = initCommand.includes('expo');
+            const readinessTimeout = isExpoServer ? 60000 : 10000;
+
             // Wait for the server to be ready (non-blocking - always returns the process ID)
             try {
-                const isReady = await this.waitForServerReady(instanceId, process.id, 10000);
+                const isReady = await this.waitForServerReady(instanceId, process.id, readinessTimeout);
                 if (isReady) {
                     this.logger.info('Development server is ready', { instanceId });
                 } else {
-                    this.logger.warn('Development server may not be fully ready', { instanceId });
+                    this.logger.warn('Development server may not be fully ready', { instanceId, readinessTimeout });
                 }
             } catch (readinessError) {
                 this.logger.warn(`Error during readiness check for ${instanceId}:`, readinessError);
                 this.logger.info('Continuing with server startup despite readiness check error', { instanceId });
             }
-            
+
             return process.id;
         } catch (error) {
             this.logger.warn('Failed to start dev server', error);
@@ -942,9 +946,12 @@ export class SandboxSdkClient extends BaseSandboxService {
                 tunnelUrlPromise = this.startCloudflaredTunnel(instanceId, allocatedPort);
             }
 
-            this.logger.info('Installing dependencies', { instanceId });
+            // Expo/React Native projects have many dependencies; give bun install more time
+            const isExpoInit = initCommand.includes('expo');
+            const installTimeout = isExpoInit ? 90000 : 40000;
+            this.logger.info('Installing dependencies', { instanceId, timeout: installTimeout });
             const [installResult, tunnelURL] = await Promise.all([
-                this.executeCommand(instanceId, `bun install`, { timeout: 40000 }),
+                this.executeCommand(instanceId, `bun install`, { timeout: installTimeout }),
                 tunnelUrlPromise
             ]);
             this.logger.info('Dependencies installed', { instanceId, tunnelURL });
