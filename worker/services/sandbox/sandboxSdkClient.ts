@@ -1807,14 +1807,16 @@ export class SandboxSdkClient extends BaseSandboxService {
             this.logger.info('Processing deployment', { instanceId });
             
             // Step 1: Run build commands (bun run build && bunx wrangler build)
+            // Expo export is significantly slower than Vite — give it more time
             this.logger.info('Building project');
-            const buildResult = await this.executeCommand(instanceId, 'bun run build');
+            const buildResult = await this.executeCommand(instanceId, 'bun run build', { timeout: 180000 });
+            this.logger.info('Build result', { exitCode: buildResult.exitCode, stdout: buildResult.stdout?.substring(0, 500), stderr: buildResult.stderr?.substring(0, 500) });
             if (buildResult.exitCode !== 0) {
                 this.logger.warn('Build step failed or not available', buildResult.stdout, buildResult.stderr);
                 throw new Error(`Build failed: ${buildResult.stderr}`);
             }
             
-            const wranglerBuildResult = await this.executeCommand(instanceId, 'bunx wrangler build');
+            const wranglerBuildResult = await this.executeCommand(instanceId, 'bunx wrangler build', { timeout: 60000 });
             if (wranglerBuildResult.exitCode !== 0) {
                 this.logger.warn('Wrangler build failed', wranglerBuildResult.stdout, wranglerBuildResult.stderr);
                 // Continue anyway - some projects might not need wrangler build
@@ -1898,9 +1900,19 @@ export class SandboxSdkClient extends BaseSandboxService {
             // Step 3: Read worker script from dist
             this.logger.info('Reading worker script');
             const session = await this.getInstanceSession(instanceId);
-            const workerFile = await session.readFile(`/workspace/${instanceId}/dist/index.js`);
+            let workerFile = await session.readFile(`/workspace/${instanceId}/dist/index.js`);
             if (!workerFile.success) {
-                throw new Error(`Worker script not found at /${instanceId}/dist/index.js. Please build the project first.`);
+                // For asset-only deployments (e.g. Expo web export), generate a minimal
+                // fallback worker so the pipeline can proceed. Static assets are served
+                // by the Cloudflare assets binding; the worker just returns 404 for
+                // any non-asset request.
+                this.logger.info('dist/index.js not found, generating fallback worker for asset-only deployment');
+                const fallbackWorker = `export default { fetch() { return new Response('Not Found', { status: 404 }); } };`;
+                await this.executeCommand(instanceId, `mkdir -p dist && echo '${fallbackWorker}' > dist/index.js`);
+                workerFile = await session.readFile(`/workspace/${instanceId}/dist/index.js`);
+                if (!workerFile.success) {
+                    throw new Error(`Worker script not found at /${instanceId}/dist/index.js. Please build the project first.`);
+                }
             }
             
             const workerContent = workerFile.content;
@@ -1979,12 +1991,26 @@ export class SandboxSdkClient extends BaseSandboxService {
             }
             
             // Step 4: Check for static assets and process them
-            const assetsPath = `${instanceId}/dist/client`;
+            // Primary: dist/client/ (Vite, Expo with --output-dir dist/client)
+            // Fallback: dist/ itself may contain web assets from expo export (default output)
+            let assetsPath = `${instanceId}/dist/client`;
             let assetsManifest: Record<string, { hash: string; size: number }> | undefined;
             let fileContents: Map<string, Buffer> | undefined;
-            
-            const assetDirResult = await this.safeSandboxExec(`test -d ${assetsPath} && echo "exists" || echo "missing"`);
-            const hasAssets = assetDirResult.exitCode === 0 && assetDirResult.stdout.trim() === "exists";
+
+            let assetDirResult = await this.safeSandboxExec(`test -d ${assetsPath} && echo "exists" || echo "missing"`);
+            let hasAssets = assetDirResult.exitCode === 0 && assetDirResult.stdout.trim() === "exists";
+
+            if (!hasAssets) {
+                // Check if assets exist at dist/ directly (e.g. expo export default output)
+                const fallbackAssetsPath = `${instanceId}/dist`;
+                const fallbackCheck = await this.safeSandboxExec(`test -f ${fallbackAssetsPath}/index.html && echo "exists" || echo "missing"`);
+                if (fallbackCheck.exitCode === 0 && fallbackCheck.stdout.trim() === "exists") {
+                    this.logger.info('Assets found at dist/ root, moving to dist/client/ for deployment');
+                    await this.executeCommand(instanceId, 'mkdir -p dist/client && find dist -maxdepth 1 -not -name client -not -name index.js -not -name dist -exec mv {} dist/client/ \\;');
+                    assetDirResult = await this.safeSandboxExec(`test -d ${assetsPath} && echo "exists" || echo "missing"`);
+                    hasAssets = assetDirResult.exitCode === 0 && assetDirResult.stdout.trim() === "exists";
+                }
+            }
             
             if (hasAssets) {
                 this.logger.info('Processing static assets', { assetsPath });

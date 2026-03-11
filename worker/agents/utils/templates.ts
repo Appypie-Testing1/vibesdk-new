@@ -426,8 +426,8 @@ To build a valid, previewable Expo/React Native project (SDK 54, React Native 0.
 "scripts": {
     "dev": "node _expo-proxy.cjs",
     "build:web": "bun x expo export --platform web --output-dir dist/client",
-    "build:worker": "bunx esbuild worker.ts --outfile=dist/index.js --format=esm --bundle",
-    "build": "npm run build:web && npm run build:worker",
+    "build:worker": "bun x esbuild worker.ts --outfile=dist/index.js --format=esm --bundle",
+    "build": "bun run build:web && bun run build:worker",
     "lint": "npx eslint . --ext .ts,.tsx"
 }
 \`\`\`
@@ -529,8 +529,8 @@ const styles = StyleSheet.create({
             scripts: {
                 dev: 'node _expo-proxy.cjs',
                 'build:web': 'bun x expo export --platform web --output-dir dist/client',
-                'build:worker': 'bunx esbuild worker.ts --outfile=dist/index.js --format=esm --bundle',
-                build: 'npm run build:web && npm run build:worker',
+                'build:worker': 'bun x esbuild worker.ts --outfile=dist/index.js --format=esm --bundle',
+                build: 'bun run build:web && bun run build:worker',
                 lint: 'npx eslint . --ext .ts,.tsx',
             },
             dependencies: {
@@ -555,6 +555,7 @@ const styles = StyleSheet.create({
                 '@babel/core': '^7.25.0',
                 '@types/react': '~19.1.0',
                 'typescript': '~5.9.0',
+                'esbuild': '^0.24.0',
             },
         }, null, 2),
         'tsconfig.json': JSON.stringify({
@@ -742,9 +743,9 @@ To build a valid, previewable Expo/React Native + Cloudflare Workers fullstack p
 "scripts": {
     "dev": "node _expo-proxy.cjs",
     "build:web": "bun x expo export --platform web --output-dir dist/client",
-    "build:worker": "bunx esbuild api/src/index.ts --outfile=dist/index.js --format=esm --bundle --external:cloudflare:* --external:node:*",
-    "build": "npm run build:web && npm run build:worker",
-    "deploy": "npm run build && wrangler deploy",
+    "build:worker": "bun x esbuild api/src/index.ts --outfile=dist/index.js --format=esm --bundle --external:cloudflare:* --external:node:*",
+    "build": "bun run build:web && bun run build:worker",
+    "deploy": "bun run build && wrangler deploy",
     "lint": "npx eslint . --ext .ts,.tsx"
 }
 \`\`\`
@@ -986,9 +987,10 @@ export const apiClient = {
             main: 'expo-router/entry',
             scripts: {
                 dev: 'node _expo-proxy.cjs',
-                'build:web': 'bun x expo export --platform web --output-dir dist/web',
-                build: 'npm run build:web',
-                deploy: 'npm run build:web && wrangler deploy',
+                'build:web': 'bun x expo export --platform web --output-dir dist/client',
+                'build:worker': 'bun x esbuild api/src/index.ts --outfile=dist/index.js --format=esm --bundle --external:cloudflare:* --external:node:*',
+                build: 'bun run build:web && bun run build:worker',
+                deploy: 'bun run build && wrangler deploy',
                 lint: 'npx eslint . --ext .ts,.tsx',
             },
             dependencies: {
@@ -1017,6 +1019,7 @@ export const apiClient = {
                 'typescript': '~5.9.0',
                 '@cloudflare/workers-types': '^4.20251213.0',
                 'wrangler': '^4.14.0',
+                'esbuild': '^0.24.0',
             },
         }, null, 2),
         'tsconfig.json': JSON.stringify({
