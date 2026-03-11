@@ -484,7 +484,7 @@ export default function Chat() {
 			hasSeenPreview.current = true;
 		} else if (previewUrl) {
 			const isExistingChat = urlChatId !== 'new';
-			const isMobile = templateDetails?.renderMode === 'mobile';
+			const isMobile = templateDetails?.renderMode === 'mobile' || templateDetails?.renderMode === 'mobile-fullstack';
 			const shouldSwitch =
 				behaviorType === 'agentic' ||
 				isMobile ||

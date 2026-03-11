@@ -14,6 +14,7 @@ import { PhasicGenerationContext } from '../domain/values/GenerationContext';
 import {
 	PHASE_IMPLEMENTATION_SYSTEM_PROMPT,
 	MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT,
+	FULLSTACK_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT,
 	buildPhaseImplementationUserPrompt,
 } from './prompts/phaseImplementationPrompts';
 
@@ -48,8 +49,12 @@ export class PhaseImplementationOperation extends AgentOperation<PhasicGeneratio
         const codeGenerationFormat = new SCOFFormat();
 
         // Build messages for generation -- use mobile-specific prompt for Expo/RN projects
-        const isMobile = context.templateDetails?.renderMode === 'mobile';
-        const systemPrompt = isMobile ? MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT : PHASE_IMPLEMENTATION_SYSTEM_PROMPT;
+        const renderMode = context.templateDetails?.renderMode;
+        const systemPrompt = renderMode === 'mobile-fullstack'
+            ? FULLSTACK_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT
+            : renderMode === 'mobile'
+                ? MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT
+                : PHASE_IMPLEMENTATION_SYSTEM_PROMPT;
         const messages = getSystemPromptWithProjectContext(systemPrompt, context, CodeSerializerType.SCOF, false);
 
         // Create user message with optional images

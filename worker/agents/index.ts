@@ -5,7 +5,7 @@ import { InferenceContext } from './inferutils/config.types';
 import { SandboxSdkClient } from '../services/sandbox/sandboxSdkClient';
 import { selectTemplate } from './planning/templateSelector';
 import { TemplateDetails } from '../services/sandbox/sandboxTypes';
-import { createScratchTemplateDetails, createExpoScratchTemplateDetails } from './utils/templates';
+import { createScratchTemplateDetails, createExpoScratchTemplateDetails, createExpoFullstackTemplateDetails } from './utils/templates';
 import { TemplateSelection } from './schemas';
 import type { ImageAttachment } from '../types/image-attachment';
 import { BaseSandboxService } from 'worker/services/sandbox/BaseSandboxService';
@@ -96,6 +96,24 @@ export async function getTemplateForQuery(
     // This ensures mobile queries always get the Expo template, not a web template
     const mobileKeywords = /\b(mobile\s*app|ios\s*app|android\s*app|react\s*native|expo|phone\s*app|native\s*app|iphone|smartphone|mobile\s*application)\b/i;
     if (mobileKeywords.test(query)) {
+        // Detect if the mobile app needs a backend (database, API, auth, etc.)
+        const backendKeywords = /\b(database|api|backend|auth|users|crud|full[\s-]?stack|server|login|signup|register|persist|storage|d1|sqlite|sql)\b/i;
+        const needsBackend = backendKeywords.test(query);
+
+        if (needsBackend) {
+            logger.info('Fullstack mobile app detected from query keywords; using expo-fullstack template');
+            const expoFullstack: TemplateDetails = createExpoFullstackTemplateDetails();
+            const selection: TemplateSelection = {
+                selectedTemplateName: 'expo-fullstack',
+                reasoning: 'Mobile app with backend/database request detected - using Expo + Hono + D1 fullstack template',
+                useCase: 'Other',
+                complexity: 'moderate',
+                styleSelection: 'Custom',
+                projectType: 'app',
+            } as TemplateSelection;
+            return { templateDetails: expoFullstack, selection, projectType: 'app' };
+        }
+
         logger.info('Mobile app detected from query keywords; using expo-scratch template');
         const expoScratch: TemplateDetails = createExpoScratchTemplateDetails();
         const selection: TemplateSelection = {

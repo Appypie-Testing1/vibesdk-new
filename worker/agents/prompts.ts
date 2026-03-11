@@ -1046,6 +1046,92 @@ const styles = StyleSheet.create({
 `,
 }
 
+export const FULLSTACK_MOBILE_STRATEGIES = {
+    FRONTEND_FIRST_PLANNING: `<PHASES GENERATION STRATEGY>
+    **STRATEGY: Build a fully working fullstack React Native mobile app with Hono API backend iteratively**
+    The project is developed live: the user is provided a preview link after each phase via Expo Go and web preview.
+    The core principle is to build the mobile UI and API backend together, delivering a working end-to-end app in each phase.
+    **Each phase should be self-contained and result in a working, previewable app with data persistence.**
+
+    **First Phase: Complete Mobile UI + API Foundation**
+        * Build ALL screens/routes in the app/ directory using expo-router file-based routing.
+        * Build corresponding API endpoints in api/src/index.ts using Hono with D1 database.
+        * Use React Native components exclusively: View, Text, TouchableOpacity, ScrollView, FlatList, TextInput, Image, etc.
+        * Style with StyleSheet.create() -- do NOT use Tailwind CSS, HTML elements, or web-specific CSS.
+        * Connect frontend screens to API via lib/api-client.ts.
+        * Include working CRUD operations with real database persistence.
+        * The initial phase should deliver an immediately usable app with real data.
+        * For simple apps (single screen + basic CRUD): deliver the complete app in 1 phase.
+        * For complex apps (multiple screens): deliver all screens with working navigation, API routes, and core features.
+
+    **Subsequent Phases: Features & Polish**
+        * Add remaining features, refine interactions, and improve visual polish.
+        * Extend API routes and database schema as needed.
+        * Each phase must keep the app functional -- no broken screens or API routes.
+        * Address any runtime errors from previous phases first.
+
+    <PHASE GENERATION CONSTRAINTS>
+        * **Phase Count:** 1 phase for simple apps, 2-4 phases for complex apps. Do not exceed ${Math.floor(MAX_PHASES * 0.8)} phases.
+        * **File Count:** 3-12 files per phase. Frontend files go in app/ directory, API files in api/src/, shared types in lib/.
+        * **React Native ONLY for UI:** Use View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Alert, Animated, etc.
+        * **NO web elements:** Do NOT use div, span, button, input, h1, p, or any HTML elements.
+        * **NO web styling:** Do NOT use Tailwind CSS, className, CSS files, or CSS-in-JS. Use only StyleSheet.create().
+        * **API routes:** Use Hono framework. All routes under /api/* prefix. Use c.env.DB for D1 database access.
+        * **Database:** Use D1 SQL directly via c.env.DB.prepare(). Create tables with CREATE TABLE IF NOT EXISTS.
+        * **Routing:** Use expo-router file-based routing (files in app/ directory). Stack.Screen, Tabs, etc.
+        * **Icons:** Use ONLY \`@expo/vector-icons\` (with a SLASH, not a hyphen): \`import { MaterialIcons } from '@expo/vector-icons'\`.
+        * **Images:** Use Image from react-native with external URLs (unsplash, placeholder services).
+        * **State:** Use React useState/useReducer/useContext. For complex state, suggest installing zustand.
+        * **package.json:** When generating package.json, KEEP ALL existing dependencies. You may ADD new dependencies but NEVER remove existing ones.
+        * **DO NOT modify:** app.json, metro.config.js, tsconfig.json, wrangler.jsonc -- these are pre-configured.
+    </PHASE GENERATION CONSTRAINTS>
+</PHASES GENERATION STRATEGY>`,
+
+    UI_NON_NEGOTIABLES: `## FULLSTACK MOBILE UI NON-NEGOTIABLES (React Native + Hono API)
+
+1) Screen Structure (use this pattern for every screen)
+export default function Screen() {
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* screen content */}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  content: { padding: 16 },
+});
+
+2) API Integration Pattern
+- Use lib/api-client.ts for all API calls
+- Handle loading, error, and success states
+- Use useEffect for data fetching on mount
+- Use callbacks for mutations (create, update, delete)
+
+3) API Route Pattern (Hono + D1)
+- All routes under /api/* prefix
+- Use c.env.DB for D1 database access
+- Wrap handlers in try-catch
+- Return JSON responses with proper status codes
+- Use CREATE TABLE IF NOT EXISTS for schema initialization
+
+4) Component Usage
+- Use React Native components ONLY: View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Switch
+- Import from 'react-native' and 'expo-*' packages
+- For navigation: use expo-router (Stack, Tabs, Link, useRouter)
+- For icons: use \`@expo/vector-icons\` (SLASH not hyphen)
+
+5) Styling Rules
+- ALWAYS use StyleSheet.create() for styles
+- NEVER use className, Tailwind, or CSS
+- Use flexbox for layouts
+- Use consistent spacing: 4, 8, 12, 16, 20, 24, 32
+`,
+}
+
 export const STRATEGIES = {
     FRONTEND_FIRST_PLANNING: `<PHASES GENERATION STRATEGY>
     **STRATEGY: Scalable, Demoable Frontend and core application First / Iterative Feature Addition later**

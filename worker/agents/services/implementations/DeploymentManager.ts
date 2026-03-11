@@ -484,7 +484,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
             // 1. Ensure metro.config.js exists (sanitizes proxy headers to prevent Metro crashes)
             // 2. Auto-install any missing third-party dependencies
             const state = this.getState();
-            if (state.templateRenderMode === 'mobile') {
+            if (state.templateRenderMode === 'mobile' || state.templateRenderMode === 'mobile-fullstack') {
                 await this.ensureMetroConfig(sandboxInstanceId);
                 await this.autoInstallMissingDependencies(sandboxInstanceId);
             }
@@ -747,7 +747,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
      */
     private static sanitizeFiles<T extends { filePath: string; fileContents: string }>(files: T[], renderMode?: string): T[] {
         // Skip Vite/Hono sanitization entirely for mobile (Expo) projects
-        if (renderMode === 'mobile') {
+        if (renderMode === 'mobile' || renderMode === 'mobile-fullstack') {
             return files;
         }
         return files.map(file => {
@@ -1111,10 +1111,11 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         
         logger.info('Starting Cloudflare deployment', { target });
 
-        // Mobile (Expo/React Native) projects cannot be deployed to Cloudflare Workers.
+        // Pure mobile (Expo/React Native) projects cannot be deployed to Cloudflare Workers.
         // They don't have wrangler.jsonc or a Worker entry point.
+        // mobile-fullstack projects CAN be deployed (they have wrangler.jsonc + Hono backend).
         if (state.templateRenderMode === 'mobile') {
-            logger.info('Skipping Cloudflare deployment for mobile project');
+            logger.info('Skipping Cloudflare deployment for pure mobile project');
             callbacks?.onError?.({
                 message: 'Mobile apps cannot be deployed to Cloudflare Workers. Use Expo Go or EAS Build to distribute your app.',
                 instanceId: state.sandboxInstanceId ?? '',

@@ -204,7 +204,7 @@ export const AppPreview = forwardRef<HTMLIFrameElement, PreviewComponentProps>(
 			);
 		}
 
-		if (templateDetails?.renderMode === 'mobile') {
+		if (templateDetails?.renderMode === 'mobile' || templateDetails?.renderMode === 'mobile-fullstack') {
 			// When inside phone frame (MobilePreviewWrapper), render a simple iframe
 			// showing the web preview. The phone frame IS the mobile preview.
 			// When NOT in phone frame, render MobilePreview with QR code + tabs.

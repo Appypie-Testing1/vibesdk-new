@@ -63,7 +63,10 @@ export interface BaseProjectState {
     
     // Template metadata
     templateInitCommand?: string;
-    templateRenderMode?: 'sandbox' | 'browser' | 'mobile';
+    templateRenderMode?: 'sandbox' | 'browser' | 'mobile' | 'mobile-fullstack';
+
+    // D1 database (for mobile-fullstack projects)
+    d1DatabaseId?: string;
 
     // Deep debug
     lastDeepDebugTranscript: string | null;

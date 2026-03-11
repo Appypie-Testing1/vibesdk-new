@@ -16,7 +16,7 @@ import { FileRegenerationOperation } from '../../operations/FileRegeneration';
 // Database schema imports removed - using zero-storage OAuth flow
 import { BaseSandboxService } from '../../../services/sandbox/BaseSandboxService';
 import { getTemplateImportantFiles } from '../../../services/sandbox/utils';
-import { createScratchTemplateDetails, createExpoScratchTemplateDetails } from '../../utils/templates';
+import { createScratchTemplateDetails, createExpoScratchTemplateDetails, createExpoFullstackTemplateDetails } from '../../utils/templates';
 import { WebSocketMessageData, WebSocketMessageType } from '../../../api/websocketTypes';
 import { AgentActionKey, InferenceContext, InferenceRuntimeOverrides, ModelConfig } from '../../inferutils/config.types';
 import { ModelConfigService } from '../../../database/services/ModelConfigService';
@@ -217,6 +217,17 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 }
                 return this.templateDetailsCache;
             }
+            if (this.state.templateName === 'expo-fullstack') {
+                this.templateDetailsCache = createExpoFullstackTemplateDetails();
+                if (!this.state.templateRenderMode) {
+                    this.setState({
+                        ...this.state,
+                        templateRenderMode: 'mobile-fullstack',
+                        templateInitCommand: this.templateDetailsCache.initCommand,
+                    });
+                }
+                return this.templateDetailsCache;
+            }
             this.ensureTemplateDetails();
             throw new Error('Template details not loaded. Call ensureTemplateDetails() first.');
         }
@@ -225,7 +236,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
     protected isPreviewable(): boolean {
         // Mobile (Expo) projects are previewable if they have package.json and app.json or app.config.ts
-        if (this.state.templateRenderMode === 'mobile') {
+        if (this.state.templateRenderMode === 'mobile' || this.state.templateRenderMode === 'mobile-fullstack') {
             return this.fileManager.fileExists('package.json') && (
                 this.fileManager.fileExists('app.json') || this.fileManager.fileExists('app.config.ts')
             );
@@ -1142,7 +1153,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
         // Compute expo deep link transformer for mobile templates
         // Uses exps:// for HTTPS sandbox URLs, exp:// for HTTP
-        const computeExpoDeepLink = this.state.templateRenderMode === 'mobile'
+        const computeExpoDeepLink = (this.state.templateRenderMode === 'mobile' || this.state.templateRenderMode === 'mobile-fullstack')
             ? (previewURL: string): string | undefined => {
                 try {
                     const url = new URL(previewURL);

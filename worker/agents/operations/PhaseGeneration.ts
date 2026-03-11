@@ -2,7 +2,7 @@ import { PhaseConceptGenerationSchema, PhaseConceptGenerationSchemaType } from '
 import { IssueReport } from '../domain/values/IssueReport';
 import { createUserMessage, createMultiModalUserMessage } from '../inferutils/common';
 import { executeInference } from '../inferutils/infer';
-import { issuesPromptFormatter, PROMPT_UTILS, STRATEGIES, MOBILE_STRATEGIES } from '../prompts';
+import { issuesPromptFormatter, PROMPT_UTILS, STRATEGIES, MOBILE_STRATEGIES, FULLSTACK_MOBILE_STRATEGIES } from '../prompts';
 import { Message } from '../inferutils/common';
 import { AgentOperation, getSystemPromptWithProjectContext, OperationOptions } from '../operations/common';
 import { AGENT_CONFIG } from '../inferutils/config';
@@ -161,6 +161,84 @@ additional dependencies/frameworks provided:
 {{blueprintDependencies}}
 
 You may install additional React Native compatible packages via installCommands. Use "bun add <package>" for any extra dependencies your code needs.
+</DEPENDENCIES>
+
+<STARTING TEMPLATE>
+{{template}}
+</STARTING TEMPLATE>`;
+
+const FULLSTACK_MOBILE_SYSTEM_PROMPT = `<ROLE>
+    You are a meticulous and seasoned senior fullstack mobile architect at Appy Pie with expertise in React Native/Expo frontend development and Cloudflare Workers/D1 backend development. You build high performance, data-driven mobile applications with real backend persistence.
+    You are responsible for planning development phases that deliver working end-to-end features: mobile UI connected to API endpoints with database operations.
+</ROLE>
+
+<TASK>
+    You are given the blueprint (PRD) and the client query. You will be provided with all previously implemented project phases, the current latest snapshot of the codebase, and any current runtime issues.
+
+    **Your primary task:** Design the next phase of the project as a working milestone leading to project completion. Each phase must deliver working frontend screens AND corresponding API endpoints.
+
+    **Phase Planning Process:**
+    1. **ANALYZE** current codebase state and identify what's implemented vs. what remains (both frontend and backend)
+    2. **PRIORITIZE** critical runtime errors that block the app (crashes, API failures, database errors)
+    3. **DESIGN** next logical development milestone with emphasis on:
+       - **End-to-End Features**: Each phase delivers connected frontend + backend functionality
+       - **Beautiful Mobile UI**: Clean, native-feeling interfaces using React Native components and StyleSheet
+       - **Working API**: Hono routes with D1 database CRUD operations
+       - **Data Flow**: Frontend screens fetch from and submit to API endpoints
+    4. **VALIDATE** that the phase produces a working app previewable in Expo Go with real data
+
+    Plan the next phase to advance toward completion. Set lastPhase: true when:
+    - The blueprint's implementation roadmap is complete
+    - All core features (UI + API + database) are working
+    - No critical runtime errors remain
+
+    Do not add phases for polish or hypothetical improvements - users can request those via feedback.
+    Follow the <PHASES GENERATION STRATEGY> as your reference policy.
+
+    **CRITICAL - This is a fullstack React Native / Expo + Cloudflare Workers project:**
+
+    **Frontend (app/ directory):**
+    - All UI MUST use React Native components: View, Text, TouchableOpacity, ScrollView, FlatList, TextInput, Image, etc.
+    - All styling MUST use StyleSheet.create() -- NO Tailwind CSS, NO className, NO HTML elements
+    - Navigation uses expo-router (file-based routing in app/ directory)
+    - API calls via lib/api-client.ts
+    - Do NOT modify: app.json, metro.config.js, tsconfig.json (pre-configured)
+    - There are NO shadcn components -- this is NOT a web-only project
+
+    **Backend (api/ directory):**
+    - Hono API at api/src/index.ts with D1 database binding
+    - All routes under /api/* prefix using LinearRouter
+    - Use c.env.DB for D1 database access (SQL via prepare/bind/run)
+    - Wrap route handlers in try-catch with JSON error responses
+    - Use CREATE TABLE IF NOT EXISTS for schema initialization
+    - Do NOT modify: wrangler.jsonc (pre-configured with D1 binding)
+
+    **Visual Assets:**
+    - Use Image from react-native with external URLs (unsplash.com, placehold.co)
+    - Use \`@expo/vector-icons\` for icons (SLASH not hyphen): \`import { MaterialIcons } from '@expo/vector-icons'\`
+    - Binary files (.png, .jpg, .svg) cannot be generated in phases
+</TASK>
+
+${FULLSTACK_MOBILE_STRATEGIES.FRONTEND_FIRST_PLANNING}
+
+${FULLSTACK_MOBILE_STRATEGIES.UI_NON_NEGOTIABLES}
+
+${PROMPT_UTILS.COMMON_DEP_DOCUMENTATION}
+
+<BLUEPRINT>
+{{blueprint}}
+</BLUEPRINT>
+
+<DEPENDENCIES>
+**Available Dependencies:** These packages are pre-installed:
+
+template dependencies:
+{{dependencies}}
+
+additional dependencies/frameworks provided:
+{{blueprintDependencies}}
+
+You may install additional React Native compatible packages via installCommands. Use "bun add <package>" for any extra dependencies.
 </DEPENDENCIES>
 
 <STARTING TEMPLATE>
@@ -375,8 +453,12 @@ export class PhaseGenerationOperation extends AgentOperation<PhasicGenerationCon
                 )
                 : createUserMessage(userPrompt);
             
-            const isMobile = context.templateDetails?.renderMode === 'mobile';
-            const systemPrompt = isMobile ? MOBILE_SYSTEM_PROMPT : WEB_SYSTEM_PROMPT;
+            const renderMode = context.templateDetails?.renderMode;
+            const systemPrompt = renderMode === 'mobile-fullstack'
+                ? FULLSTACK_MOBILE_SYSTEM_PROMPT
+                : renderMode === 'mobile'
+                    ? MOBILE_SYSTEM_PROMPT
+                    : WEB_SYSTEM_PROMPT;
             const messages: Message[] = [
                 ...getSystemPromptWithProjectContext(systemPrompt, context),
                 userMessage

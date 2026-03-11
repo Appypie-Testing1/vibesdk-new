@@ -448,7 +448,7 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
         // Mobile projects: skip static analysis and runtime error fetching.
         // Expo/RN containers don't have eslint configured, TypeScript compilation
         // is very slow with RN types, and runtime errors are only visible on-device.
-        if (this.state.templateRenderMode === 'mobile') {
+        if (this.state.templateRenderMode === 'mobile' || this.state.templateRenderMode === 'mobile-fullstack') {
             this.logger.info("Mobile project - skipping review cycle (not applicable)");
             return CurrentDevState.IDLE;
         }
@@ -661,7 +661,7 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             await this.deployToSandbox(safeFiles, false, phase.name, true);
             // Skip static analysis/code fixes for mobile — Expo containers don't
             // have eslint configured and tsc with RN types is extremely slow
-            if (postPhaseFixing && this.state.templateRenderMode !== 'mobile') {
+            if (postPhaseFixing && this.state.templateRenderMode !== 'mobile' && this.state.templateRenderMode !== 'mobile-fullstack') {
                 await this.applyDeterministicCodeFixes();
                 if (this.getInferenceContext().enableFastSmartCodeFix) {
                     await this.applyFastSmartCodeFixes();

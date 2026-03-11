@@ -223,7 +223,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         });
 
                         // Restore expo deep link for mobile projects on reconnect
-                        if (templateDetails.renderMode === 'mobile' && previewUrl) {
+                        if ((templateDetails.renderMode === 'mobile' || templateDetails.renderMode === 'mobile-fullstack') && previewUrl) {
                             try {
                                 const parsedUrl = new URL(previewUrl);
                                 const scheme = parsedUrl.protocol === 'https:' ? 'exps' : 'exp';

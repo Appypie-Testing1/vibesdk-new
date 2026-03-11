@@ -158,7 +158,7 @@ export class AgenticProjectBuilderOperation extends AgentOperationWithTools<
         const hasPlan = isAgenticBlueprint(blueprint) && blueprint.plan.length > 0;
         const hasTemplate = !!selectedTemplate;
         const isPresentationProject = projectType === 'presentation';
-        const isMobileProject = context.templateDetails?.renderMode === 'mobile';
+        const isMobileProject = context.templateDetails?.renderMode === 'mobile' || context.templateDetails?.renderMode === 'mobile-fullstack';
         const needsSandbox = !isPresentationProject && (hasTSX || projectType === 'app');
 
         const dynamicHints = [

@@ -2,7 +2,7 @@ import { TemplateRegistry } from '../../inferutils/schemaFormatters';
 import { PhaseConceptSchema, type PhaseConceptType } from '../../schemas';
 import type { IssueReport } from '../../domain/values/IssueReport';
 import type { UserContext } from '../../core/types';
-import { issuesPromptFormatter, PROMPT_UTILS, MOBILE_STRATEGIES } from '../../prompts';
+import { issuesPromptFormatter, PROMPT_UTILS, MOBILE_STRATEGIES, FULLSTACK_MOBILE_STRATEGIES } from '../../prompts';
 
 export const PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase in a React + TypeScript codebase.
 
@@ -67,6 +67,70 @@ export const MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a
 </CRITICAL_MOBILE_RULES>
 
 ${MOBILE_STRATEGIES.UI_NON_NEGOTIABLES}
+
+${PROMPT_UTILS.COMMON_PITFALLS}
+
+${PROMPT_UTILS.COMMON_DEP_DOCUMENTATION}
+
+<DEPENDENCIES>
+{{dependencies}}
+
+{{blueprintDependencies}}
+</DEPENDENCIES>
+
+{{template}}
+
+<BLUEPRINT>
+{{blueprint}}
+</BLUEPRINT>`;
+
+export const FULLSTACK_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase in a fullstack React Native / Expo + Cloudflare Workers (Hono + D1) codebase.
+
+<MOBILE_UX_RUBRIC>
+- Layout: proper use of flexbox, consistent padding/margins, clear visual hierarchy.
+- Interaction: proper touch targets (min 44pt), press feedback via TouchableOpacity/Pressable.
+- States: loading/empty/error handled with appropriate React Native components.
+- Navigation: expo-router file-based routing, proper Stack/Tabs configuration.
+</MOBILE_UX_RUBRIC>
+
+<API_RUBRIC>
+- Routes: all under /api/* prefix using Hono with LinearRouter.
+- Database: D1 via c.env.DB.prepare() with parameterized queries.
+- Error handling: try-catch in every route handler, JSON error responses.
+- Schema: CREATE TABLE IF NOT EXISTS for auto-initialization.
+</API_RUBRIC>
+
+<RELIABILITY>
+- No TS errors.
+- No hooks violations.
+- No render loops.
+- All imports must resolve to installed packages.
+- API routes must return valid JSON.
+- Database queries must use parameterized bindings (never string interpolation).
+</RELIABILITY>
+
+<CRITICAL_FULLSTACK_MOBILE_RULES>
+**Frontend (app/ directory):**
+- Use ONLY React Native components: View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Switch, ActivityIndicator, SafeAreaView, etc.
+- NEVER use HTML elements: div, span, button, input, h1, p, a, ul, li, etc.
+- NEVER use Tailwind CSS or className prop. Use ONLY StyleSheet.create() for all styling.
+- NEVER import from 'react-dom' or use web-specific APIs (document, window.location, etc.)
+- Navigation: use expo-router (Link, useRouter, Stack, Tabs) -- NOT @react-navigation directly.
+- Icons: use ONLY \`@expo/vector-icons\` (SLASH not hyphen): \`import { MaterialIcons } from '@expo/vector-icons'\`. NEVER write \`@expo-vector-icons\`.
+- API calls: use lib/api-client.ts for all backend communication.
+- package.json: KEEP ALL existing template dependencies.
+
+**Backend (api/ directory):**
+- Use Hono with LinearRouter for API routes.
+- All routes under /api/* prefix.
+- Use c.env.DB (D1 binding) for database operations.
+- Use parameterized queries: c.env.DB.prepare('SELECT * FROM t WHERE id = ?').bind(id).all()
+- Global error handler with app.onError().
+- CORS middleware for /api/* routes.
+- Return JSON responses with appropriate HTTP status codes.
+</CRITICAL_FULLSTACK_MOBILE_RULES>
+
+${FULLSTACK_MOBILE_STRATEGIES.UI_NON_NEGOTIABLES}
 
 ${PROMPT_UTILS.COMMON_PITFALLS}
 

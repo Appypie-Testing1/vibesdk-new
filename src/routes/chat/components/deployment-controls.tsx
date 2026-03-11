@@ -345,7 +345,7 @@ export function DeploymentControls({
 					</div>
 
 					{/* Expo QR Code - shown for mobile projects */}
-					{templateRenderMode === 'mobile' && expoDeepLink && (
+					{(templateRenderMode === 'mobile' || templateRenderMode === 'mobile-fullstack') && expoDeepLink && (
 						<div className="bg-bg-3/60 dark:bg-bg-4/60 border border-green-200/40 dark:border-green-800/20 rounded-md p-4 mb-3">
 							<div className="text-xs text-green-600 dark:text-green-400 font-medium mb-2">Scan with Expo Go:</div>
 							<div className="flex items-center gap-4">

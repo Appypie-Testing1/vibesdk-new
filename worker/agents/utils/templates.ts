@@ -695,3 +695,471 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         disabled: false,
     };
 }
+
+const EXPO_FULLSTACK_TEMPLATE_INSTRUCTIONS = `
+To build a valid, previewable Expo/React Native + Cloudflare Workers fullstack project (Expo SDK 54, React Native 0.81), follow these rules:
+
+1. The package.json **MUST** have these scripts:
+\`\`\`
+"scripts": {
+    "dev": "node _expo-proxy.cjs",
+    "build:web": "npx expo export --platform web --output-dir dist/web",
+    "build": "npm run build:web",
+    "deploy": "npm run build:web && wrangler deploy",
+    "lint": "npx eslint . --ext .ts,.tsx"
+}
+\`\`\`
+
+2. The project has TWO parts:
+   - **Frontend (app/ directory):** Expo Router screens using React Native components
+   - **Backend (api/ directory):** Hono API with D1 database routes
+
+3. The project **MUST** have a valid app.json, wrangler.jsonc, and metro.config.js.
+
+4. All mobile UI must use React Native components (View, Text, TouchableOpacity, etc.), NOT HTML elements.
+
+5. The Hono API worker is at api/src/index.ts with D1 database binding.
+
+6. Frontend screens call the API via lib/api-client.ts using the API_URL env var.
+
+7. These packages are pre-installed: expo, expo-router, expo-constants, expo-font, expo-linking, expo-status-bar, expo-system-ui, react-native, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens, react-native-web, hono, drizzle-orm. Do NOT add them again.
+
+8. **CRITICAL**: If your code imports ANY package not listed above, you MUST install it with exec_commands("bun add <package>") BEFORE calling deploy_preview.
+
+9. The wrangler.jsonc serves the web export as static assets and routes /api/* to the Hono worker.
+
+10. The D1 database is pre-provisioned. Use Drizzle ORM for queries in the API layer.
+`;
+
+/**
+ * Expo/React Native fullstack template with Hono API backend and D1 database.
+ * Used for mobile apps that need a persistent backend (CRUD, auth, etc.).
+ */
+export function createExpoFullstackTemplateDetails(): TemplateDetails {
+    const fullstackFiles: Record<string, string> = {
+        'app/_layout.tsx': `
+import { Stack } from 'expo-router';
+
+export default function RootLayout() {
+  return (
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: '#f5f5f5' },
+        headerTintColor: '#333',
+        headerTitleStyle: { fontWeight: 'bold' },
+      }}
+    >
+      <Stack.Screen name="index" options={{ title: 'Home' }} />
+    </Stack>
+  );
+}
+`,
+        'app/index.tsx': `
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { useEffect, useState } from 'react';
+import { apiClient } from '../lib/api-client';
+
+export default function HomeScreen() {
+  const [status, setStatus] = useState<string>('Loading...');
+
+  useEffect(() => {
+    apiClient.get('/api/health')
+      .then(data => setStatus(data.status ?? 'ok'))
+      .catch(() => setStatus('Error connecting to API'));
+  }, []);
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Welcome</Text>
+      <Text style={styles.subtitle}>Fullstack Expo + Workers App</Text>
+      <View style={styles.statusCard}>
+        {status === 'Loading...' ? (
+          <ActivityIndicator size="small" color="#4f46e5" />
+        ) : (
+          <Text style={styles.statusText}>API: {status}</Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f5f5f5',
+    padding: 24,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 24,
+  },
+  statusCard: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4f46e5',
+  },
+});
+`,
+        'api/src/index.ts': `
+import { Hono } from 'hono';
+import { LinearRouter } from 'hono/router/linear-router';
+import { cors } from 'hono/cors';
+
+type Bindings = {
+  DB: D1Database;
+};
+
+const app = new Hono<{ Bindings: Bindings }>({ router: new LinearRouter() });
+
+// Global error handler
+app.onError((err, c) => {
+  console.error('Unhandled error:', err.message);
+  return c.json({ error: err.message || 'Internal Server Error' }, 500);
+});
+
+// CORS middleware
+app.use('/api/*', cors({
+  origin: '*',
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+}));
+
+// Health check
+app.get('/api/health', (c) => {
+  return c.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Example: List items
+app.get('/api/items', async (c) => {
+  try {
+    const result = await c.env.DB.prepare('SELECT * FROM items ORDER BY created_at DESC').all();
+    return c.json({ items: result.results });
+  } catch (err) {
+    return c.json({ items: [], error: 'Database not initialized yet' });
+  }
+});
+
+// Example: Create item
+app.post('/api/items', async (c) => {
+  try {
+    const body = await c.req.json();
+    const id = crypto.randomUUID();
+    const name = body.name || 'Untitled';
+    await c.env.DB.prepare('INSERT INTO items (id, name, created_at) VALUES (?, ?, ?)')
+      .bind(id, name, new Date().toISOString())
+      .run();
+    return c.json({ id, name, created_at: new Date().toISOString() }, 201);
+  } catch (err) {
+    return c.json({ error: 'Failed to create item' }, 400);
+  }
+});
+
+// Example: Delete item
+app.delete('/api/items/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await c.env.DB.prepare('DELETE FROM items WHERE id = ?').bind(id).run();
+    return c.json({ success: true });
+  } catch (err) {
+    return c.json({ error: 'Failed to delete item' }, 400);
+  }
+});
+
+export default app;
+`,
+        'api/src/db/schema.sql': `-- D1 database schema
+-- Run this via wrangler d1 execute or migrations
+
+CREATE TABLE IF NOT EXISTS items (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`,
+        'lib/api-client.ts': `
+// API client for communicating with the Hono backend.
+// In development (Expo Go), uses the sandbox preview URL.
+// In production (deployed), uses relative paths (same origin).
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || '';
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const url = API_URL + path;
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((error as Record<string, string>).error || res.statusText);
+  }
+  return res.json() as Promise<T>;
+}
+
+export const apiClient = {
+  get: <T>(path: string) => request<T>(path),
+  post: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
+  put: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
+  delete: <T>(path: string) =>
+    request<T>(path, { method: 'DELETE' }),
+};
+`,
+        'app.json': JSON.stringify({
+            expo: {
+                name: 'expo-fullstack-app',
+                slug: 'expo-fullstack-app',
+                version: '1.0.0',
+                orientation: 'portrait',
+                scheme: 'expo-fullstack-app',
+                platforms: ['ios', 'android'],
+                web: { bundler: 'metro' },
+                plugins: ['expo-router'],
+            }
+        }, null, 2),
+        'package.json': JSON.stringify({
+            name: 'expo-fullstack-app',
+            version: '1.0.0',
+            main: 'expo-router/entry',
+            scripts: {
+                dev: 'node _expo-proxy.cjs',
+                'build:web': 'npx expo export --platform web --output-dir dist/web',
+                build: 'npm run build:web',
+                deploy: 'npm run build:web && wrangler deploy',
+                lint: 'npx eslint . --ext .ts,.tsx',
+            },
+            dependencies: {
+                'expo': '~54.0.0',
+                'expo-constants': '~18.0.9',
+                'expo-font': '~14.0.9',
+                'expo-linking': '~8.0.8',
+                'expo-router': '~6.0.14',
+                'expo-status-bar': '~3.0.8',
+                'expo-system-ui': '~6.0.7',
+                'react': '19.1.0',
+                'react-dom': '19.1.0',
+                'react-native': '0.81.5',
+                'react-native-gesture-handler': '~2.28.0',
+                'react-native-reanimated': '~4.1.0',
+                'react-native-safe-area-context': '~5.6.0',
+                'react-native-screens': '~4.11.0',
+                'react-native-web': '~0.21.0',
+                'react-native-worklets': '~0.5.0',
+                'hono': '^4.11.0',
+                'drizzle-orm': '^0.39.0',
+            },
+            devDependencies: {
+                '@babel/core': '^7.25.0',
+                '@types/react': '~19.1.0',
+                'typescript': '~5.9.0',
+                '@cloudflare/workers-types': '^4.20251213.0',
+                'wrangler': '^4.14.0',
+            },
+        }, null, 2),
+        'tsconfig.json': JSON.stringify({
+            extends: 'expo/tsconfig.base',
+            compilerOptions: {
+                strict: true,
+                paths: { '@/*': ['./*'] },
+            },
+        }, null, 2),
+        'wrangler.jsonc': JSON.stringify({
+            "$schema": "node_modules/wrangler/config-schema.json",
+            "name": "expo-fullstack-app",
+            "main": "api/src/index.ts",
+            "compatibility_date": "2025-01-15",
+            "compatibility_flags": ["nodejs_compat"],
+            "assets": {
+                "directory": "dist/web",
+                "not_found_handling": "single-page-application",
+                "run_worker_first": ["/api/*"],
+                "binding": "ASSETS"
+            },
+            "d1_databases": [{
+                "binding": "DB",
+                "database_name": "app-db",
+                "database_id": "{{D1_ID}}"
+            }],
+            "vars": {
+                "ENVIRONMENT": "production"
+            },
+            "workers_dev": false,
+            "preview_urls": false
+        }, null, 2),
+        'metro.config.js': `const { getDefaultConfig } = require('expo/metro-config');
+
+const config = getDefaultConfig(__dirname);
+
+// Disable package exports to fix React 19 web bundling.
+config.resolver.unstable_enablePackageExports = false;
+
+// Exclude api/ directory from Metro bundling (it's the Workers backend)
+config.resolver.blockList = [/api\\/.*$/];
+
+// Sanitize proxy headers to prevent Metro 0.83.x "TypeError: Invalid URL".
+config.server = {
+  ...config.server,
+  enhanceMiddleware: (middleware) => {
+    return (req, res, next) => {
+      if (req.headers['x-forwarded-proto']) {
+        req.headers['x-forwarded-proto'] = req.headers['x-forwarded-proto'].split(',')[0].trim();
+      }
+      if (req.headers['x-forwarded-host']) {
+        req.headers['x-forwarded-host'] = req.headers['x-forwarded-host'].split(',')[0].trim();
+      }
+      return middleware(req, res, next);
+    };
+  },
+};
+
+module.exports = config;
+`,
+        'public/web-preview.html': `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover" />
+<title>App Preview</title>
+<style>
+html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #fff; }
+#root { display: flex; flex: 1; height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&transform.routerRoot=app"></script>
+</body>
+</html>`,
+        '_expo-proxy.cjs': `// Reverse proxy that sanitizes duplicated x-forwarded-* headers before they
+// reach the Expo dev server.
+const http = require('http');
+const net = require('net');
+const { spawn } = require('child_process');
+
+const PUBLIC_PORT = parseInt(process.env.PORT || '8001', 10);
+const INTERNAL_PORT = PUBLIC_PORT + 1;
+
+// Start Expo dev server on internal port
+const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
+  stdio: 'inherit',
+  env: { ...process.env, PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
+});
+expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); process.exit(1); });
+expo.on('exit', (code) => { process.exit(code || 0); });
+
+function sanitizeHeaders(headers) {
+  const h = { ...headers };
+  h['x-forwarded-proto'] = 'https';
+  if (h['x-forwarded-host']) h['x-forwarded-host'] = h['x-forwarded-host'].split(',')[0].trim();
+  return h;
+}
+
+// HTTP proxy
+const server = http.createServer((clientReq, clientRes) => {
+  const proxyReq = http.request(
+    { hostname: '127.0.0.1', port: INTERNAL_PORT, path: clientReq.url, method: clientReq.method, headers: sanitizeHeaders(clientReq.headers) },
+    (proxyRes) => {
+      clientRes.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(clientRes, { end: true });
+    }
+  );
+  proxyReq.on('error', () => {
+    clientRes.writeHead(503, { 'Content-Type': 'text/plain' });
+    clientRes.end('Expo dev server starting...');
+  });
+  clientReq.pipe(proxyReq, { end: true });
+});
+
+// WebSocket proxy
+server.on('upgrade', (req, socket, head) => {
+  const proxySocket = net.connect(INTERNAL_PORT, '127.0.0.1', () => {
+    const sanitized = sanitizeHeaders(req.headers);
+    const headerLines = Object.entries(sanitized).map(([k, v]) => k + ': ' + v).join('\\r\\n');
+    proxySocket.write(
+      req.method + ' ' + req.url + ' HTTP/1.1\\r\\n' + headerLines + '\\r\\n\\r\\n'
+    );
+    if (head && head.length) proxySocket.write(head);
+    socket.pipe(proxySocket).pipe(socket);
+  });
+  proxySocket.on('error', () => socket.destroy());
+  socket.on('error', () => proxySocket.destroy());
+});
+
+server.listen(PUBLIC_PORT, '0.0.0.0', () => {
+  console.log('[proxy] Listening on port ' + PUBLIC_PORT + ', forwarding to Expo on port ' + INTERNAL_PORT);
+});
+
+process.on('SIGTERM', () => { expo.kill(); server.close(); });
+process.on('SIGINT', () => { expo.kill(); server.close(); });
+`,
+    };
+
+    return {
+        name: 'expo-fullstack',
+        description: {
+            selection: 'expo-fullstack-template',
+            usage: `Expo/React Native fullstack template with Hono API backend and D1 database. ${EXPO_FULLSTACK_TEMPLATE_INSTRUCTIONS}`
+        },
+        fileTree: {
+            path: '/',
+            type: 'directory',
+            children: [
+                { path: 'app', type: 'directory', children: [] },
+                { path: 'api', type: 'directory', children: [
+                    { path: 'src', type: 'directory', children: [] },
+                ] },
+                { path: 'lib', type: 'directory', children: [] },
+                { path: 'public', type: 'directory', children: [] },
+                { path: 'package.json', type: 'file' },
+                { path: 'app.json', type: 'file' },
+                { path: 'wrangler.jsonc', type: 'file' },
+                { path: 'tsconfig.json', type: 'file' },
+                { path: 'metro.config.js', type: 'file' },
+                { path: '_expo-proxy.cjs', type: 'file' },
+            ]
+        },
+        allFiles: fullstackFiles,
+        language: 'typescript',
+        deps: {
+            'expo': '~54.0.0',
+            'react-native': '0.81.5',
+            'react-native-gesture-handler': '~2.28.0',
+            'react-native-reanimated': '~4.1.0',
+            'expo-router': '~6.0.14',
+            'hono': '^4.11.0',
+            'drizzle-orm': '^0.39.0',
+        },
+        projectType: 'app',
+        renderMode: 'mobile-fullstack',
+        initCommand: 'node _expo-proxy.cjs',
+        frameworks: ['react-native', 'expo', 'expo-router', 'hono', 'drizzle-orm'],
+        importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'api/src/index.ts', 'lib/api-client.ts', 'package.json', 'wrangler.jsonc'],
+        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'wrangler.jsonc'],
+        redactedFiles: [],
+        disabled: false,
+    };
+}

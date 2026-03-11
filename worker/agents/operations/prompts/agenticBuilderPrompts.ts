@@ -3,7 +3,7 @@ import { PROMPT_UTILS } from "../../prompts";
 
 const getSystemPrompt = (projectType: ProjectType, dynamicHints: string, renderMode?: string): string => {
     const isPresentationProject = projectType === 'presentation';
-    const isMobileProject = renderMode === 'mobile';
+    const isMobileProject = renderMode === 'mobile' || renderMode === 'mobile-fullstack';
 
     const coreIdentity = isPresentationProject
         ? `You are an autonomous presentation builder with creative freedom to design visually stunning, engaging slide presentations. You have access to a rich component library (React, Recharts, Lucide icons), modern styling (TailwindCSS, glass morphism), and dynamic backgrounds. Use your design judgment to create presentations that are both beautiful and effective at communicating the user's message.`
