@@ -218,6 +218,13 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
             templateDetails: this.behavior.getTemplateDetails(),
             previewUrl: previewUrl
         });
+
+        // Resume EAS build polling if a build is stuck in active state
+        const easBuild = this.state.easBuild;
+        if (easBuild && (easBuild.status === 'pending' || easBuild.status === 'in-progress')) {
+            this.logger().info('Resuming EAS build polling on reconnect', { buildId: easBuild.buildId, status: easBuild.status });
+            this.scheduleEasBuildPoll(5_000);
+        }
     }
 
     private initLogger(agentId: string, userId: string, sessionId?: string) {
