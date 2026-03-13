@@ -194,9 +194,12 @@ export function buildWorkerBindings(
 		}
 	}
 
-	// Add D1 database bindings
+	// Add D1 database bindings (skip unresolved placeholders)
 	if (config.d1_databases) {
 		for (const d1 of config.d1_databases) {
+			if (!d1.database_id || d1.database_id.startsWith('{{')) {
+				continue;
+			}
 			bindings.push({
 				name: d1.binding,
 				type: 'd1',

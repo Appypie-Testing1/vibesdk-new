@@ -712,14 +712,14 @@ export class SandboxSdkClient extends BaseSandboxService {
             try {
                 resourceProvisioner = new ResourceProvisioner(this.logger);
             } catch (error) {
-                this.logger.warn(`Cannot initialize resource provisioner: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                this.logger.error(`Cannot initialize resource provisioner: ${error instanceof Error ? error.message : 'Unknown error'}`);
                 return {
-                    success: true,
+                    success: false,
                     provisioned: [],
                     failed: parseResult.placeholders.map(p => ({
                         placeholder: p.placeholder,
                         resourceType: p.resourceType,
-                        error: 'Missing Cloudflare credentials',
+                        error: 'Missing Cloudflare credentials (CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN)',
                         binding: p.binding
                     })),
                     replacements: {},
