@@ -74,7 +74,6 @@
 			"binding": "DB",
 			"database_name": "vibesdk-db",
 			"database_id": "60fccd3b-21b1-44ea-bb30-a596b10d1bdc",
-			"id": "60fccd3b-21b1-44ea-bb30-a596b10d1bdc",
 			"migrations_dir": "migrations",
 			"remote": true
 		}
