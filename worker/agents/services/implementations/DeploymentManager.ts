@@ -1225,6 +1225,13 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         logger.info('Triggering EAS build', { platform, sandboxInstanceId: state.sandboxInstanceId });
 
         try {
+            // EAS CLI requires a git repository with committed files
+            const gitInit = 'git init && git add -A && git commit -m "eas-build" --no-verify';
+            const gitResult = await client.executeCommands(state.sandboxInstanceId, [gitInit], 30_000);
+            if (!gitResult.success) {
+                logger.warn('Git init for EAS may have failed (could already exist)', { error: gitResult.error });
+            }
+
             const command = `EXPO_TOKEN=${expoToken} npx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 120_000);
 
