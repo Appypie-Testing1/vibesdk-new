@@ -37,8 +37,10 @@ const MobilePreview = forwardRef<HTMLIFrameElement, {
 		// instead of Safari/Chrome (which would show raw JSON manifest).
 		// Expo Go connects via HTTP; Cloudflare redirects to HTTPS transparently.
 		expoDeepLink = `exp://${url.hostname}`;
-		url.pathname = '/web-preview.html';
-		webPreviewSrc = url.toString();
+		// Expo Router handles client-side routing at root — loading /web-preview.html
+		// causes "Unmatched Route" because there is no matching route file.
+		// Metro dev server serves the proper HTML entry at /.
+		webPreviewSrc = url.origin;
 	} catch {
 		expoDeepLink = previewUrl;
 		webPreviewSrc = previewUrl;
@@ -212,8 +214,8 @@ export const AppPreview = forwardRef<HTMLIFrameElement, PreviewComponentProps>(
 				let webPreviewSrc: string;
 				try {
 					const url = new URL(previewUrl);
-					url.pathname = '/web-preview.html';
-					webPreviewSrc = url.toString();
+					// Expo Router handles routing at root — /web-preview.html causes "Unmatched Route"
+					webPreviewSrc = url.origin;
 				} catch {
 					webPreviewSrc = previewUrl;
 				}
