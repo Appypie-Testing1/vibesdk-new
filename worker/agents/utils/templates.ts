@@ -442,7 +442,15 @@ To build a valid, previewable Expo/React Native project (SDK 54, React Native 0.
 
 6. These packages are already installed: expo, expo-router, expo-constants, expo-font, expo-linking, expo-status-bar, expo-system-ui, react-native, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens, react-native-web. Do NOT add them again with exec_commands.
 
-7. **CRITICAL**: If your code imports ANY package not listed above, you MUST install it with exec_commands("bun add <package>") BEFORE calling deploy_preview. Missing dependencies cause Metro bundler to crash with "Unable to resolve module" errors. Common packages that need explicit installation: date-fns, react-native-svg, zustand, @react-native-async-storage/async-storage, expo-image, expo-linear-gradient, expo-splash-screen, lottie-react-native, etc.
+7. **CRITICAL**: If your code imports ANY package not listed above, you MUST install it with exec_commands("bun add <package>") BEFORE calling deploy_preview. Missing dependencies cause Metro bundler to crash with "Unable to resolve module" errors. Common packages that need explicit installation: date-fns, zustand, @react-native-async-storage/async-storage, expo-image, expo-linear-gradient, expo-splash-screen, etc.
+
+8. **BANNED PACKAGES** -- Do NOT use these. They fail to install or are incompatible with Expo SDK 54:
+   - lucide-react-native (use emoji or Unicode symbols for icons instead)
+   - @expo/vector-icons (not compatible with SDK 54)
+   - react-native-vector-icons (requires native linking)
+   - react-native-svg (often causes build failures)
+   - Any package requiring native compilation or pod install
+   For icons, use emoji characters (e.g. "+" for add, "x" for delete, etc.) or simple Text components.
 `;
 
 /**
@@ -766,9 +774,14 @@ To build a valid, previewable Expo/React Native + Cloudflare Workers fullstack p
 
 8. **CRITICAL**: If your code imports ANY package not listed above, you MUST install it with exec_commands("bun add <package>") BEFORE calling deploy_preview.
 
-9. The wrangler.jsonc serves the web export as static assets and routes /api/* to the Hono worker.
+9. **BANNED PACKAGES** -- Do NOT use these. They fail to install or are incompatible with Expo SDK 54:
+   - lucide-react-native, @expo/vector-icons, react-native-vector-icons, react-native-svg
+   - Any package requiring native compilation or pod install
+   For icons, use emoji characters or simple Text components.
 
-10. The D1 database is pre-provisioned. Use Drizzle ORM for queries in the API layer.
+10. The wrangler.jsonc serves the web export as static assets and routes /api/* to the Hono worker.
+
+11. The D1 database is pre-provisioned. Use Drizzle ORM for queries in the API layer.
 `;
 
 /**

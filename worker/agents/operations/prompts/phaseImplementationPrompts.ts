@@ -61,7 +61,7 @@ export const MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a
 - NEVER use Tailwind CSS or className prop. Use ONLY StyleSheet.create() for all styling.
 - NEVER import from 'react-dom' or use web-specific APIs (document, window.location, etc.)
 - Navigation: use expo-router (Link, useRouter, Stack, Tabs) -- NOT @react-navigation directly.
-- Icons: use ONLY \`@expo/vector-icons\` (SLASH not hyphen): \`import { MaterialIcons } from '@expo/vector-icons'\`. NEVER write \`@expo-vector-icons\` (wrong package name). NEVER use lucide-react-native.
+- Icons: Do NOT use any icon library (no @expo/vector-icons, no lucide-react-native, no react-native-vector-icons). Use emoji or Unicode symbols in Text components instead.
 - Images: use Image from 'react-native' with external URLs.
 - package.json: KEEP ALL existing template dependencies. NEVER remove react-native-safe-area-context, react-native-screens, react-native-gesture-handler, react-native-reanimated, expo-router, or any other pre-installed package.
 </CRITICAL_MOBILE_RULES>
@@ -116,7 +116,7 @@ export const FULLSTACK_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are impl
 - NEVER use Tailwind CSS or className prop. Use ONLY StyleSheet.create() for all styling.
 - NEVER import from 'react-dom' or use web-specific APIs (document, window.location, etc.)
 - Navigation: use expo-router (Link, useRouter, Stack, Tabs) -- NOT @react-navigation directly.
-- Icons: use ONLY \`@expo/vector-icons\` (SLASH not hyphen): \`import { MaterialIcons } from '@expo/vector-icons'\`. NEVER write \`@expo-vector-icons\`.
+- Icons: Do NOT use any icon library. Use emoji or Unicode symbols in Text components instead.
 - API calls: use lib/api-client.ts for all backend communication.
 - package.json: KEEP ALL existing template dependencies.
 

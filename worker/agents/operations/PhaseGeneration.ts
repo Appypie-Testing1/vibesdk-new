@@ -135,7 +135,7 @@ const MOBILE_SYSTEM_PROMPT = `<ROLE>
 
     **Visual Assets:**
     - Use Image from react-native with external URLs (unsplash.com, placehold.co)
-    - Use \`@expo/vector-icons\` for icons (SLASH not hyphen): \`import { MaterialIcons } from '@expo/vector-icons'\`. NEVER write \`@expo-vector-icons\`.
+    - Do NOT use any icon library. Use emoji or Unicode symbols in Text components for icons.
     - Binary files (.png, .jpg, .svg) cannot be generated in phases
 
     **REMEMBER: This is a serious mobile app project. Deliver a polished, production-quality React Native app.**
@@ -215,7 +215,7 @@ const FULLSTACK_MOBILE_SYSTEM_PROMPT = `<ROLE>
 
     **Visual Assets:**
     - Use Image from react-native with external URLs (unsplash.com, placehold.co)
-    - Use \`@expo/vector-icons\` for icons (SLASH not hyphen): \`import { MaterialIcons } from '@expo/vector-icons'\`
+    - Do NOT use any icon library. Use emoji or Unicode symbols in Text components for icons.
     - Binary files (.png, .jpg, .svg) cannot be generated in phases
 </TASK>
 

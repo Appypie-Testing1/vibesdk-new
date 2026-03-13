@@ -64,12 +64,9 @@
 // Altering max_instances value will have no effect. Please use the MAX_SANDBOX_INSTANCES var instead.
 	//		"max_instances": 1400,
             // ATTENTION: Altering instance_type value will have no effect. Please use the SANDBOX_INSTANCE_TYPE var instead.
-            "instance_type": {
-                "vcpu": 4,
-                "memory_mib": 8192,
-                "disk_mb": 10240
-            },
-            "rollout_step_percentage": 100
+            "instance_type": "standard-3",
+            "rollout_step_percentage": 100,
+            "max_instances": 10
 		}
 	],
 	"d1_databases": [
@@ -157,15 +154,10 @@
             "custom_domain": true
         },
         {
-        "pattern": "*.vibesnappy.appypie.com/*",
-        "custom_domain": false,
-        "zone_id": "db01fac4261b2604aacad8410443a3e2"
-    }
-/*{
-            "pattern": "*build-preview.cloudflare.dev/*",
+            "pattern": "*vibesnappy.appypie.com/*",
             "custom_domain": false,
-            "zone_id": "db01fac4261b2604aacad8410443a3e2"
-        }*/
+            "zone_id": "7662520cb743a30c63d76c24bcb0e9c6"
+        }
     ],
 	"vars": {
         "TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",

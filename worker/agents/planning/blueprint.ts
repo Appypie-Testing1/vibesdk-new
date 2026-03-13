@@ -329,7 +329,7 @@ This is a React Native / Expo mobile app project. ALL web-specific instructions 
 - React Native components: View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Switch, SafeAreaView
 - StyleSheet.create() for ALL styling (flexbox, spacing, colors, typography)
 - expo-router for navigation (file-based routing in app/ directory)
-- @expo/vector-icons for icons (SLASH not hyphen): import { MaterialIcons } from '@expo/vector-icons'
+- Do NOT use any icon library. Use emoji or Unicode symbols in Text components for icons.
 - Image from 'react-native' with external URLs for visual assets
 
 **Project Structure:**
@@ -340,8 +340,8 @@ ${templateDetails?.renderMode === 'mobile-fullstack' ? `- Backend API: api/src/i
 - All API routes under /api/* prefix
 - Database: D1 via c.env.DB.prepare() with parameterized queries` : '- No backend/API -- this is a frontend-only mobile app'}
 
-**Dependencies to suggest:** React Native compatible packages only. Common useful packages: zustand, @react-native-async-storage/async-storage, expo-image, date-fns, react-native-svg.
-Do NOT suggest: tailwindcss, framer-motion, lucide-react, react-router-dom, shadcn, or any web-only library.`;
+**Dependencies to suggest:** React Native compatible packages only. Common useful packages: zustand, @react-native-async-storage/async-storage, expo-image, date-fns.
+Do NOT suggest: tailwindcss, framer-motion, lucide-react, lucide-react-native, @expo/vector-icons, react-native-vector-icons, react-router-dom, shadcn, or any web-only library.`;
             systemPrompt = `${systemPrompt}\n\n${mobileOverride}`;
         }
         
