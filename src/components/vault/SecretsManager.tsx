@@ -117,6 +117,24 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 		}
 	};
 
+	// Loading state (vault context still initializing)
+	if (state.status === 'unknown') {
+		return (
+			<Card id={id} className={className}>
+				<CardHeader>
+					<CardTitle className="flex items-center gap-2">
+						<Shield className="h-5 w-5" />
+						Secrets Vault
+					</CardTitle>
+					<CardDescription>Checking vault status...</CardDescription>
+				</CardHeader>
+				<CardContent className="flex items-center justify-center py-8">
+					<Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+				</CardContent>
+			</Card>
+		);
+	}
+
 	// Not setup state
 	if (state.status === 'not_setup') {
 		return (
