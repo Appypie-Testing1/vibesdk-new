@@ -33,6 +33,15 @@ interface VaultSession {
 	lastAccessedAt: number;
 }
 
+/** Serializable session data for ctx.storage persistence (survives hibernation) */
+interface StoredSession {
+	encryptedVMK: string; // base64
+	nonce: string;        // base64
+	sessionKey: string;   // base64
+	createdAt: number;
+	lastAccessedAt: number;
+}
+
 export class UserSecretsStore extends DurableObject<Env> {
 	private session: VaultSession | null = null;
 
@@ -41,7 +50,40 @@ export class UserSecretsStore extends DurableObject<Env> {
 		ctx.blockConcurrencyWhile(async () => {
 			await this.initializeSchema();
 			await this.scheduleCleanup();
+			await this.restoreSession();
 		});
+	}
+
+	/** Restore session from ctx.storage after hibernation wake-up */
+	private async restoreSession(): Promise<void> {
+		const stored = await this.ctx.storage.get<StoredSession>('vault_session');
+		if (!stored) return;
+
+		// Check if session has expired
+		if (Date.now() - stored.lastAccessedAt > SESSION_TIMEOUT_MS) {
+			await this.ctx.storage.delete('vault_session');
+			return;
+		}
+
+		this.session = {
+			encryptedVMK: this.base64ToArrayBuffer(stored.encryptedVMK),
+			nonce: this.base64ToArrayBuffer(stored.nonce),
+			sk: this.base64ToUint8Array(stored.sessionKey),
+			createdAt: stored.createdAt,
+			lastAccessedAt: stored.lastAccessedAt,
+		};
+	}
+
+	/** Persist session to ctx.storage for hibernation survival */
+	private persistSession(data: { encryptedVMK: string; nonce: string; sessionKey: string }, now: number): void {
+		const stored: StoredSession = {
+			encryptedVMK: data.encryptedVMK,
+			nonce: data.nonce,
+			sessionKey: data.sessionKey,
+			createdAt: now,
+			lastAccessedAt: now,
+		};
+		void this.ctx.storage.put('vault_session', stored);
 	}
 
 	async fetch(request: Request): Promise<Response> {
@@ -110,6 +152,9 @@ export class UserSecretsStore extends DurableObject<Env> {
 			createdAt: now,
 			lastAccessedAt: now,
 		};
+
+		// Persist to storage so session survives DO hibernation
+		this.persistSession(data, now);
 
 		this.sendWs(ws, { type: 'vault_session_ready' });
 	}
@@ -414,6 +459,13 @@ export class UserSecretsStore extends DurableObject<Env> {
 			return { valid: false, error: 'Session expired', errorType: 'session_expired' };
 		}
 		this.session.lastAccessedAt = Date.now();
+		// Update persisted lastAccessedAt to extend session across hibernation
+		void this.ctx.storage.get<StoredSession>('vault_session').then((stored) => {
+			if (stored) {
+				stored.lastAccessedAt = Date.now();
+				void this.ctx.storage.put('vault_session', stored);
+			}
+		});
 		return { valid: true };
 	}
 
@@ -458,6 +510,7 @@ export class UserSecretsStore extends DurableObject<Env> {
 			this.session.sk.fill(0);
 		}
 		this.session = null;
+		void this.ctx.storage.delete('vault_session');
 	}
 
 	private sendWs(ws: WebSocket, data: Record<string, unknown>): void {
