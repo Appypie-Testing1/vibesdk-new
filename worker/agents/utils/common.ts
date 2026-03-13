@@ -96,6 +96,9 @@ export function extractCommands(rawOutput: string, onlyInstallCommands: boolean 
 		});
 	}
 
+	// Normalize package names: strip subpaths (e.g., "zustand/react/shallow" -> "zustand")
+	filteredCommands = filteredCommands.map(normalizeInstallCommand);
+
 	return filteredCommands;
 }
 
@@ -198,6 +201,37 @@ export function validateAndCleanBootstrapCommands(
 		invalidCommands,
 		deduplicated: deduplicatedCount
 	};
+}
+
+/**
+ * Normalize an install command by stripping subpaths from package names.
+ * e.g., "bun add zustand/react/shallow" -> "bun add zustand"
+ * e.g., "bun add @tanstack/react-query/devtools" -> "bun add @tanstack/react-query"
+ */
+function normalizeInstallCommand(command: string): string {
+	const installMatch = command.match(/^((?:npm|yarn|pnpm|bun)\s+(?:install|add))\s+(.+)$/);
+	if (!installMatch) return command;
+
+	const prefix = installMatch[1];
+	const packages = installMatch[2].split(/\s+/).map(pkg => {
+		// Strip version specifier temporarily to process the name
+		const versionMatch = pkg.match(/^(.+?)(@[\d^~>=<].*)$/);
+		const name = versionMatch ? versionMatch[1] : pkg;
+		const version = versionMatch ? versionMatch[2] : '';
+
+		let normalized: string;
+		if (name.startsWith('@')) {
+			// Scoped: @scope/package/subpath -> @scope/package
+			const parts = name.split('/');
+			normalized = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : name;
+		} else {
+			// Unscoped: package/subpath -> package
+			normalized = name.split('/')[0];
+		}
+		return normalized + version;
+	});
+
+	return `${prefix} ${packages.join(' ')}`;
 }
 
 export function looksLikeCommand(text: string): boolean {
