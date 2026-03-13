@@ -428,7 +428,7 @@ To build a valid, previewable Expo/React Native project (SDK 54, React Native 0.
     "build:web": "bun x expo export --platform web --output-dir dist/client",
     "build:worker": "bun x esbuild worker.ts --outfile=dist/index.js --format=esm --bundle",
     "build": "bun run build:web && bun run build:worker",
-    "lint": "npx eslint . --ext .ts,.tsx"
+    "lint": "eslint --cache -f json --quiet ."
 }
 \`\`\`
 
@@ -539,7 +539,7 @@ const styles = StyleSheet.create({
                 'build:web': 'bun x expo export --platform web --output-dir dist/client',
                 'build:worker': 'bun x esbuild worker.ts --outfile=dist/index.js --format=esm --bundle',
                 build: 'bun run build:web && bun run build:worker',
-                lint: 'npx eslint . --ext .ts,.tsx',
+                lint: 'eslint --cache -f json --quiet .',
             },
             dependencies: {
                 'expo': '~54.0.0',
@@ -763,7 +763,7 @@ To build a valid, previewable Expo/React Native + Cloudflare Workers fullstack p
     "build:worker": "bun x esbuild api/src/index.ts --outfile=dist/index.js --format=esm --bundle --external:cloudflare:* --external:node:*",
     "build": "bun run build:web && bun run build:worker",
     "deploy": "bun run build && wrangler deploy",
-    "lint": "npx eslint . --ext .ts,.tsx"
+    "lint": "eslint --cache -f json --quiet ."
 }
 \`\`\`
 
@@ -883,6 +883,7 @@ const styles = StyleSheet.create({
 });
 `,
         'api/src/index.ts': `
+/// <reference types="@cloudflare/workers-types" />
 import { Hono } from 'hono';
 import { LinearRouter } from 'hono/router/linear-router';
 import { cors } from 'hono/cors';
@@ -1013,7 +1014,7 @@ export const apiClient = {
                 'build:worker': 'bun x esbuild api/src/index.ts --outfile=dist/index.js --format=esm --bundle --external:cloudflare:* --external:node:*',
                 build: 'bun run build:web && bun run build:worker',
                 deploy: 'bun run build && wrangler deploy',
-                lint: 'npx eslint . --ext .ts,.tsx',
+                lint: 'eslint --cache -f json --quiet .',
             },
             dependencies: {
                 'expo': '~54.0.0',

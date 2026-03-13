@@ -1658,28 +1658,31 @@ export class SandboxSdkClient extends BaseSandboxService {
             // Process ESLint results
             if (lintResult.status === 'fulfilled') {
                 try {
-                    const lintData = JSON.parse(lintResult.value.stdout) as Array<{
-                        filePath: string;
-                        messages: Array<{
-                            message: string;
-                            line?: number;
-                            column?: number;
-                            severity: number;
-                            ruleId?: string;
+                    const stdout = lintResult.value.stdout?.trim();
+                    if (stdout && stdout.startsWith('[')) {
+                        const lintData = JSON.parse(stdout) as Array<{
+                            filePath: string;
+                            messages: Array<{
+                                message: string;
+                                line?: number;
+                                column?: number;
+                                severity: number;
+                                ruleId?: string;
+                            }>;
                         }>;
-                    }>;
-                    
-                    for (const fileResult of lintData) {
-                        for (const message of fileResult.messages || []) {
-                            lintIssues.push({
-                                message: message.message,
-                                filePath: fileResult.filePath,
-                                line: message.line || 0,
-                                column: message.column,
-                                severity: this.mapESLintSeverity(message.severity),
-                                ruleId: message.ruleId || '',
-                                source: 'eslint'
-                            });
+
+                        for (const fileResult of lintData) {
+                            for (const message of fileResult.messages || []) {
+                                lintIssues.push({
+                                    message: message.message,
+                                    filePath: fileResult.filePath,
+                                    line: message.line || 0,
+                                    column: message.column,
+                                    severity: this.mapESLintSeverity(message.severity),
+                                    ruleId: message.ruleId || '',
+                                    source: 'eslint'
+                                });
+                            }
                         }
                     }
                 } catch (error) {
