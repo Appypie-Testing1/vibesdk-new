@@ -55,7 +55,7 @@ import {
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api-client';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-// import { SecretsManager } from '@/components/vault';
+import { SecretsManager } from '@/components/vault';
 
 export default function SettingsPage() {
 	const { user } = useAuth();
@@ -589,7 +589,7 @@ export default function SettingsPage() {
 					</Card>
 
 					{/* User Secrets Vault Section */}
-					{/* <SecretsManager id="secrets" /> */}
+					<SecretsManager id="secrets" />
 
 					<Card id="api-keys">
 						<CardHeader variant="minimal">

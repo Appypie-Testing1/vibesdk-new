@@ -189,6 +189,20 @@ export function getTemplatesData(): SecretTemplate[] {
 			required: false,
 			category: 'deployment',
 		},
+		{
+			id: 'EXPO_TOKEN',
+			displayName: 'Expo Access Token',
+			envVarName: 'EXPO_TOKEN',
+			provider: 'expo',
+			icon: '📱',
+			description: 'Expo access token for EAS native app builds (iOS/Android)',
+			instructions:
+				'Go to https://expo.dev → Sign in → Account Settings → Access Tokens → Create',
+			placeholder: 'Your Expo access token',
+			validation: '.+',
+			required: false,
+			category: 'deployment',
+		},
 
 		// Database & Storage
 		{

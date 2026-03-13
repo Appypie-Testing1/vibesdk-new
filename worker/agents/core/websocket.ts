@@ -259,6 +259,12 @@ export function handleWebSocketMessage(
                             provider: 'expo',
                             envVarName: 'EXPO_TOKEN',
                         });
+                        // Also send build error so frontend clears the pending state
+                        sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_ERROR, {
+                            buildId: '',
+                            platform: platform as 'ios' | 'android',
+                            error: 'EXPO_TOKEN is required. Please add your Expo access token first.',
+                        });
                         return;
                     }
 
