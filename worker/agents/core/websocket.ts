@@ -196,15 +196,53 @@ export function handleWebSocketMessage(
                     const state = agent.getConversationState();
                     const debugState = agent.getBehavior().getDeepDebugSessionState();
                     logger.info('Conversation state retrieved', state);
-                    sendToConnection(connection, WebSocketMessageResponses.CONVERSATION_STATE, { 
+                    sendToConnection(connection, WebSocketMessageResponses.CONVERSATION_STATE, {
                         state,
                         deepDebugSession: debugState
                     });
+                    // Resume EAS build polling if a build is stuck in active state
+                    const easBuildState = agent.state.easBuild;
+                    if (easBuildState && (easBuildState.status === 'pending' || easBuildState.status === 'in-progress')) {
+                        logger.info('Resuming stuck EAS build polling', { buildId: easBuildState.buildId, status: easBuildState.status });
+                        agent.scheduleEasBuildPoll(5_000);
+                    }
                 } catch (error) {
                     logger.error('Error fetching conversation state:', error);
                     sendError(connection, `Error fetching conversation state: ${error instanceof Error ? error.message : String(error)}`);
                 }
                 break;
+            case 'eas_build_check': {
+                // Manual check/recovery for stuck EAS builds
+                const easBuild = agent.state.easBuild;
+                if (easBuild && (easBuild.status === 'pending' || easBuild.status === 'in-progress')) {
+                    logger.info('Manual EAS build check requested, resuming polling', { buildId: easBuild.buildId });
+                    agent.scheduleEasBuildPoll(3_000);
+                    sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_STATUS, {
+                        buildId: easBuild.buildId,
+                        platform: easBuild.platform,
+                        status: easBuild.status,
+                    });
+                } else if (easBuild) {
+                    // Build already finished/errored, resend the final status
+                    if (easBuild.status === 'finished') {
+                        sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_COMPLETE, {
+                            buildId: easBuild.buildId,
+                            platform: easBuild.platform,
+                            artifactUrl: easBuild.artifactUrl || easBuild.easArtifactUrl || '',
+                            downloadUrl: easBuild.artifactUrl
+                                ? `/api/agent/${agent.getAgentId()}/builds/${easBuild.buildId}/download`
+                                : '',
+                        });
+                    } else if (easBuild.status === 'errored' || easBuild.status === 'cancelled') {
+                        sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_ERROR, {
+                            buildId: easBuild.buildId,
+                            platform: easBuild.platform,
+                            error: easBuild.error || 'Build failed',
+                        });
+                    }
+                }
+                break;
+            }
             case WebSocketMessageRequests.EAS_BUILD_TRIGGER: {
                 const platform = parsedMessage.platform as string;
                 if (platform !== 'ios' && platform !== 'android') {
