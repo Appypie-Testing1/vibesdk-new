@@ -205,6 +205,48 @@ export function handleWebSocketMessage(
                     sendError(connection, `Error fetching conversation state: ${error instanceof Error ? error.message : String(error)}`);
                 }
                 break;
+            case WebSocketMessageRequests.EAS_BUILD_TRIGGER: {
+                const platform = parsedMessage.platform as string;
+                if (platform !== 'ios' && platform !== 'android') {
+                    sendError(connection, 'Invalid platform. Must be "ios" or "android".');
+                    break;
+                }
+
+                logger.info('EAS build trigger received', { platform });
+
+                agent.getDecryptedSecret({ envVarName: 'EXPO_TOKEN' }).then((expoToken) => {
+                    if (!expoToken) {
+                        sendToConnection(connection, WebSocketMessageResponses.VAULT_REQUIRED, {
+                            reason: 'EXPO_TOKEN is required to build native apps with EAS. Create one at https://expo.dev/accounts/[username]/settings/access-tokens',
+                            provider: 'expo',
+                            envVarName: 'EXPO_TOKEN',
+                        });
+                        return;
+                    }
+
+                    return agent.deploymentManager.triggerEasBuild(platform as 'ios' | 'android', expoToken, {
+                        onStatus: (build) => {
+                            broadcastToConnections(agent, WebSocketMessageResponses.EAS_BUILD_STATUS, {
+                                buildId: build.buildId,
+                                platform: build.platform,
+                                status: build.status,
+                            });
+                        },
+                        onError: (error) => {
+                            sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_ERROR, {
+                                buildId: '',
+                                platform: platform as 'ios' | 'android',
+                                error,
+                            });
+                        },
+                        scheduleAlarm: (delayMs) => agent.scheduleEasBuildPoll(delayMs),
+                    });
+                }).catch((error: unknown) => {
+                    logger.error('Error triggering EAS build:', error);
+                    sendError(connection, `Error triggering EAS build: ${error instanceof Error ? error.message : String(error)}`);
+                });
+                break;
+            }
             // Disabled it for now
             // case WebSocketMessageRequests.TERMINAL_COMMAND:
             //     // Handle terminal command execution

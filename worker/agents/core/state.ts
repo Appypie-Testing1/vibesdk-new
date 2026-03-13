@@ -3,7 +3,7 @@ import type { PhasicBlueprint, AgenticBlueprint, PhaseConceptType ,
     Blueprint,
 } from '../schemas';
 import type { InferenceMetadata } from '../inferutils/config.types';
-import { BehaviorType, Plan, ProjectType } from './types';
+import { BehaviorType, Plan, ProjectType, EasBuildState } from './types';
 
 export interface FileState extends FileOutputType {
     lastDiff: string;
@@ -70,6 +70,9 @@ export interface BaseProjectState {
 
     // Deep debug
     lastDeepDebugTranscript: string | null;
+
+    // EAS Build
+    easBuild?: EasBuildState;
 
     mvpGenerated: boolean;
     reviewingInitiated: boolean;

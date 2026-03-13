@@ -570,6 +570,73 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         });
     }
     // ==========================================
+    // EAS Build / Alarm
+    // ==========================================
+
+    /**
+     * Schedule a DO alarm for EAS build polling.
+     */
+    scheduleEasBuildPoll(delayMs: number): void {
+        this.ctx.storage.setAlarm(Date.now() + delayMs).catch(err => {
+            this.logger().error('Failed to schedule EAS build poll alarm', err);
+        });
+    }
+
+    /**
+     * Durable Object alarm handler -- used for EAS build status polling.
+     */
+    override readonly alarm = async (): Promise<void> => {
+        const easBuild = this.state.easBuild;
+        if (!easBuild || (easBuild.status !== 'pending' && easBuild.status !== 'in-progress')) {
+            return;
+        }
+
+        this.logger().info('Alarm fired for EAS build poll', { buildId: easBuild.buildId });
+
+        // Retrieve EXPO_TOKEN from vault
+        const expoToken = await this.getDecryptedSecret({ envVarName: 'EXPO_TOKEN' });
+        if (!expoToken) {
+            this.logger().error('EXPO_TOKEN not found during alarm poll');
+            const errorBuild = { ...easBuild, status: 'errored' as const, error: 'EXPO_TOKEN not available' };
+            this.setState({ ...this.state, easBuild: errorBuild });
+            this.broadcast(WebSocketMessageResponses.EAS_BUILD_ERROR, {
+                buildId: easBuild.buildId,
+                platform: easBuild.platform,
+                error: 'EXPO_TOKEN not available. Please reconfigure your Expo token.',
+            });
+            return;
+        }
+
+        await this.deploymentManager.pollEasBuildStatus(expoToken, {
+            onStatus: (build) => {
+                this.broadcast(WebSocketMessageResponses.EAS_BUILD_STATUS, {
+                    buildId: build.buildId,
+                    platform: build.platform,
+                    status: build.status,
+                });
+            },
+            onComplete: (build) => {
+                this.broadcast(WebSocketMessageResponses.EAS_BUILD_COMPLETE, {
+                    buildId: build.buildId,
+                    platform: build.platform,
+                    artifactUrl: build.artifactUrl || build.easArtifactUrl || '',
+                    downloadUrl: build.artifactUrl
+                        ? `/api/agent/${this.getAgentId()}/builds/${build.buildId}/download`
+                        : '',
+                });
+            },
+            onError: (buildId, platform, error) => {
+                this.broadcast(WebSocketMessageResponses.EAS_BUILD_ERROR, {
+                    buildId,
+                    platform,
+                    error,
+                });
+            },
+            scheduleAlarm: (delayMs) => this.scheduleEasBuildPoll(delayMs),
+        });
+    };
+
+    // ==========================================
     // Git Management
     // ==========================================
 

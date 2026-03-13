@@ -99,6 +99,15 @@ export interface HandleMessageDeps {
         source?: string
     }) => void;
     onVaultUnlockRequired?: (reason: string) => void;
+    onEasBuildUpdate?: (update: {
+        type: 'status' | 'complete' | 'error';
+        buildId: string;
+        platform: string;
+        status?: string;
+        artifactUrl?: string;
+        downloadUrl?: string;
+        error?: string;
+    }) => void;
 }
 
 export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
@@ -330,8 +339,21 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         setMessages(prev => [...prev, ...queuedMessages]);
                     }
 
+                    // Restore EAS build state on reconnect
+                    const easBuildState = (state as unknown as { easBuild?: { buildId: string; platform: string; status: string; artifactUrl?: string; error?: string } }).easBuild;
+                    if (easBuildState) {
+                        deps.onEasBuildUpdate?.({
+                            type: easBuildState.status === 'finished' ? 'complete' : easBuildState.status === 'errored' || easBuildState.status === 'cancelled' ? 'error' : 'status',
+                            buildId: easBuildState.buildId,
+                            platform: easBuildState.platform,
+                            status: easBuildState.status,
+                            downloadUrl: easBuildState.artifactUrl ? `/api/agent/${urlChatId}/builds/${easBuildState.buildId}/download` : undefined,
+                            error: easBuildState.error,
+                        });
+                    }
+
                     setIsInitialStateRestored(true);
-                    
+
                     if (state.shouldBeGenerating && !isGenerating) {
                         logger.debug('🔄 Reconnected with shouldBeGenerating=true, auto-resuming generation');
                         setIsGenerating(true); 
@@ -1017,6 +1039,48 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         duration: 5000,
                     });
                 }
+                break;
+            }
+
+            case 'eas_build_status': {
+                logger.info('EAS build status update', { buildId: message.buildId, status: message.status });
+                deps.onEasBuildUpdate?.({
+                    type: 'status',
+                    buildId: message.buildId,
+                    platform: message.platform,
+                    status: message.status,
+                });
+                break;
+            }
+
+            case 'eas_build_complete': {
+                logger.info('EAS build complete', { buildId: message.buildId, platform: message.platform });
+                deps.onEasBuildUpdate?.({
+                    type: 'complete',
+                    buildId: message.buildId,
+                    platform: message.platform,
+                    artifactUrl: message.artifactUrl,
+                    downloadUrl: message.downloadUrl,
+                });
+                toast.success(`${message.platform === 'ios' ? 'iOS' : 'Android'} build completed`, {
+                    description: 'Your native app binary is ready for download.',
+                    duration: 8000,
+                });
+                break;
+            }
+
+            case 'eas_build_error': {
+                logger.error('EAS build error', { buildId: message.buildId, error: message.error });
+                deps.onEasBuildUpdate?.({
+                    type: 'error',
+                    buildId: message.buildId,
+                    platform: message.platform,
+                    error: message.error,
+                });
+                toast.error(`${message.platform === 'ios' ? 'iOS' : 'Android'} build failed`, {
+                    description: message.error,
+                    duration: 8000,
+                });
                 break;
             }
 

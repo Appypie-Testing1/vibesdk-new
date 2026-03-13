@@ -1,6 +1,6 @@
-import { 
-    IDeploymentManager, 
-    DeploymentParams, 
+import {
+    IDeploymentManager,
+    DeploymentParams,
     DeploymentResult,
     SandboxDeploymentCallbacks,
     CloudflareDeploymentCallbacks
@@ -14,7 +14,7 @@ import { ServiceOptions } from '../interfaces/IServiceOptions';
 import { BaseSandboxService } from 'worker/services/sandbox/BaseSandboxService';
 import { getSandboxService } from '../../../services/sandbox/factory';
 import { validateAndCleanBootstrapCommands } from 'worker/agents/utils/common';
-import { DeploymentTarget } from '../../core/types';
+import { DeploymentTarget, EasBuildPlatform, EasBuildState } from '../../core/types';
 import { BaseProjectState } from '../../core/state';
 
 const PER_ATTEMPT_TIMEOUT_MS = 60000;  // 60 seconds per individual attempt
@@ -1178,10 +1178,255 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             deploymentUrl: deploymentUrl || ''
         });
 
-        return { 
+        return {
             deploymentUrl: deploymentUrl || null,
             deploymentId: deploymentId
         };
     }
 
+    // ========== EAS BUILD METHODS ==========
+
+    private static readonly EAS_POLL_INTERVAL_MS = 30_000;
+    private static readonly EAS_MAX_POLL_DURATION_MS = 30 * 60_000; // 30 minutes
+
+    /**
+     * Trigger an EAS build for the given platform.
+     * Runs `eas build` in the sandbox and stores the build ID in state.
+     * Returns the build state for the caller to broadcast via WebSocket.
+     */
+    async triggerEasBuild(
+        platform: EasBuildPlatform,
+        expoToken: string,
+        callbacks?: {
+            onStatus?: (build: EasBuildState) => void;
+            onError?: (error: string) => void;
+            scheduleAlarm?: (delayMs: number) => void;
+        }
+    ): Promise<EasBuildState | null> {
+        const state = this.getState();
+        const logger = this.getLog();
+        const client = this.getClient();
+
+        if (!state.sandboxInstanceId) {
+            const error = 'No sandbox instance available. Deploy a preview first.';
+            logger.error(error);
+            callbacks?.onError?.(error);
+            return null;
+        }
+
+        if (state.easBuild && (state.easBuild.status === 'pending' || state.easBuild.status === 'in-progress')) {
+            const error = `An EAS build is already ${state.easBuild.status} (${state.easBuild.buildId})`;
+            logger.error(error);
+            callbacks?.onError?.(error);
+            return null;
+        }
+
+        logger.info('Triggering EAS build', { platform, sandboxInstanceId: state.sandboxInstanceId });
+
+        try {
+            const command = `EXPO_TOKEN=${expoToken} npx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
+            const result = await client.executeCommands(state.sandboxInstanceId, [command], 120_000);
+
+            if (!result.success || !result.results[0]?.success) {
+                const error = result.results[0]?.error || result.error || 'EAS build command failed';
+                logger.error('EAS build trigger failed', { error });
+                callbacks?.onError?.(error);
+                return null;
+            }
+
+            const output = result.results[0].output;
+            let buildId: string;
+            try {
+                // EAS CLI --json outputs a JSON array with build info
+                const parsed = JSON.parse(output);
+                const buildInfo = Array.isArray(parsed) ? parsed[0] : parsed;
+                buildId = buildInfo.id;
+                if (!buildId) throw new Error('No build ID in EAS output');
+            } catch (parseError) {
+                // Try to extract build ID from non-JSON output
+                const match = output.match(/Build ID:\s*([a-f0-9-]+)/i) || output.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/);
+                if (!match) {
+                    const error = `Failed to parse EAS build output: ${output.slice(0, 500)}`;
+                    logger.error(error);
+                    callbacks?.onError?.(error);
+                    return null;
+                }
+                buildId = match[1];
+            }
+
+            const easBuild: EasBuildState = {
+                buildId,
+                platform,
+                status: 'pending',
+                startedAt: Date.now(),
+            };
+
+            this.setState({ ...this.getState(), easBuild });
+            callbacks?.onStatus?.(easBuild);
+            callbacks?.scheduleAlarm?.(DeploymentManager.EAS_POLL_INTERVAL_MS);
+
+            logger.info('EAS build triggered successfully', { buildId, platform });
+            return easBuild;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            logger.error('EAS build trigger error', { error: message });
+            callbacks?.onError?.(message);
+            return null;
+        }
+    }
+
+    /**
+     * Poll the status of an active EAS build.
+     * Called from the alarm handler. Returns whether polling should continue.
+     */
+    async pollEasBuildStatus(
+        expoToken: string,
+        callbacks?: {
+            onStatus?: (build: EasBuildState) => void;
+            onComplete?: (build: EasBuildState) => void;
+            onError?: (buildId: string, platform: EasBuildPlatform, error: string) => void;
+            scheduleAlarm?: (delayMs: number) => void;
+        }
+    ): Promise<boolean> {
+        const state = this.getState();
+        const logger = this.getLog();
+        const client = this.getClient();
+        const easBuild = state.easBuild;
+
+        if (!easBuild || !state.sandboxInstanceId) {
+            logger.info('No active EAS build to poll');
+            return false;
+        }
+
+        // Check timeout
+        const elapsed = Date.now() - easBuild.startedAt;
+        if (elapsed > DeploymentManager.EAS_MAX_POLL_DURATION_MS) {
+            const error = 'EAS build timed out after 30 minutes';
+            logger.error(error, { buildId: easBuild.buildId });
+            const timedOutBuild: EasBuildState = { ...easBuild, status: 'errored', error };
+            this.setState({ ...this.getState(), easBuild: timedOutBuild });
+            callbacks?.onError?.(easBuild.buildId, easBuild.platform, error);
+            return false;
+        }
+
+        try {
+            const command = `EXPO_TOKEN=${expoToken} npx eas-cli build:view ${easBuild.buildId} --json`;
+            const result = await client.executeCommands(state.sandboxInstanceId, [command], 30_000);
+
+            if (!result.success || !result.results[0]?.success) {
+                logger.warn('EAS build status check failed, will retry', { error: result.results[0]?.error });
+                callbacks?.scheduleAlarm?.(DeploymentManager.EAS_POLL_INTERVAL_MS);
+                return true;
+            }
+
+            const parsed = JSON.parse(result.results[0].output);
+            const buildStatus = parsed.status as string;
+
+            logger.info('EAS build status', { buildId: easBuild.buildId, status: buildStatus });
+
+            if (buildStatus === 'finished') {
+                const artifactUrl = parsed.artifacts?.buildUrl;
+                const completedBuild: EasBuildState = {
+                    ...easBuild,
+                    status: 'finished',
+                    easArtifactUrl: artifactUrl,
+                };
+                this.setState({ ...this.getState(), easBuild: completedBuild });
+
+                if (artifactUrl) {
+                    // Download and store in R2
+                    const stored = await this.downloadAndStoreArtifact(
+                        artifactUrl,
+                        easBuild.buildId,
+                        easBuild.platform
+                    );
+                    if (stored) {
+                        const finalBuild: EasBuildState = { ...completedBuild, artifactUrl: stored };
+                        this.setState({ ...this.getState(), easBuild: finalBuild });
+                        callbacks?.onComplete?.(finalBuild);
+                    } else {
+                        callbacks?.onComplete?.(completedBuild);
+                    }
+                } else {
+                    callbacks?.onComplete?.(completedBuild);
+                }
+                return false;
+            }
+
+            if (buildStatus === 'errored' || buildStatus === 'cancelled') {
+                const error = parsed.error?.message || `Build ${buildStatus}`;
+                const failedBuild: EasBuildState = { ...easBuild, status: buildStatus as 'errored' | 'cancelled', error };
+                this.setState({ ...this.getState(), easBuild: failedBuild });
+                callbacks?.onError?.(easBuild.buildId, easBuild.platform, error);
+                return false;
+            }
+
+            // Still building (pending, in-progress, etc.)
+            const updatedBuild: EasBuildState = {
+                ...easBuild,
+                status: (buildStatus === 'in-progress' || buildStatus === 'pending') ? buildStatus as 'in-progress' | 'pending' : easBuild.status,
+            };
+            this.setState({ ...this.getState(), easBuild: updatedBuild });
+            callbacks?.onStatus?.(updatedBuild);
+            callbacks?.scheduleAlarm?.(DeploymentManager.EAS_POLL_INTERVAL_MS);
+            return true;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            logger.warn('EAS build poll error, will retry', { error: message });
+            callbacks?.scheduleAlarm?.(DeploymentManager.EAS_POLL_INTERVAL_MS);
+            return true;
+        }
+    }
+
+    /**
+     * Download an EAS build artifact and store it in R2.
+     * Returns the R2 object key, or null on failure.
+     */
+    async downloadAndStoreArtifact(
+        easArtifactUrl: string,
+        buildId: string,
+        platform: EasBuildPlatform
+    ): Promise<string | null> {
+        const logger = this.getLog();
+        const extension = platform === 'ios' ? 'ipa' : 'apk';
+        const agentId = this.getAgentId();
+        const r2Key = `eas-builds/${agentId}/${buildId}.${extension}`;
+
+        try {
+            logger.info('Downloading EAS artifact', { easArtifactUrl, r2Key });
+
+            const response = await fetch(easArtifactUrl);
+            if (!response.ok) {
+                logger.error('Failed to download EAS artifact', { status: response.status });
+                return null;
+            }
+
+            const data = await response.arrayBuffer();
+            const contentType = platform === 'ios' ? 'application/octet-stream' : 'application/vnd.android.package-archive';
+
+            await this.env.R2_BUCKET.put(r2Key, data, {
+                httpMetadata: { contentType },
+                customMetadata: {
+                    buildId,
+                    platform,
+                    agentId,
+                    createdAt: new Date().toISOString(),
+                },
+            });
+
+            logger.info('EAS artifact stored in R2', { r2Key, size: data.byteLength });
+            return r2Key;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            logger.error('Failed to store EAS artifact in R2', { error: message });
+            return null;
+        }
+    }
+
+    /**
+     * Get the current EAS build state from agent state.
+     */
+    getEasBuildState(): EasBuildState | undefined {
+        return this.getState().easBuild;
+    }
 }

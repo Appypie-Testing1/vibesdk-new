@@ -5,6 +5,7 @@ import type { CodeIssue, RuntimeError, StaticAnalysisResponse, TemplateDetails }
 import type { CodeFixResult } from "../services/code-fixer";
 import { IssueReport } from "../agents/domain/values/IssueReport";
 import type { RateLimitExceededError } from 'shared/types/errors';
+import type { EasBuildPlatform, EasBuildStatus } from "../agents/core/types";
 
 type ErrorMessage = {
     type: 'error';
@@ -432,6 +433,33 @@ type ServerLogMessage = {
 	source?: string;
 };
 
+// ========== EAS BUILD MESSAGES ==========
+
+type EasBuildStatusMessage = {
+	type: 'eas_build_status';
+	buildId: string;
+	platform: EasBuildPlatform;
+	status: EasBuildStatus;
+	progress?: string;
+	artifactUrl?: string;
+	error?: string;
+};
+
+type EasBuildCompleteMessage = {
+	type: 'eas_build_complete';
+	buildId: string;
+	platform: EasBuildPlatform;
+	artifactUrl: string;
+	downloadUrl: string;
+};
+
+type EasBuildErrorMessage = {
+	type: 'eas_build_error';
+	buildId: string;
+	platform: EasBuildPlatform;
+	error: string;
+};
+
 // ========== VAULT MESSAGES ==========
 
 /** Sent by client when vault is unlocked via dedicated vault WebSocket */
@@ -620,7 +648,10 @@ export type WebSocketMessage =
 	| ServerLogMessage
 	| VaultUnlockedMessage
 	| VaultLockedMessage
-	| VaultRequiredMessage;
+	| VaultRequiredMessage
+	| EasBuildStatusMessage
+	| EasBuildCompleteMessage
+	| EasBuildErrorMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)
 export type WebSocketMessageType = WebSocketMessage['type'];

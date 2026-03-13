@@ -82,6 +82,11 @@ export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
 
     // Vault messages
     VAULT_REQUIRED: 'vault_required',
+
+    // EAS Build messages
+    EAS_BUILD_STATUS: 'eas_build_status',
+    EAS_BUILD_COMPLETE: 'eas_build_complete',
+    EAS_BUILD_ERROR: 'eas_build_error',
 } as const satisfies Record<string, WebSocketMessageType>;
 
 // WebSocket message types
@@ -116,6 +121,9 @@ export const WebSocketMessageRequests = {
     // Vault session sync (SK sent to vault WebSocket, only sessionId here)
     VAULT_UNLOCKED: 'vault_unlocked',
     VAULT_LOCKED: 'vault_locked',
+
+    // EAS Build requests
+    EAS_BUILD_TRIGGER: 'eas_build_trigger',
 };
 
 export const PREVIEW_EXPIRED_ERROR = 'Preview expired, attempting redeploy. Please try again after a minute or refresh the page';

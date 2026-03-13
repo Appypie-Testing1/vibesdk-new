@@ -1,4 +1,5 @@
 import { CodingAgentController } from '../controllers/agent/controller';
+import { BuildsController } from '../controllers/builds/controller';
 import { AppEnv } from '../../types/appenv';
 import { Hono } from 'hono';
 import { AuthConfig, setAuthLevel } from '../../middleware/auth/routeAuth';
@@ -28,4 +29,7 @@ export function setupCodegenRoutes(app: Hono<AppEnv>): void {
     app.get('/api/agent/:agentId/connect', setAuthLevel(AuthConfig.ownerOnly), adaptController(CodingAgentController, CodingAgentController.connectToExistingAgent));
 
     app.get('/api/agent/:agentId/preview', setAuthLevel(AuthConfig.authenticated), adaptController(CodingAgentController, CodingAgentController.deployPreview));
+
+    // EAS build artifact download - owner only
+    app.get('/api/agent/:agentId/builds/:buildId/download', setAuthLevel(AuthConfig.ownerOnly), adaptController(BuildsController, BuildsController.downloadBuildArtifact));
 }

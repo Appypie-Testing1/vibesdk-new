@@ -131,6 +131,15 @@ export function useChat({
 
 	// Expo mobile preview state
 	const [expoDeepLink, setExpoDeepLink] = useState<string>();
+
+	// EAS Build state
+	const [easBuild, setEasBuild] = useState<{
+		buildId: string;
+		platform: 'ios' | 'android';
+		status: 'pending' | 'in-progress' | 'finished' | 'errored' | 'cancelled';
+		downloadUrl?: string;
+		error?: string;
+	} | null>(null);
 	
 	// Redeployment state - tracks when redeploy button should be enabled
 	const [isRedeployReady, setIsRedeployReady] = useState(false);
@@ -248,6 +257,21 @@ export function useChat({
 			onPresentationFileEvent: (evt) => {
 				if (!evt.path.includes('/slides/')) return;
 				window.dispatchEvent(new CustomEvent('presentation-file-event', { detail: evt }));
+			},
+			onEasBuildUpdate: (update) => {
+				setEasBuild(prev => {
+					const base = prev ?? { buildId: update.buildId, platform: update.platform as 'ios' | 'android', status: 'pending' as const };
+					switch (update.type) {
+						case 'status':
+							return { ...base, buildId: update.buildId, platform: update.platform as 'ios' | 'android', status: (update.status ?? base.status) as typeof base.status };
+						case 'complete':
+							return { ...base, buildId: update.buildId, platform: update.platform as 'ios' | 'android', status: 'finished' as const, downloadUrl: update.downloadUrl, error: undefined };
+						case 'error':
+							return { ...base, buildId: update.buildId, platform: update.platform as 'ios' | 'android', status: 'errored' as const, error: update.error };
+						default:
+							return prev;
+					}
+				});
 			},
 		} as HandleMessageDeps),
 		[
@@ -732,6 +756,15 @@ export function useChat({
 		}
 	}, [websocket, sendMessage, isDeploying, onDebugMessage]);
 
+	const handleTriggerEasBuild = useCallback((platform: 'ios' | 'android') => {
+		if (websocket && websocket.readyState === WebSocket.OPEN) {
+			sendWebSocketMessage(websocket, 'eas_build_trigger', { platform });
+			setEasBuild({ buildId: '', platform, status: 'pending' });
+		} else {
+			toast.error('WebSocket not connected');
+		}
+	}, [websocket]);
+
 	const allFiles = useMemo(() => mergeFiles(bootstrapFiles, files), [bootstrapFiles, files]);
 
 	return {
@@ -781,5 +814,8 @@ export function useChat({
 		allFiles,
 		// Mobile preview
 		expoDeepLink,
+		// EAS Build
+		easBuild,
+		handleTriggerEasBuild,
 	};
 }

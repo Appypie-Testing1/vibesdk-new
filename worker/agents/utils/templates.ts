@@ -619,6 +619,14 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
 <script src="/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&transform.routerRoot=app"></script>
 </body>
 </html>`,
+        'eas.json': JSON.stringify({
+            cli: { version: '>= 12.0.0' },
+            build: {
+                development: { developmentClient: true, distribution: 'internal' },
+                preview: { distribution: 'internal' },
+                production: {},
+            },
+        }, null, 2),
         '_expo-proxy.cjs': `// Reverse proxy that sanitizes duplicated x-forwarded-* headers before they
 // reach the Expo dev server. Behind nested proxies (Cloudflare -> sandbox),
 // these headers can contain comma-separated duplicates like "https, https"
@@ -725,6 +733,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 { path: 'tsconfig.json', type: 'file' },
                 { path: 'metro.config.js', type: 'file' },
                 { path: '_expo-proxy.cjs', type: 'file' },
+                { path: 'eas.json', type: 'file' },
                 { path: 'wrangler.jsonc', type: 'file' },
                 { path: 'worker.ts', type: 'file' },
             ]
@@ -737,7 +746,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         initCommand: 'node _expo-proxy.cjs',
         frameworks: ['react-native', 'expo', 'expo-router'],
         importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'package.json', 'app.json'],
-        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'wrangler.jsonc', 'worker.ts'],
+        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'eas.json', 'wrangler.jsonc', 'worker.ts'],
         redactedFiles: [],
         disabled: false,
     };
@@ -1109,6 +1118,14 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
 <script src="/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&transform.routerRoot=app"></script>
 </body>
 </html>`,
+        'eas.json': JSON.stringify({
+            cli: { version: '>= 12.0.0' },
+            build: {
+                development: { developmentClient: true, distribution: 'internal' },
+                preview: { distribution: 'internal' },
+                production: {},
+            },
+        }, null, 2),
         '_expo-proxy.cjs': `// Reverse proxy that sanitizes duplicated x-forwarded-* headers before they
 // reach the Expo dev server.
 const http = require('http');
@@ -1218,6 +1235,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 { path: 'tsconfig.json', type: 'file' },
                 { path: 'metro.config.js', type: 'file' },
                 { path: '_expo-proxy.cjs', type: 'file' },
+                { path: 'eas.json', type: 'file' },
             ]
         },
         allFiles: fullstackFiles,
@@ -1236,7 +1254,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         initCommand: 'node _expo-proxy.cjs',
         frameworks: ['react-native', 'expo', 'expo-router', 'hono', 'drizzle-orm'],
         importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'api/src/index.ts', 'lib/api-client.ts', 'package.json', 'wrangler.jsonc'],
-        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'wrangler.jsonc'],
+        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'eas.json', 'wrangler.jsonc'],
         redactedFiles: [],
         disabled: false,
     };

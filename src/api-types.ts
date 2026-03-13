@@ -180,7 +180,10 @@ export type {
 
 export type {
   BehaviorType,
-  ProjectType
+  ProjectType,
+  EasBuildPlatform,
+  EasBuildStatus,
+  EasBuildState
 } from 'worker/agents/core/types';
 
 export type {
