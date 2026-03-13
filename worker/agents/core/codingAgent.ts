@@ -574,29 +574,34 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
     // ==========================================
 
     /**
-     * Schedule a DO alarm for EAS build polling.
+     * Schedule an EAS build poll using the Agent framework's scheduling system.
+     * This avoids conflicts with the framework's internal alarm management --
+     * Cloudflare DOs only support one alarm at a time, and raw setAlarm() calls
+     * get overwritten by the framework's _scheduleNextAlarm().
      */
     scheduleEasBuildPoll(delayMs: number): void {
-        this.ctx.storage.setAlarm(Date.now() + delayMs).catch(err => {
-            this.logger().error('Failed to schedule EAS build poll alarm', err);
+        const delaySeconds = Math.ceil(delayMs / 1000);
+        this.schedule(delaySeconds, 'onEasBuildPoll').catch(err => {
+            this.logger().error('Failed to schedule EAS build poll', err);
         });
     }
 
     /**
-     * Durable Object alarm handler -- used for EAS build status polling.
+     * Scheduled callback for EAS build status polling.
+     * Called by the Agent framework's schedule system.
      */
-    override readonly alarm = async (): Promise<void> => {
+    async onEasBuildPoll(): Promise<void> {
         const easBuild = this.state.easBuild;
         if (!easBuild || (easBuild.status !== 'pending' && easBuild.status !== 'in-progress')) {
             return;
         }
 
-        this.logger().info('Alarm fired for EAS build poll', { buildId: easBuild.buildId });
+        this.logger().info('EAS build poll triggered', { buildId: easBuild.buildId });
 
         // Retrieve EXPO_TOKEN from vault
         const expoToken = await this.getDecryptedSecret({ envVarName: 'EXPO_TOKEN' });
         if (!expoToken) {
-            this.logger().error('EXPO_TOKEN not found during alarm poll');
+            this.logger().error('EXPO_TOKEN not found during EAS poll');
             const errorBuild = { ...easBuild, status: 'errored' as const, error: 'EXPO_TOKEN not available' };
             this.setState({ ...this.state, easBuild: errorBuild });
             this.broadcast(WebSocketMessageResponses.EAS_BUILD_ERROR, {
@@ -634,7 +639,7 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
             },
             scheduleAlarm: (delayMs) => this.scheduleEasBuildPoll(delayMs),
         });
-    };
+    }
 
     // ==========================================
     // Git Management
