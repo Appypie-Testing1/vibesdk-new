@@ -899,31 +899,52 @@ export class UserSecretsStore extends DurableObject<Env> {
 
 		this.session.lastAccessedAt = Date.now();
 
-		let secretId = query.secretId;
-		if (!secretId) {
-			const matches = this.listSecrets().filter((s) => {
-				if (query.provider && s.metadata?.provider !== query.provider) return false;
-				if (query.envVarName && s.metadata?.envVarName !== query.envVarName) return false;
-				return true;
-			});
-
-			if (matches.length === 0) {
-				return { success: false, error: 'secret_not_found' };
-			}
-			secretId = matches[0].id;
-		}
-
-		const secret = this.getSecret(secretId);
-		if (!secret) {
-			return { success: false, error: 'secret_not_found' };
-		}
-
 		try {
 			const vmk = await this.decryptVMK(
 				new Uint8Array(this.session.encryptedVMK),
 				new Uint8Array(this.session.nonce),
 				this.session.sk
 			);
+
+			let secretId = query.secretId;
+			if (!secretId) {
+				const allSecrets = this.listSecrets();
+
+				// First: try matching by metadata (provider/envVarName)
+				let matches = allSecrets.filter((s) => {
+					if (query.provider && s.metadata?.provider !== query.provider) return false;
+					if (query.envVarName && s.metadata?.envVarName !== query.envVarName) return false;
+					return true;
+				});
+
+				// Fallback: match by decrypted name when metadata lookup fails
+				if (matches.length === 0 && query.envVarName) {
+					for (const s of allSecrets) {
+						try {
+							const decryptedName = await this.decryptSecretValue(
+								s.encryptedName, s.nameNonce, vmk
+							);
+							if (decryptedName === query.envVarName) {
+								matches = [s];
+								break;
+							}
+						} catch {
+							// Skip secrets that fail to decrypt
+						}
+					}
+				}
+
+				if (matches.length === 0) {
+					return { success: false, error: 'secret_not_found' };
+				}
+				secretId = matches[0].id;
+			}
+
+			const secret = this.getSecret(secretId);
+			if (!secret) {
+				return { success: false, error: 'secret_not_found' };
+			}
+
 			const value = await this.decryptSecretValue(secret.encryptedValue, secret.valueNonce, vmk);
 			return { success: true, value };
 		} catch {
