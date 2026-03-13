@@ -620,7 +620,7 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
 </body>
 </html>`,
         'eas.json': JSON.stringify({
-            cli: { version: '>= 12.0.0' },
+            cli: { version: '>= 12.0.0', appVersionSource: 'remote' },
             build: {
                 development: { developmentClient: true, distribution: 'internal' },
                 preview: { distribution: 'internal' },
@@ -1120,7 +1120,7 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
 </body>
 </html>`,
         'eas.json': JSON.stringify({
-            cli: { version: '>= 12.0.0' },
+            cli: { version: '>= 12.0.0', appVersionSource: 'remote' },
             build: {
                 development: { developmentClient: true, distribution: 'internal' },
                 preview: { distribution: 'internal' },

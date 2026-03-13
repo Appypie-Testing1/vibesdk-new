@@ -1232,6 +1232,13 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 logger.warn('Git init for EAS may have failed (could already exist)', { error: gitResult.error });
             }
 
+            // Initialize EAS project (links to Expo account, required before build in non-interactive mode)
+            const easInit = `EXPO_TOKEN=${expoToken} npx eas-cli init --non-interactive`;
+            const easInitResult = await client.executeCommands(state.sandboxInstanceId, [easInit], 60_000);
+            if (!easInitResult.success) {
+                logger.warn('EAS init may have failed', { error: easInitResult.error });
+            }
+
             const command = `EXPO_TOKEN=${expoToken} npx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 120_000);
 
