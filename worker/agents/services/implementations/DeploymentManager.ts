@@ -1188,6 +1188,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
 
     private static readonly EAS_POLL_INTERVAL_MS = 30_000;
     private static readonly EAS_MAX_POLL_DURATION_MS = 30 * 60_000; // 30 minutes
+    private static readonly EAS_MAX_POLL_FAILURES = 5;
 
     /**
      * Trigger an EAS build for the given platform.
@@ -1314,7 +1315,17 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 30_000);
 
             if (!result.success || !result.results[0]?.success) {
-                logger.warn('EAS build status check failed, will retry', { error: result.results[0]?.error });
+                const failures = (easBuild.pollFailures || 0) + 1;
+                logger.warn('EAS build status check failed', { error: result.results[0]?.error, failures });
+                if (failures >= DeploymentManager.EAS_MAX_POLL_FAILURES) {
+                    const error = `EAS build polling stopped after ${failures} consecutive failures: ${result.results[0]?.error || 'command failed'}`;
+                    const failedBuild: EasBuildState = { ...easBuild, status: 'errored', error, pollFailures: failures };
+                    this.setState({ ...this.getState(), easBuild: failedBuild });
+                    callbacks?.onError?.(easBuild.buildId, easBuild.platform, error);
+                    return false;
+                }
+                const updatedBuild: EasBuildState = { ...easBuild, pollFailures: failures };
+                this.setState({ ...this.getState(), easBuild: updatedBuild });
                 callbacks?.scheduleAlarm?.(DeploymentManager.EAS_POLL_INTERVAL_MS);
                 return true;
             }
@@ -1365,6 +1376,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             const updatedBuild: EasBuildState = {
                 ...easBuild,
                 status: (buildStatus === 'in-progress' || buildStatus === 'pending') ? buildStatus as 'in-progress' | 'pending' : easBuild.status,
+                pollFailures: 0,
             };
             this.setState({ ...this.getState(), easBuild: updatedBuild });
             callbacks?.onStatus?.(updatedBuild);
@@ -1372,7 +1384,17 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             return true;
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            logger.warn('EAS build poll error, will retry', { error: message });
+            const failures = (easBuild.pollFailures || 0) + 1;
+            logger.warn('EAS build poll error', { error: message, failures });
+            if (failures >= DeploymentManager.EAS_MAX_POLL_FAILURES) {
+                const errorMsg = `EAS build polling stopped after ${failures} consecutive failures: ${message}`;
+                const failedBuild: EasBuildState = { ...easBuild, status: 'errored', error: errorMsg, pollFailures: failures };
+                this.setState({ ...this.getState(), easBuild: failedBuild });
+                callbacks?.onError?.(easBuild.buildId, easBuild.platform, errorMsg);
+                return false;
+            }
+            const updatedBuild: EasBuildState = { ...easBuild, pollFailures: failures };
+            this.setState({ ...this.getState(), easBuild: updatedBuild });
             callbacks?.scheduleAlarm?.(DeploymentManager.EAS_POLL_INTERVAL_MS);
             return true;
         }

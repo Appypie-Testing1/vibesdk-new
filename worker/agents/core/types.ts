@@ -147,4 +147,5 @@ export interface EasBuildState {
     artifactUrl?: string;
     easArtifactUrl?: string;
     error?: string;
+    pollFailures?: number;
 }
