@@ -1191,8 +1191,10 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
     private static readonly EAS_MAX_POLL_FAILURES = 5;
 
     /**
-     * Create an EAS project on Expo servers and inject the projectId into app.json.
-     * Returns the projectId or null on failure.
+     * Ensure the EAS project is configured in app.json.
+     * Strategy 1: Run `yes | eas init` in the sandbox to auto-accept prompts.
+     * Strategy 2: Use Expo REST + GraphQL API to create project and inject projectId.
+     * Returns the projectId or a truthy string on success, null on failure.
      */
     private async ensureEasProject(
         sandboxId: string,
@@ -1200,38 +1202,53 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         client: BaseSandboxService,
         logger: ReturnType<typeof this.getLog>
     ): Promise<string | null> {
+        // Strategy 1: Run eas init with piped input (auto-accepts prompts)
+        logger.info('Attempting EAS project setup via eas init');
+        const easInitCmd = `yes '' | EXPO_TOKEN=${expoToken} npx eas-cli init 2>&1`;
+        const easInitResult = await client.executeCommands(sandboxId, [easInitCmd], 90_000);
+        const initOutput = easInitResult.results?.[0]?.output || '';
+        logger.info('eas init output', { success: easInitResult.success, output: initOutput.slice(0, 500) });
+
+        if (easInitResult.success) {
+            // Verify projectId was written to app.json
+            const verifyCmd = 'node -e "const a=require(\'./app.json\'); console.log(a.expo?.extra?.eas?.projectId || \'\')"';
+            const verifyResult = await client.executeCommands(sandboxId, [verifyCmd], 10_000);
+            const projectId = verifyResult.results?.[0]?.output?.trim();
+            if (projectId) {
+                logger.info('EAS project configured via eas init', { projectId });
+                return projectId;
+            }
+        }
+
+        // Strategy 2: Expo API fallback
+        logger.info('eas init did not configure project, trying Expo API');
         try {
-            // 1. Get user/account info from Expo API
+            // Get user/account info
             const meResp = await fetch('https://api.expo.dev/v2/users/me', {
                 headers: { Authorization: `Bearer ${expoToken}` },
             });
-            if (!meResp.ok) {
-                logger.error('Expo API /v2/users/me failed', { status: meResp.status });
-                return null;
-            }
-            const meData = await meResp.json() as {
-                data: { accounts: Array<{ id: string; name: string }> };
-            };
-            const account = meData.data?.accounts?.[0];
+            const meText = await meResp.text();
+            logger.info('Expo /v2/users/me response', { status: meResp.status, body: meText.slice(0, 500) });
+
+            if (!meResp.ok) return null;
+
+            const meData = JSON.parse(meText) as Record<string, unknown>;
+            // Expo API may nest under data.user or data directly
+            const userData = (meData.data as Record<string, unknown>) || {};
+            const accounts = (userData.accounts || (userData.user as Record<string, unknown>)?.accounts) as
+                Array<{ id: string; name: string }> | undefined;
+            const account = accounts?.[0];
             if (!account) {
-                logger.error('No Expo account found');
+                logger.error('No Expo account found in API response', { meData: JSON.stringify(meData).slice(0, 500) });
                 return null;
             }
 
-            // 2. Read slug from app.json in sandbox
-            const readCmd = 'node -e "console.log(JSON.stringify(require(\'./app.json\')))"';
+            // Read slug from app.json
+            const readCmd = 'node -e "const a=require(\'./app.json\'); console.log(a.expo?.slug || a.slug || \'my-app\')"';
             const readResult = await client.executeCommands(sandboxId, [readCmd], 10_000);
-            let slug = 'my-app';
-            if (readResult.success && readResult.results[0]?.output) {
-                try {
-                    const appJson = JSON.parse(readResult.results[0].output.trim());
-                    slug = appJson.expo?.slug || appJson.slug || slug;
-                } catch {
-                    logger.warn('Failed to parse app.json, using default slug');
-                }
-            }
+            const slug = readResult.results?.[0]?.output?.trim() || 'my-app';
 
-            // 3. Create project via Expo GraphQL API
+            // Create project via GraphQL
             const gqlResp = await fetch('https://api.expo.dev/graphql', {
                 method: 'POST',
                 headers: {
@@ -1242,22 +1259,21 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                     query: `mutation CreateApp($appInput: CreateAppInput!) {
                         app { createApp(appInput: $appInput) { id } }
                     }`,
-                    variables: {
-                        appInput: { accountId: account.id, projectName: slug },
-                    },
+                    variables: { appInput: { accountId: account.id, projectName: slug } },
                 }),
             });
+            const gqlText = await gqlResp.text();
+            logger.info('Expo GraphQL createApp response', { status: gqlResp.status, body: gqlText.slice(0, 500) });
 
-            const gqlData = await gqlResp.json() as {
+            const gqlData = JSON.parse(gqlText) as {
                 data?: { app?: { createApp?: { id: string } } };
                 errors?: Array<{ message: string }>;
             };
 
             let projectId = gqlData.data?.app?.createApp?.id;
 
-            // If project already exists, try to find it
-            if (!projectId && gqlData.errors?.some(e => e.message.includes('already'))) {
-                logger.info('Project may already exist, looking it up', { slug, account: account.name });
+            // If project already exists, look it up
+            if (!projectId && gqlData.errors?.some(e => e.message.includes('already') || e.message.includes('taken'))) {
                 const lookupResp = await fetch('https://api.expo.dev/graphql', {
                     method: 'POST',
                     headers: {
@@ -1265,44 +1281,29 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                         Authorization: `Bearer ${expoToken}`,
                     },
                     body: JSON.stringify({
-                        query: `query GetProject($name: String!, $accountName: String!) {
-                            project { byUsernameAndSlug(username: $accountName, slug: $name) { id } }
-                        }`,
-                        variables: { name: slug, accountName: account.name },
+                        query: `query { app { byFullName(fullName: "@${account.name}/${slug}") { id } } }`,
                     }),
                 });
                 const lookupData = await lookupResp.json() as {
-                    data?: { project?: { byUsernameAndSlug?: { id: string } } };
+                    data?: { app?: { byFullName?: { id: string } } };
                 };
-                projectId = lookupData.data?.project?.byUsernameAndSlug?.id;
+                projectId = lookupData.data?.app?.byFullName?.id;
+                logger.info('Looked up existing project', { projectId });
             }
 
             if (!projectId) {
-                logger.error('Failed to create/find EAS project', { errors: gqlData.errors });
+                logger.error('Failed to create/find EAS project', { gqlErrors: gqlData.errors, slug, account: account.name });
                 return null;
             }
 
-            // 4. Inject projectId into app.json in the sandbox
-            const injectCmd = `node -e "
-                const fs = require('fs');
-                const a = JSON.parse(fs.readFileSync('./app.json', 'utf8'));
-                a.expo = a.expo || {};
-                a.expo.extra = a.expo.extra || {};
-                a.expo.extra.eas = a.expo.extra.eas || {};
-                a.expo.extra.eas.projectId = '${projectId}';
-                fs.writeFileSync('./app.json', JSON.stringify(a, null, 2));
-                console.log('projectId injected: ${projectId}');
-            "`;
-            const injectResult = await client.executeCommands(sandboxId, [injectCmd], 10_000);
-            if (!injectResult.success) {
-                logger.error('Failed to inject projectId into app.json', { error: injectResult.error });
-                return null;
-            }
+            // Inject projectId into app.json
+            const injectCmd = `node -e "const fs=require('fs');const a=JSON.parse(fs.readFileSync('./app.json','utf8'));a.expo=a.expo||{};a.expo.extra=a.expo.extra||{};a.expo.extra.eas=a.expo.extra.eas||{};a.expo.extra.eas.projectId='${projectId}';fs.writeFileSync('./app.json',JSON.stringify(a,null,2));console.log('ok')"`;
+            await client.executeCommands(sandboxId, [injectCmd], 10_000);
 
-            logger.info('EAS project configured', { projectId, slug, account: account.name });
+            logger.info('EAS project configured via API', { projectId, slug });
             return projectId;
         } catch (error) {
-            logger.error('ensureEasProject failed', { error: error instanceof Error ? error.message : String(error) });
+            logger.error('ensureEasProject API fallback failed', { error: error instanceof Error ? error.message : String(error) });
             return null;
         }
     }
