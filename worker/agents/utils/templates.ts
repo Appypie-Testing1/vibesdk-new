@@ -576,6 +576,14 @@ const styles = StyleSheet.create({
                 paths: { '@/*': ['./*'] },
             },
         }, null, 2),
+        'babel.config.js': `module.exports = function (api) {
+  api.cache(true);
+  return {
+    presets: ['babel-preset-expo'],
+    plugins: ['react-native-reanimated/plugin'],
+  };
+};
+`,
         'metro.config.js': `const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
@@ -749,7 +757,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         initCommand: 'node _expo-proxy.cjs',
         frameworks: ['react-native', 'expo', 'expo-router'],
         importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'package.json', 'app.json'],
-        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'eas.json', 'wrangler.jsonc', 'worker.ts'],
+        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'eas.json', 'babel.config.js', 'wrangler.jsonc', 'worker.ts'],
         redactedFiles: [],
         disabled: false,
     };
@@ -1058,6 +1066,14 @@ export const apiClient = {
                 paths: { '@/*': ['./*'] },
             },
         }, null, 2),
+        'babel.config.js': `module.exports = function (api) {
+  api.cache(true);
+  return {
+    presets: ['babel-preset-expo'],
+    plugins: ['react-native-reanimated/plugin'],
+  };
+};
+`,
         'wrangler.jsonc': JSON.stringify({
             "$schema": "node_modules/wrangler/config-schema.json",
             "name": "expo-fullstack-app",
@@ -1261,7 +1277,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         initCommand: 'node _expo-proxy.cjs',
         frameworks: ['react-native', 'expo', 'expo-router', 'hono', 'drizzle-orm'],
         importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'api/src/index.ts', 'lib/api-client.ts', 'package.json', 'wrangler.jsonc'],
-        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'eas.json', 'wrangler.jsonc'],
+        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'eas.json', 'babel.config.js', 'wrangler.jsonc'],
         redactedFiles: [],
         disabled: false,
     };

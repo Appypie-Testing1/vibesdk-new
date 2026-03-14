@@ -1403,8 +1403,8 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 logger.warn('Git init for EAS may have failed (could already exist)', { error: gitResult.error });
             }
 
-            // Ensure android.package and ios.bundleIdentifier are set (required by EAS in non-interactive mode)
-            const ensureNativeIds = `node -e "
+            // Ensure android.package, ios.bundleIdentifier, and babel.config.js exist (required for EAS builds)
+            const ensureBuildPrereqs = `node -e "
                 var fs = require('fs');
                 var a = JSON.parse(fs.readFileSync('./app.json', 'utf8'));
                 var slug = (a.expo && a.expo.slug) || 'myapp';
@@ -1415,9 +1415,20 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 if (!a.expo.ios) a.expo.ios = {};
                 if (!a.expo.ios.bundleIdentifier) a.expo.ios.bundleIdentifier = pkg;
                 fs.writeFileSync('./app.json', JSON.stringify(a, null, 2));
+                if (!fs.existsSync('./babel.config.js')) {
+                    fs.writeFileSync('./babel.config.js',
+                        'module.exports = function (api) {\\n' +
+                        '  api.cache(true);\\n' +
+                        '  return {\\n' +
+                        '    presets: [\"babel-preset-expo\"],\\n' +
+                        '    plugins: [\"react-native-reanimated/plugin\"],\\n' +
+                        '  };\\n' +
+                        '};\\n'
+                    );
+                }
                 console.log('ok');
             "`;
-            await client.executeCommands(state.sandboxInstanceId, [ensureNativeIds], 10_000);
+            await client.executeCommands(state.sandboxInstanceId, [ensureBuildPrereqs], 10_000);
 
             // Create EAS project via Expo API and inject projectId into app.json
             const easProjectResult = await this.ensureEasProject(state.sandboxInstanceId, expoToken, client, logger);
