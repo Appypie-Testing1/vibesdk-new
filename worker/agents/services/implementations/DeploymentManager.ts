@@ -1243,7 +1243,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             '}',
             '',
             'async function main() {',
-            '  const me = await gql("query { meUserActor { __typename id ... on User { username accounts { id name } } ... on Robot { firstName accounts { id name } } } }");',
+            '  const me = await gql("query { meUserActor { id ... on User { username accounts { id name } } } }");',
             '  if (me.status !== 200) { console.log(JSON.stringify({ error: "graphql_http_error", status: me.status, body: me.body.slice(0, 300) })); return; }',
             '  let meData;',
             '  try { meData = JSON.parse(me.body); } catch(e) { console.log(JSON.stringify({ error: "parse_failed", body: me.body.slice(0, 300) })); return; }',
