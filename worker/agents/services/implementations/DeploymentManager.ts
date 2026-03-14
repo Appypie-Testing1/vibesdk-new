@@ -1201,13 +1201,113 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         expoToken: string,
         client: BaseSandboxService,
         logger: ReturnType<typeof this.getLog>
-    ): Promise<string | null> {
-        // Strategy 1: Run eas init with piped input (auto-accepts prompts)
-        logger.info('Attempting EAS project setup via eas init');
-        const easInitCmd = `yes '' | EXPO_TOKEN=${expoToken} npx eas-cli init 2>&1`;
-        const easInitResult = await client.executeCommands(sandboxId, [easInitCmd], 90_000);
-        const initOutput = easInitResult.results?.[0]?.output || '';
-        logger.info('eas init output', { success: easInitResult.success, output: initOutput.slice(0, 500) });
+    ): Promise<{ success: true; projectId: string } | { success: false; error: string }> {
+        // Read slug from app.json
+        const readCmd = 'node -e "const a=require(\'./app.json\'); console.log(JSON.stringify({slug: a.expo?.slug || a.slug || \'my-app\', existingId: a.expo?.extra?.eas?.projectId || \'\'}))"';
+        const readResult = await client.executeCommands(sandboxId, [readCmd], 10_000);
+        const appInfo = (() => {
+            try { return JSON.parse(readResult.results?.[0]?.output?.trim() || '{}') as { slug: string; existingId: string }; }
+            catch { return { slug: 'my-app', existingId: '' }; }
+        })();
+
+        // If projectId already set, we're done
+        if (appInfo.existingId) {
+            logger.info('EAS projectId already in app.json', { projectId: appInfo.existingId });
+            return { success: true, projectId: appInfo.existingId };
+        }
+
+        // Strategy 1 (primary): Create via Expo REST + GraphQL API from Worker
+        logger.info('Creating EAS project via Expo API', { slug: appInfo.slug });
+        try {
+            // Get user/account info
+            const meResp = await fetch('https://api.expo.dev/v2/users/me', {
+                headers: {
+                    Authorization: `Bearer ${expoToken}`,
+                    'User-Agent': 'eas-cli',
+                },
+            });
+            const meText = await meResp.text();
+            logger.info('Expo /v2/users/me response', { status: meResp.status, body: meText.slice(0, 500) });
+
+            if (!meResp.ok) {
+                logger.warn('Expo API auth failed, will try eas init fallback', { status: meResp.status });
+            } else {
+                const meData = JSON.parse(meText) as Record<string, unknown>;
+                const dataObj = meData.data as Record<string, unknown> | undefined;
+                // Handle multiple response shapes from Expo API
+                const accounts = (
+                    dataObj?.accounts ||
+                    (dataObj?.user as Record<string, unknown>)?.accounts ||
+                    meData.accounts
+                ) as Array<{ id: string; name: string }> | undefined;
+                const account = accounts?.[0];
+
+                if (account) {
+                    // Create project via GraphQL
+                    const gqlResp = await fetch('https://api.expo.dev/graphql', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${expoToken}`,
+                            'User-Agent': 'eas-cli',
+                        },
+                        body: JSON.stringify({
+                            query: `mutation CreateApp($appInput: CreateAppInput!) { app { createApp(appInput: $appInput) { id } } }`,
+                            variables: { appInput: { accountId: account.id, projectName: appInfo.slug } },
+                        }),
+                    });
+                    const gqlText = await gqlResp.text();
+                    logger.info('Expo GraphQL CreateApp response', { status: gqlResp.status, body: gqlText.slice(0, 500) });
+
+                    const gqlData = JSON.parse(gqlText) as {
+                        data?: { app?: { createApp?: { id: string } } };
+                        errors?: Array<{ message: string }>;
+                    };
+
+                    let projectId = gqlData.data?.app?.createApp?.id;
+
+                    // If project already exists, look it up
+                    if (!projectId && gqlData.errors?.some(e => e.message.includes('already') || e.message.includes('taken') || e.message.includes('exists'))) {
+                        const lookupResp = await fetch('https://api.expo.dev/graphql', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                Authorization: `Bearer ${expoToken}`,
+                                'User-Agent': 'eas-cli',
+                            },
+                            body: JSON.stringify({
+                                query: `query { app { byFullName(fullName: "@${account.name}/${appInfo.slug}") { id } } }`,
+                            }),
+                        });
+                        const lookupData = await lookupResp.json() as {
+                            data?: { app?: { byFullName?: { id: string } } };
+                        };
+                        projectId = lookupData.data?.app?.byFullName?.id;
+                    }
+
+                    if (projectId) {
+                        // Inject projectId into app.json
+                        const injectCmd = `node -e "const fs=require('fs');const a=JSON.parse(fs.readFileSync('./app.json','utf8'));a.expo=a.expo||{};a.expo.extra=a.expo.extra||{};a.expo.extra.eas=a.expo.extra.eas||{};a.expo.extra.eas.projectId='${projectId}';fs.writeFileSync('./app.json',JSON.stringify(a,null,2));console.log('ok')"`;
+                        await client.executeCommands(sandboxId, [injectCmd], 10_000);
+                        logger.info('EAS project created via API', { projectId, account: account.name });
+                        return { success: true, projectId };
+                    }
+
+                    logger.warn('GraphQL create did not return projectId', { response: gqlText.slice(0, 300) });
+                } else {
+                    logger.warn('No Expo account found in API response', { response: meText.slice(0, 300) });
+                }
+            }
+        } catch (apiErr) {
+            logger.warn('Expo API strategy failed', { error: apiErr instanceof Error ? apiErr.message : String(apiErr) });
+        }
+
+        // Strategy 2 (fallback): Run eas init with piped input in sandbox
+        logger.info('Falling back to eas init in sandbox');
+        const easInitCmd = `printf 'y\\ny\\ny\\n' | EXPO_TOKEN=${expoToken} bunx eas-cli init 2>&1`;
+        const easInitResult = await client.executeCommands(sandboxId, [easInitCmd], 120_000);
+        const initOutput = easInitResult.results?.[0]?.output || easInitResult.results?.[0]?.error || '';
+        logger.info('eas init result', { success: easInitResult.success, output: initOutput.slice(0, 1000) });
 
         if (easInitResult.success) {
             // Verify projectId was written to app.json
@@ -1216,96 +1316,14 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             const projectId = verifyResult.results?.[0]?.output?.trim();
             if (projectId) {
                 logger.info('EAS project configured via eas init', { projectId });
-                return projectId;
+                return { success: true, projectId };
             }
         }
 
-        // Strategy 2: Expo API fallback
-        logger.info('eas init did not configure project, trying Expo API');
-        try {
-            // Get user/account info
-            const meResp = await fetch('https://api.expo.dev/v2/users/me', {
-                headers: { Authorization: `Bearer ${expoToken}` },
-            });
-            const meText = await meResp.text();
-            logger.info('Expo /v2/users/me response', { status: meResp.status, body: meText.slice(0, 500) });
-
-            if (!meResp.ok) return null;
-
-            const meData = JSON.parse(meText) as Record<string, unknown>;
-            // Expo API may nest under data.user or data directly
-            const userData = (meData.data as Record<string, unknown>) || {};
-            const accounts = (userData.accounts || (userData.user as Record<string, unknown>)?.accounts) as
-                Array<{ id: string; name: string }> | undefined;
-            const account = accounts?.[0];
-            if (!account) {
-                logger.error('No Expo account found in API response', { meData: JSON.stringify(meData).slice(0, 500) });
-                return null;
-            }
-
-            // Read slug from app.json
-            const readCmd = 'node -e "const a=require(\'./app.json\'); console.log(a.expo?.slug || a.slug || \'my-app\')"';
-            const readResult = await client.executeCommands(sandboxId, [readCmd], 10_000);
-            const slug = readResult.results?.[0]?.output?.trim() || 'my-app';
-
-            // Create project via GraphQL
-            const gqlResp = await fetch('https://api.expo.dev/graphql', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${expoToken}`,
-                },
-                body: JSON.stringify({
-                    query: `mutation CreateApp($appInput: CreateAppInput!) {
-                        app { createApp(appInput: $appInput) { id } }
-                    }`,
-                    variables: { appInput: { accountId: account.id, projectName: slug } },
-                }),
-            });
-            const gqlText = await gqlResp.text();
-            logger.info('Expo GraphQL createApp response', { status: gqlResp.status, body: gqlText.slice(0, 500) });
-
-            const gqlData = JSON.parse(gqlText) as {
-                data?: { app?: { createApp?: { id: string } } };
-                errors?: Array<{ message: string }>;
-            };
-
-            let projectId = gqlData.data?.app?.createApp?.id;
-
-            // If project already exists, look it up
-            if (!projectId && gqlData.errors?.some(e => e.message.includes('already') || e.message.includes('taken'))) {
-                const lookupResp = await fetch('https://api.expo.dev/graphql', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${expoToken}`,
-                    },
-                    body: JSON.stringify({
-                        query: `query { app { byFullName(fullName: "@${account.name}/${slug}") { id } } }`,
-                    }),
-                });
-                const lookupData = await lookupResp.json() as {
-                    data?: { app?: { byFullName?: { id: string } } };
-                };
-                projectId = lookupData.data?.app?.byFullName?.id;
-                logger.info('Looked up existing project', { projectId });
-            }
-
-            if (!projectId) {
-                logger.error('Failed to create/find EAS project', { gqlErrors: gqlData.errors, slug, account: account.name });
-                return null;
-            }
-
-            // Inject projectId into app.json
-            const injectCmd = `node -e "const fs=require('fs');const a=JSON.parse(fs.readFileSync('./app.json','utf8'));a.expo=a.expo||{};a.expo.extra=a.expo.extra||{};a.expo.extra.eas=a.expo.extra.eas||{};a.expo.extra.eas.projectId='${projectId}';fs.writeFileSync('./app.json',JSON.stringify(a,null,2));console.log('ok')"`;
-            await client.executeCommands(sandboxId, [injectCmd], 10_000);
-
-            logger.info('EAS project configured via API', { projectId, slug });
-            return projectId;
-        } catch (error) {
-            logger.error('ensureEasProject API fallback failed', { error: error instanceof Error ? error.message : String(error) });
-            return null;
-        }
+        return {
+            success: false,
+            error: `Both strategies failed. eas init output: ${initOutput.slice(0, 400)}`
+        };
     }
 
     /**
@@ -1352,9 +1370,9 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
 
             // Create EAS project via Expo API and inject projectId into app.json
             // (eas init --non-interactive cannot auto-create projects)
-            const projectId = await this.ensureEasProject(state.sandboxInstanceId, expoToken, client, logger);
-            if (!projectId) {
-                const error = 'Failed to create EAS project on Expo servers';
+            const easProjectResult = await this.ensureEasProject(state.sandboxInstanceId, expoToken, client, logger);
+            if (!easProjectResult.success) {
+                const error = `EAS project setup failed: ${easProjectResult.error}`;
                 logger.error(error);
                 callbacks?.onError?.(error);
                 return null;
@@ -1364,7 +1382,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             const gitCommit = 'git add -A && git commit -m "eas-project-config" --no-verify';
             await client.executeCommands(state.sandboxInstanceId, [gitCommit], 15_000);
 
-            const command = `EXPO_TOKEN=${expoToken} npx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
+            const command = `EXPO_TOKEN=${expoToken} bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 120_000);
 
             if (!result.success || !result.results[0]?.success) {
@@ -1450,7 +1468,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         }
 
         try {
-            const command = `EXPO_TOKEN=${expoToken} npx eas-cli build:view ${easBuild.buildId} --json`;
+            const command = `EXPO_TOKEN=${expoToken} bunx eas-cli build:view ${easBuild.buildId} --json`;
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 30_000);
 
             if (!result.success || !result.results[0]?.success) {

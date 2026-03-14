@@ -564,6 +564,7 @@ const styles = StyleSheet.create({
                 '@types/react': '~19.1.0',
                 'typescript': '~5.9.0',
                 'esbuild': '^0.24.0',
+                'eas-cli': '^15.0.0',
             },
         }, null, 2),
         'tsconfig.json': JSON.stringify({
@@ -1043,6 +1044,7 @@ export const apiClient = {
                 '@cloudflare/workers-types': '^4.20251213.0',
                 'wrangler': '^4.14.0',
                 'esbuild': '^0.24.0',
+                'eas-cli': '^15.0.0',
             },
         }, null, 2),
         'tsconfig.json': JSON.stringify({
