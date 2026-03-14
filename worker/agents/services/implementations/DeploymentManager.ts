@@ -1191,6 +1191,123 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
     private static readonly EAS_MAX_POLL_FAILURES = 5;
 
     /**
+     * Create an EAS project on Expo servers and inject the projectId into app.json.
+     * Returns the projectId or null on failure.
+     */
+    private async ensureEasProject(
+        sandboxId: string,
+        expoToken: string,
+        client: BaseSandboxService,
+        logger: ReturnType<typeof this.getLog>
+    ): Promise<string | null> {
+        try {
+            // 1. Get user/account info from Expo API
+            const meResp = await fetch('https://api.expo.dev/v2/users/me', {
+                headers: { Authorization: `Bearer ${expoToken}` },
+            });
+            if (!meResp.ok) {
+                logger.error('Expo API /v2/users/me failed', { status: meResp.status });
+                return null;
+            }
+            const meData = await meResp.json() as {
+                data: { accounts: Array<{ id: string; name: string }> };
+            };
+            const account = meData.data?.accounts?.[0];
+            if (!account) {
+                logger.error('No Expo account found');
+                return null;
+            }
+
+            // 2. Read slug from app.json in sandbox
+            const readCmd = 'node -e "console.log(JSON.stringify(require(\'./app.json\')))"';
+            const readResult = await client.executeCommands(sandboxId, [readCmd], 10_000);
+            let slug = 'my-app';
+            if (readResult.success && readResult.results[0]?.output) {
+                try {
+                    const appJson = JSON.parse(readResult.results[0].output.trim());
+                    slug = appJson.expo?.slug || appJson.slug || slug;
+                } catch {
+                    logger.warn('Failed to parse app.json, using default slug');
+                }
+            }
+
+            // 3. Create project via Expo GraphQL API
+            const gqlResp = await fetch('https://api.expo.dev/graphql', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${expoToken}`,
+                },
+                body: JSON.stringify({
+                    query: `mutation CreateApp($appInput: CreateAppInput!) {
+                        app { createApp(appInput: $appInput) { id } }
+                    }`,
+                    variables: {
+                        appInput: { accountId: account.id, projectName: slug },
+                    },
+                }),
+            });
+
+            const gqlData = await gqlResp.json() as {
+                data?: { app?: { createApp?: { id: string } } };
+                errors?: Array<{ message: string }>;
+            };
+
+            let projectId = gqlData.data?.app?.createApp?.id;
+
+            // If project already exists, try to find it
+            if (!projectId && gqlData.errors?.some(e => e.message.includes('already'))) {
+                logger.info('Project may already exist, looking it up', { slug, account: account.name });
+                const lookupResp = await fetch('https://api.expo.dev/graphql', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${expoToken}`,
+                    },
+                    body: JSON.stringify({
+                        query: `query GetProject($name: String!, $accountName: String!) {
+                            project { byUsernameAndSlug(username: $accountName, slug: $name) { id } }
+                        }`,
+                        variables: { name: slug, accountName: account.name },
+                    }),
+                });
+                const lookupData = await lookupResp.json() as {
+                    data?: { project?: { byUsernameAndSlug?: { id: string } } };
+                };
+                projectId = lookupData.data?.project?.byUsernameAndSlug?.id;
+            }
+
+            if (!projectId) {
+                logger.error('Failed to create/find EAS project', { errors: gqlData.errors });
+                return null;
+            }
+
+            // 4. Inject projectId into app.json in the sandbox
+            const injectCmd = `node -e "
+                const fs = require('fs');
+                const a = JSON.parse(fs.readFileSync('./app.json', 'utf8'));
+                a.expo = a.expo || {};
+                a.expo.extra = a.expo.extra || {};
+                a.expo.extra.eas = a.expo.extra.eas || {};
+                a.expo.extra.eas.projectId = '${projectId}';
+                fs.writeFileSync('./app.json', JSON.stringify(a, null, 2));
+                console.log('projectId injected: ${projectId}');
+            "`;
+            const injectResult = await client.executeCommands(sandboxId, [injectCmd], 10_000);
+            if (!injectResult.success) {
+                logger.error('Failed to inject projectId into app.json', { error: injectResult.error });
+                return null;
+            }
+
+            logger.info('EAS project configured', { projectId, slug, account: account.name });
+            return projectId;
+        } catch (error) {
+            logger.error('ensureEasProject failed', { error: error instanceof Error ? error.message : String(error) });
+            return null;
+        }
+    }
+
+    /**
      * Trigger an EAS build for the given platform.
      * Runs `eas build` in the sandbox and stores the build ID in state.
      * Returns the build state for the caller to broadcast via WebSocket.
@@ -1232,12 +1349,19 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 logger.warn('Git init for EAS may have failed (could already exist)', { error: gitResult.error });
             }
 
-            // Initialize EAS project (links to Expo account, required before build in non-interactive mode)
-            const easInit = `EXPO_TOKEN=${expoToken} npx eas-cli init --non-interactive`;
-            const easInitResult = await client.executeCommands(state.sandboxInstanceId, [easInit], 60_000);
-            if (!easInitResult.success) {
-                logger.warn('EAS init may have failed', { error: easInitResult.error });
+            // Create EAS project via Expo API and inject projectId into app.json
+            // (eas init --non-interactive cannot auto-create projects)
+            const projectId = await this.ensureEasProject(state.sandboxInstanceId, expoToken, client, logger);
+            if (!projectId) {
+                const error = 'Failed to create EAS project on Expo servers';
+                logger.error(error);
+                callbacks?.onError?.(error);
+                return null;
             }
+
+            // Commit the updated app.json with projectId
+            const gitCommit = 'git add -A && git commit -m "eas-project-config" --no-verify';
+            await client.executeCommands(state.sandboxInstanceId, [gitCommit], 15_000);
 
             const command = `EXPO_TOKEN=${expoToken} npx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 120_000);
