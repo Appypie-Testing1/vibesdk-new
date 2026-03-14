@@ -1215,66 +1215,81 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             return { success: true, projectId: appInfo.existingId };
         }
 
-        // Use node script in sandbox to call Expo API (sandbox has proven network access to expo.dev)
-        // This avoids eas-cli TTY issues and Worker fetch issues
+        // Use node script in sandbox to call Expo GraphQL API
+        // (sandbox has proven network access to expo.dev; REST /v2 endpoints return 404)
         const apiScript = `node -e "
 const https = require('https');
 const fs = require('fs');
 const token = process.env.EXPO_TOKEN;
 const slug = '${appInfo.slug}';
 
-function request(options, body) {
+function gql(query, variables) {
+  const body = JSON.stringify({ query, variables });
   return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
+    const req = https.request({
+      hostname: 'api.expo.dev',
+      path: '/graphql',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token,
+      }
+    }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => resolve({ status: res.statusCode, body: data }));
     });
     req.on('error', reject);
-    if (body) req.write(body);
+    req.write(body);
     req.end();
   });
 }
 
 async function main() {
-  // Step 1: Get account info
-  const me = await request({
-    hostname: 'api.expo.dev',
-    path: '/v2/users/me',
-    method: 'GET',
-    headers: { 'Authorization': 'Bearer ' + token }
-  });
+  // Step 1: Get current user and accounts via GraphQL
+  const me = await gql('query { meUserActor { __typename id ... on User { username accounts { id name } } ... on Robot { firstName accounts { id name } } } }');
 
   if (me.status !== 200) {
-    console.log(JSON.stringify({ error: 'auth_failed', status: me.status, body: me.body.slice(0, 300) }));
+    console.log(JSON.stringify({ error: 'graphql_failed', status: me.status, body: me.body.slice(0, 300) }));
     return;
   }
 
-  const meData = JSON.parse(me.body);
-  const accounts = meData.data?.accounts || meData.data?.user?.accounts || meData.accounts || [];
+  let meData;
+  try { meData = JSON.parse(me.body); } catch(e) {
+    console.log(JSON.stringify({ error: 'parse_failed', body: me.body.slice(0, 300) }));
+    return;
+  }
+
+  if (meData.errors && meData.errors.length > 0) {
+    console.log(JSON.stringify({ error: 'auth_failed', messages: meData.errors.map(e => e.message).join('; ') }));
+    return;
+  }
+
+  const actor = meData.data?.meUserActor;
+  if (!actor) {
+    console.log(JSON.stringify({ error: 'no_user', body: me.body.slice(0, 300) }));
+    return;
+  }
+
+  const accounts = actor.accounts || [];
   if (accounts.length === 0) {
-    console.log(JSON.stringify({ error: 'no_accounts', body: me.body.slice(0, 300) }));
+    console.log(JSON.stringify({ error: 'no_accounts', user: actor.username || actor.firstName, body: me.body.slice(0, 300) }));
     return;
   }
   const account = accounts[0];
 
   // Step 2: Create project via GraphQL
-  const createBody = JSON.stringify({
-    query: 'mutation CreateApp(\$appInput: CreateAppInput!) { app { createApp(appInput: \$appInput) { id } } }',
-    variables: { appInput: { accountId: account.id, projectName: slug } }
-  });
+  const create = await gql(
+    'mutation CreateApp(\$appInput: CreateAppInput!) { app { createApp(appInput: \$appInput) { id } } }',
+    { appInput: { accountId: account.id, projectName: slug } }
+  );
 
-  const create = await request({
-    hostname: 'api.expo.dev',
-    path: '/graphql',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + token
-    }
-  }, createBody);
+  let createData;
+  try { createData = JSON.parse(create.body); } catch(e) {
+    console.log(JSON.stringify({ error: 'create_parse_failed', body: create.body.slice(0, 300) }));
+    return;
+  }
 
-  const createData = JSON.parse(create.body);
   let projectId = createData.data?.app?.createApp?.id;
 
   // Step 3: If already exists, look it up
@@ -1284,20 +1299,11 @@ async function main() {
     );
 
     if (hasExisting) {
-      const lookupBody = JSON.stringify({
-        query: '{ app { byFullName(fullName: \"@' + account.name + '/' + slug + '\") { id } } }'
-      });
-      const lookup = await request({
-        hostname: 'api.expo.dev',
-        path: '/graphql',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + token
-        }
-      }, lookupBody);
-      const lookupData = JSON.parse(lookup.body);
-      projectId = lookupData.data?.app?.byFullName?.id;
+      const lookup = await gql('query(\$fullName: String!) { app { byFullName(fullName: \$fullName) { id } } }', { fullName: '@' + account.name + '/' + slug });
+      try {
+        const lookupData = JSON.parse(lookup.body);
+        projectId = lookupData.data?.app?.byFullName?.id;
+      } catch(e) {}
     }
 
     if (!projectId) {
