@@ -515,6 +515,8 @@ const styles = StyleSheet.create({
                 orientation: 'portrait',
                 scheme: 'expo-app',
                 platforms: ['ios', 'android', 'web'],
+                ios: { bundleIdentifier: 'com.expo.app' },
+                android: { package: 'com.expo.app' },
                 web: { bundler: 'metro' },
                 plugins: ['expo-router'],
             }
@@ -1001,6 +1003,8 @@ export const apiClient = {
                 orientation: 'portrait',
                 scheme: 'expo-fullstack-app',
                 platforms: ['ios', 'android', 'web'],
+                ios: { bundleIdentifier: 'com.expo.fullstackapp' },
+                android: { package: 'com.expo.fullstackapp' },
                 web: { bundler: 'metro' },
                 plugins: ['expo-router'],
             }

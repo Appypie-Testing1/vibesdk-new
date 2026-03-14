@@ -1403,8 +1403,23 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 logger.warn('Git init for EAS may have failed (could already exist)', { error: gitResult.error });
             }
 
+            // Ensure android.package and ios.bundleIdentifier are set (required by EAS in non-interactive mode)
+            const ensureNativeIds = `node -e "
+                var fs = require('fs');
+                var a = JSON.parse(fs.readFileSync('./app.json', 'utf8'));
+                var slug = (a.expo && a.expo.slug) || 'myapp';
+                var pkg = 'com.expo.' + slug.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                a.expo = a.expo || {};
+                if (!a.expo.android) a.expo.android = {};
+                if (!a.expo.android.package) a.expo.android.package = pkg;
+                if (!a.expo.ios) a.expo.ios = {};
+                if (!a.expo.ios.bundleIdentifier) a.expo.ios.bundleIdentifier = pkg;
+                fs.writeFileSync('./app.json', JSON.stringify(a, null, 2));
+                console.log('ok');
+            "`;
+            await client.executeCommands(state.sandboxInstanceId, [ensureNativeIds], 10_000);
+
             // Create EAS project via Expo API and inject projectId into app.json
-            // (eas init --non-interactive cannot auto-create projects)
             const easProjectResult = await this.ensureEasProject(state.sandboxInstanceId, expoToken, client, logger);
             if (!easProjectResult.success) {
                 const error = `EAS project setup failed: ${easProjectResult.error}`;
