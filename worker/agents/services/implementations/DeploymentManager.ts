@@ -1403,7 +1403,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 logger.warn('Git init for EAS may have failed (could already exist)', { error: gitResult.error });
             }
 
-            // Ensure android.package, ios.bundleIdentifier, and babel.config.js exist (required for EAS builds)
+            // Ensure build prerequisites: android.package, ios.bundleIdentifier, babel.config.js, .gitignore
             const ensureBuildPrereqs = `node -e "
                 var fs = require('fs');
                 var a = JSON.parse(fs.readFileSync('./app.json', 'utf8'));
@@ -1426,9 +1426,19 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                         '};\\n'
                     );
                 }
+                if (!fs.existsSync('./.gitignore')) {
+                    fs.writeFileSync('./.gitignore', 'node_modules/\\n.expo/\\ndist/\\n*.tsbuildinfo\\n');
+                } else {
+                    var gi = fs.readFileSync('./.gitignore', 'utf8');
+                    if (!gi.includes('.expo')) fs.writeFileSync('./.gitignore', gi + '\\n.expo/\\n');
+                }
                 console.log('ok');
             "`;
             await client.executeCommands(state.sandboxInstanceId, [ensureBuildPrereqs], 10_000);
+
+            // Fix outdated native dependencies (e.g. react-native-screens must be ~4.16.0 for RN 0.81)
+            const fixDeps = 'bunx expo install --fix 2>&1 || true';
+            await client.executeCommands(state.sandboxInstanceId, [fixDeps], 60_000);
 
             // Create EAS project via Expo API and inject projectId into app.json
             const easProjectResult = await this.ensureEasProject(state.sandboxInstanceId, expoToken, client, logger);

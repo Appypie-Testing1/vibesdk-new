@@ -507,6 +507,11 @@ const styles = StyleSheet.create({
   },
 });
 `,
+        '.gitignore': `node_modules/
+.expo/
+dist/
+*.tsbuildinfo
+`,
         'app.json': JSON.stringify({
             expo: {
                 name: 'expo-app',
@@ -557,7 +562,7 @@ const styles = StyleSheet.create({
                 'react-native-gesture-handler': '~2.28.0',
                 'react-native-reanimated': '~4.1.0',
                 'react-native-safe-area-context': '~5.6.0',
-                'react-native-screens': '~4.11.0',
+                'react-native-screens': '~4.16.0',
                 'react-native-web': '~0.21.0',
                 'react-native-worklets': '~0.5.0',
             },
@@ -566,7 +571,6 @@ const styles = StyleSheet.create({
                 '@types/react': '~19.1.0',
                 'typescript': '~5.9.0',
                 'esbuild': '^0.24.0',
-                'eas-cli': '^15.0.0',
             },
         }, null, 2),
         'tsconfig.json': JSON.stringify({
@@ -1003,6 +1007,11 @@ export const apiClient = {
     request<T>(path, { method: 'DELETE' }),
 };
 `,
+        '.gitignore': `node_modules/
+.expo/
+dist/
+*.tsbuildinfo
+`,
         'app.json': JSON.stringify({
             expo: {
                 name: 'expo-fullstack-app',
@@ -1043,7 +1052,7 @@ export const apiClient = {
                 'react-native-gesture-handler': '~2.28.0',
                 'react-native-reanimated': '~4.1.0',
                 'react-native-safe-area-context': '~5.6.0',
-                'react-native-screens': '~4.11.0',
+                'react-native-screens': '~4.16.0',
                 'react-native-web': '~0.21.0',
                 'react-native-worklets': '~0.5.0',
                 'hono': '^4.11.0',
@@ -1056,7 +1065,6 @@ export const apiClient = {
                 '@cloudflare/workers-types': '^4.20251213.0',
                 'wrangler': '^4.14.0',
                 'esbuild': '^0.24.0',
-                'eas-cli': '^15.0.0',
             },
         }, null, 2),
         'tsconfig.json': JSON.stringify({
