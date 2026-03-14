@@ -1215,123 +1215,84 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             return { success: true, projectId: appInfo.existingId };
         }
 
-        // Use node script in sandbox to call Expo GraphQL API
-        // (sandbox has proven network access to expo.dev; REST /v2 endpoints return 404)
-        const apiScript = `node -e "
-const https = require('https');
-const fs = require('fs');
-const token = process.env.EXPO_TOKEN;
-const slug = '${appInfo.slug}';
+        // Build a Node.js script to call Expo GraphQL API from inside the sandbox.
+        // We base64-encode it to avoid shell $ expansion corrupting GraphQL variables.
+        const scriptContent = [
+            'const https = require("https");',
+            'const fs = require("fs");',
+            'const token = process.env.EXPO_TOKEN;',
+            `const slug = "${appInfo.slug}";`,
+            '',
+            'function gql(query, variables) {',
+            '  const body = JSON.stringify({ query, variables });',
+            '  return new Promise((resolve, reject) => {',
+            '    const req = https.request({',
+            '      hostname: "api.expo.dev",',
+            '      path: "/graphql",',
+            '      method: "POST",',
+            '      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token }',
+            '    }, (res) => {',
+            '      let data = "";',
+            '      res.on("data", chunk => data += chunk);',
+            '      res.on("end", () => resolve({ status: res.statusCode, body: data }));',
+            '    });',
+            '    req.on("error", reject);',
+            '    req.write(body);',
+            '    req.end();',
+            '  });',
+            '}',
+            '',
+            'async function main() {',
+            '  const me = await gql("query { meUserActor { __typename id ... on User { username accounts { id name } } ... on Robot { firstName accounts { id name } } } }");',
+            '  if (me.status !== 200) { console.log(JSON.stringify({ error: "graphql_http_error", status: me.status, body: me.body.slice(0, 300) })); return; }',
+            '  let meData;',
+            '  try { meData = JSON.parse(me.body); } catch(e) { console.log(JSON.stringify({ error: "parse_failed", body: me.body.slice(0, 300) })); return; }',
+            '  if (meData.errors && meData.errors.length > 0) { console.log(JSON.stringify({ error: "auth_failed", messages: meData.errors.map(e => e.message).join("; ") })); return; }',
+            '  const actor = meData.data && meData.data.meUserActor;',
+            '  if (!actor) { console.log(JSON.stringify({ error: "no_user", body: me.body.slice(0, 300) })); return; }',
+            '  const accounts = actor.accounts || [];',
+            '  if (accounts.length === 0) { console.log(JSON.stringify({ error: "no_accounts", user: actor.username || actor.firstName })); return; }',
+            '  const account = accounts[0];',
+            '',
+            '  const create = await gql("mutation CreateApp($appInput: CreateAppInput!) { app { createApp(appInput: $appInput) { id } } }", { appInput: { accountId: account.id, projectName: slug } });',
+            '  let createData;',
+            '  try { createData = JSON.parse(create.body); } catch(e) { console.log(JSON.stringify({ error: "create_parse_failed", body: create.body.slice(0, 300) })); return; }',
+            '  let projectId = createData.data && createData.data.app && createData.data.app.createApp && createData.data.app.createApp.id;',
+            '',
+            '  if (!projectId) {',
+            '    const errs = createData.errors || [];',
+            '    const hasExisting = errs.some(function(e) { return e.message && (e.message.indexOf("already") >= 0 || e.message.indexOf("taken") >= 0 || e.message.indexOf("exists") >= 0); });',
+            '    if (hasExisting) {',
+            '      const lookup = await gql("query($fullName: String!) { app { byFullName(fullName: $fullName) { id } } }", { fullName: "@" + account.name + "/" + slug });',
+            '      try { const ld = JSON.parse(lookup.body); projectId = ld.data && ld.data.app && ld.data.app.byFullName && ld.data.app.byFullName.id; } catch(e) {}',
+            '    }',
+            '    if (!projectId) { console.log(JSON.stringify({ error: "create_failed", account: account.name, slug: slug, body: create.body.slice(0, 300) })); return; }',
+            '  }',
+            '',
+            '  const appJson = JSON.parse(fs.readFileSync("./app.json", "utf8"));',
+            '  appJson.expo = appJson.expo || {};',
+            '  appJson.expo.extra = appJson.expo.extra || {};',
+            '  appJson.expo.extra.eas = appJson.expo.extra.eas || {};',
+            '  appJson.expo.extra.eas.projectId = projectId;',
+            '  fs.writeFileSync("./app.json", JSON.stringify(appJson, null, 2));',
+            '  console.log(JSON.stringify({ success: true, projectId: projectId, account: account.name }));',
+            '}',
+            '',
+            'main().catch(function(e) { console.log(JSON.stringify({ error: "exception", message: e.message })); });',
+        ].join('\n');
 
-function gql(query, variables) {
-  const body = JSON.stringify({ query, variables });
-  return new Promise((resolve, reject) => {
-    const req = https.request({
-      hostname: 'api.expo.dev',
-      path: '/graphql',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + token,
-      }
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => resolve({ status: res.statusCode, body: data }));
-    });
-    req.on('error', reject);
-    req.write(body);
-    req.end();
-  });
-}
-
-async function main() {
-  // Step 1: Get current user and accounts via GraphQL
-  const me = await gql('query { meUserActor { __typename id ... on User { username accounts { id name } } ... on Robot { firstName accounts { id name } } } }');
-
-  if (me.status !== 200) {
-    console.log(JSON.stringify({ error: 'graphql_failed', status: me.status, body: me.body.slice(0, 300) }));
-    return;
-  }
-
-  let meData;
-  try { meData = JSON.parse(me.body); } catch(e) {
-    console.log(JSON.stringify({ error: 'parse_failed', body: me.body.slice(0, 300) }));
-    return;
-  }
-
-  if (meData.errors && meData.errors.length > 0) {
-    console.log(JSON.stringify({ error: 'auth_failed', messages: meData.errors.map(e => e.message).join('; ') }));
-    return;
-  }
-
-  const actor = meData.data?.meUserActor;
-  if (!actor) {
-    console.log(JSON.stringify({ error: 'no_user', body: me.body.slice(0, 300) }));
-    return;
-  }
-
-  const accounts = actor.accounts || [];
-  if (accounts.length === 0) {
-    console.log(JSON.stringify({ error: 'no_accounts', user: actor.username || actor.firstName, body: me.body.slice(0, 300) }));
-    return;
-  }
-  const account = accounts[0];
-
-  // Step 2: Create project via GraphQL
-  const create = await gql(
-    'mutation CreateApp(\$appInput: CreateAppInput!) { app { createApp(appInput: \$appInput) { id } } }',
-    { appInput: { accountId: account.id, projectName: slug } }
-  );
-
-  let createData;
-  try { createData = JSON.parse(create.body); } catch(e) {
-    console.log(JSON.stringify({ error: 'create_parse_failed', body: create.body.slice(0, 300) }));
-    return;
-  }
-
-  let projectId = createData.data?.app?.createApp?.id;
-
-  // Step 3: If already exists, look it up
-  if (!projectId) {
-    const hasExisting = (createData.errors || []).some(e =>
-      e.message && (e.message.includes('already') || e.message.includes('taken') || e.message.includes('exists'))
-    );
-
-    if (hasExisting) {
-      const lookup = await gql('query(\$fullName: String!) { app { byFullName(fullName: \$fullName) { id } } }', { fullName: '@' + account.name + '/' + slug });
-      try {
-        const lookupData = JSON.parse(lookup.body);
-        projectId = lookupData.data?.app?.byFullName?.id;
-      } catch(e) {}
-    }
-
-    if (!projectId) {
-      console.log(JSON.stringify({ error: 'create_failed', account: account.name, slug, body: create.body.slice(0, 300) }));
-      return;
-    }
-  }
-
-  // Step 4: Inject projectId into app.json
-  const appJson = JSON.parse(fs.readFileSync('./app.json', 'utf8'));
-  appJson.expo = appJson.expo || {};
-  appJson.expo.extra = appJson.expo.extra || {};
-  appJson.expo.extra.eas = appJson.expo.extra.eas || {};
-  appJson.expo.extra.eas.projectId = projectId;
-  fs.writeFileSync('./app.json', JSON.stringify(appJson, null, 2));
-
-  console.log(JSON.stringify({ success: true, projectId, account: account.name }));
-}
-
-main().catch(e => console.log(JSON.stringify({ error: 'exception', message: e.message })));
-"`;
+        // Base64-encode the script so shell cannot mangle $ signs in GraphQL queries
+        const b64Script = btoa(scriptContent);
 
         const apiResult = await client.executeCommands(sandboxId, [
-            `EXPO_TOKEN=${expoToken} ${apiScript}`
+            `echo '${b64Script}' | base64 -d > /tmp/_eas_setup.js && EXPO_TOKEN=${expoToken} node /tmp/_eas_setup.js`
         ], 30_000);
 
-        const apiOutput = apiResult.results?.[0]?.output?.trim() || apiResult.results?.[0]?.error || '';
-        logger.info('Expo API via sandbox result', { output: apiOutput.slice(0, 500) });
+        const rawOutput = apiResult.results?.[0]?.output || apiResult.results?.[0]?.error || '';
+        // Extract the last line (JSON output) in case there's other output
+        const lines = rawOutput.trim().split('\n');
+        const apiOutput = lines[lines.length - 1] || '';
+        logger.info('Expo API via sandbox result', { output: apiOutput.slice(0, 500), fullOutput: rawOutput.slice(0, 500) });
 
         try {
             const result = JSON.parse(apiOutput) as {
@@ -1342,7 +1303,9 @@ main().catch(e => console.log(JSON.stringify({ error: 'exception', message: e.me
                 status?: number;
                 body?: string;
                 message?: string;
+                messages?: string;
                 slug?: string;
+                user?: string;
             };
 
             if (result.success && result.projectId) {
@@ -1359,18 +1322,22 @@ main().catch(e => console.log(JSON.stringify({ error: 'exception', message: e.me
                 return { success: true, projectId: result.projectId };
             }
 
-            // API call failed with details
-            const errorDetail = result.error === 'auth_failed'
-                ? `Expo auth failed (${result.status}): ${result.body || 'no response'}`
-                : result.error === 'no_accounts'
-                    ? `No Expo accounts found: ${result.body || 'no response'}`
-                    : result.error === 'create_failed'
-                        ? `Project creation failed (account: ${result.account}, slug: ${result.slug}): ${result.body || 'no response'}`
-                        : `API error: ${result.message || result.error || apiOutput.slice(0, 300)}`;
+            // Build detailed error from result
+            const errorDetail = result.error === 'graphql_http_error'
+                ? `Expo GraphQL HTTP ${result.status}: ${result.body || 'no response'}`
+                : result.error === 'auth_failed'
+                    ? `Expo auth error: ${result.messages || 'unknown'}`
+                    : result.error === 'no_accounts'
+                        ? `No Expo accounts found for user: ${result.user || 'unknown'}`
+                        : result.error === 'create_failed'
+                            ? `Project creation failed (account: ${result.account}, slug: ${result.slug}): ${result.body || 'no response'}`
+                            : result.error === 'exception'
+                                ? `Script error: ${result.message || 'unknown'}`
+                                : `${result.error || 'unknown'}: ${result.body || result.message || result.messages || apiOutput.slice(0, 300)}`;
 
             return { success: false, error: errorDetail };
         } catch {
-            return { success: false, error: `Failed to parse API response: ${apiOutput.slice(0, 400)}` };
+            return { success: false, error: `Failed to parse API response: ${rawOutput.slice(0, 400)}` };
         }
     }
 
