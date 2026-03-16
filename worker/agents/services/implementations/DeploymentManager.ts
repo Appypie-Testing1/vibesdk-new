@@ -1172,6 +1172,20 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             message: deploymentResult.message
         });
 
+        // For fullstack mobile projects, write deployed URL so the dev proxy
+        // can route /api/* requests to the live Cloudflare Workers backend.
+        if (deploymentUrl && state.templateRenderMode === 'mobile-fullstack' && state.sandboxInstanceId) {
+            try {
+                await client.writeFiles(state.sandboxInstanceId, [{
+                    filePath: '.api-url',
+                    fileContents: deploymentUrl
+                }]);
+                logger.info('Wrote .api-url for fullstack mobile proxy', { deploymentUrl });
+            } catch (err) {
+                logger.warn('Failed to write .api-url file', err);
+            }
+        }
+
         callbacks?.onCompleted?.({
             message: deploymentResult.message || 'Successfully deployed to Appy Pie!',
             instanceId: state.sandboxInstanceId ?? '',

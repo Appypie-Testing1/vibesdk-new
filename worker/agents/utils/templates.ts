@@ -1039,13 +1039,28 @@ CREATE TABLE IF NOT EXISTS items (
 `,
         'lib/api-client.ts': `
 // API client for communicating with the Hono backend.
-// In development (Expo Go), uses the sandbox preview URL.
-// In production (deployed), uses relative paths (same origin).
+// On web (deployed): relative paths (same origin).
+// On native (Expo Go): derives the dev proxy URL from the Expo manifest
+// so /api/* requests go through the proxy to the deployed CF Workers backend.
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || '';
+function getBaseUrl(): string {
+  if (Platform.OS === 'web') return '';
+  // On native, build the base URL from the Expo manifest host
+  const debuggerHost = Constants.expoConfig?.hostUri
+    ?? (Constants as Record<string, unknown> ).manifest2?.extra?.expoGo?.debuggerHost as string | undefined;
+  if (debuggerHost) {
+    const host = debuggerHost.split(':')[0];
+    return 'https://' + host;
+  }
+  return '';
+}
+
+const BASE_URL = getBaseUrl();
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = API_URL + path;
+  const url = BASE_URL + path;
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -1220,10 +1235,12 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
                 production: {},
             },
         }, null, 2),
-        '_expo-proxy.cjs': `// Reverse proxy that sanitizes duplicated x-forwarded-* headers before they
-// reach the Expo dev server.
+        '_expo-proxy.cjs': `// Reverse proxy: routes /api/* to deployed CF Workers backend,
+// everything else to the Expo Metro dev server.
 const http = require('http');
+const https = require('https');
 const net = require('net');
+const fs = require('fs');
 const { spawn } = require('child_process');
 
 const PUBLIC_PORT = parseInt(process.env.PORT || '8001', 10);
@@ -1232,6 +1249,19 @@ let metroReady = false;
 let metroDead = false;
 let metroExitCode = null;
 const lastErrors = [];
+
+// Read deployed API URL from .api-url file (written after CF Workers deploy)
+let cachedApiUrl = null;
+let apiUrlCheckedAt = 0;
+function getApiUrl() {
+  const now = Date.now();
+  if (cachedApiUrl && now - apiUrlCheckedAt < 5000) return cachedApiUrl;
+  try {
+    cachedApiUrl = fs.readFileSync('.api-url', 'utf-8').trim();
+    apiUrlCheckedAt = now;
+  } catch { cachedApiUrl = null; }
+  return cachedApiUrl;
+}
 
 // Start Expo dev server on internal port
 const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
@@ -1269,8 +1299,57 @@ function buildErrorPage() {
   return '<html><head><meta charset="utf-8"><style>body{display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;font-family:system-ui;background:#fef2f2;color:#991b1b}div{text-align:center;max-width:700px;padding:24px}pre{text-align:left;background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:8px;font-size:12px;overflow-x:auto;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word}</style></head><body><div><h2>Metro Bundler Crashed</h2><p>The Expo dev server exited unexpectedly (code: ' + (metroExitCode || 'unknown') + ')</p>' + (errText ? '<pre>' + errText + '</pre>' : '<p>No error output captured.</p>') + '</div></body></html>';
 }
 
+// Proxy /api/* request to deployed CF Workers backend
+function proxyApiRequest(clientReq, clientRes) {
+  const apiUrl = getApiUrl();
+  if (!apiUrl) {
+    clientRes.writeHead(503, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    clientRes.end(JSON.stringify({ error: 'API not yet deployed. Deploy the app first, then API routes will work in Expo Go.' }));
+    return;
+  }
+  const parsed = new URL(apiUrl);
+  const mod = parsed.protocol === 'https:' ? https : http;
+  const proxyReq = mod.request({
+    hostname: parsed.hostname,
+    port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+    path: clientReq.url,
+    method: clientReq.method,
+    headers: { ...clientReq.headers, host: parsed.hostname },
+  }, (proxyRes) => {
+    const h = { ...proxyRes.headers };
+    h['access-control-allow-origin'] = '*';
+    h['access-control-allow-methods'] = 'GET,POST,PUT,DELETE,OPTIONS';
+    h['access-control-allow-headers'] = 'Content-Type,Authorization';
+    clientRes.writeHead(proxyRes.statusCode, h);
+    proxyRes.pipe(clientRes, { end: true });
+  });
+  proxyReq.on('error', (err) => {
+    console.error('[proxy] API proxy error:', err.message);
+    clientRes.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    clientRes.end(JSON.stringify({ error: 'Failed to reach API backend' }));
+  });
+  clientReq.pipe(proxyReq, { end: true });
+}
+
 // HTTP proxy
 const server = http.createServer((clientReq, clientRes) => {
+  // Route /api/* to deployed CF Workers backend
+  if (clientReq.url && clientReq.url.startsWith('/api/')) {
+    // Handle CORS preflight
+    if (clientReq.method === 'OPTIONS') {
+      clientRes.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+        'Access-Control-Max-Age': '86400',
+      });
+      clientRes.end();
+      return;
+    }
+    proxyApiRequest(clientReq, clientRes);
+    return;
+  }
+
   if (metroDead) {
     clientRes.writeHead(503, { 'Content-Type': 'text/html' });
     clientRes.end(buildErrorPage());
@@ -1307,6 +1386,7 @@ server.on('upgrade', (req, socket, head) => {
 
 server.listen(PUBLIC_PORT, '0.0.0.0', () => {
   console.log('[proxy] Listening on port ' + PUBLIC_PORT + ', forwarding to Expo on port ' + INTERNAL_PORT);
+  console.log('[proxy] /api/* routes will proxy to deployed backend (reads .api-url)');
 });
 
 process.on('SIGTERM', () => { expo.kill(); server.close(); });
@@ -1355,7 +1435,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         initCommand: 'node _expo-proxy.cjs',
         frameworks: ['react-native', 'expo', 'expo-router', 'hono', 'drizzle-orm'],
         importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'api/src/index.ts', 'lib/api-client.ts', 'package.json', 'wrangler.jsonc'],
-        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'eas.json', 'babel.config.js', 'wrangler.jsonc'],
+        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'eas.json', 'babel.config.js', 'wrangler.jsonc', '.api-url'],
         redactedFiles: [],
         disabled: false,
     };
