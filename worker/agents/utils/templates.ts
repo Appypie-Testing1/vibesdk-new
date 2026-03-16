@@ -100,7 +100,7 @@ export default ({ mode }: { mode: string }) => {
 const SCRATCH_TEMPLATE_INSTRUCTIONS = `
 To build a valid, previewable and deployable project, it is essential to follow few important rules:
 
-1. The package.json **MUST** be of the following form: 
+1. The package.json **MUST** be of the following form:
 \`\`\`
 ...
 	"scripts": {
@@ -116,7 +116,7 @@ To build a valid, previewable and deployable project, it is essential to follow 
 
 Failure to have a compatible package.json would result in the app un-previewable and un-deployable.
 
-2. The project **MUST** be a valid Appy Pie worker + Vite + bun project. 
+2. The project **MUST** be a valid Appy Pie worker + Vite + bun project.
 
 3. It must have a valid wrangler.jsonc and a vite.config.ts file.
 
@@ -124,6 +124,12 @@ Failure to have a compatible package.json would result in the app un-previewable
 \`\`\`ts
 ${VITE_CONFIG_MINIMAL}
 \`\`\`
+
+5. **Database:** This project has a D1 database pre-configured (binding: DB). Use c.env.DB.prepare() for SQL queries with parameterized bindings. ALWAYS include a DB init middleware that runs CREATE TABLE IF NOT EXISTS for ALL your tables on first request. Without this, tables will not exist and queries will fail.
+
+6. **API Routes:** All backend routes must be under /api/* prefix. The Hono worker is at src/index.ts. Do NOT use in-memory data stores for persistent data -- use D1.
+
+7. Do NOT modify wrangler.jsonc -- it is pre-configured with D1 binding and asset routing.
 `;
 
 /**
@@ -137,7 +143,11 @@ import { Hono } from 'hono';
 import { LinearRouter } from 'hono/router/linear-router';
 import { cors } from 'hono/cors';
 
-const app = new Hono({ router: new LinearRouter() });
+type Bindings = {
+  DB: D1Database;
+};
+
+const app = new Hono<{ Bindings: Bindings }>({ router: new LinearRouter() });
 
 // Global error handler - catches unhandled exceptions in any route
 app.onError((err, c) => {
@@ -152,39 +162,64 @@ app.use('/api/*', cors({
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
 
+// Database initialization middleware - runs CREATE TABLE IF NOT EXISTS on first request
+let dbInitialized = false;
+app.use('/api/*', async (c, next) => {
+  if (!dbInitialized && c.env.DB) {
+    try {
+      await c.env.DB.exec(\`
+        CREATE TABLE IF NOT EXISTS items (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      \`);
+      dbInitialized = true;
+    } catch (err) {
+      console.error('DB init error:', err);
+    }
+  }
+  await next();
+});
+
 // Health check — MUST be under /api/ to match run_worker_first routing
 app.get('/api/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// -------------------------------------------------------------------
-// In-memory data store (use this pattern for API data)
-// This project does NOT have a D1 database configured.
-// Store data in memory. Data resets on worker restart, which is fine
-// for development and preview. For production persistence, the user
-// can ask to add D1 later.
-// -------------------------------------------------------------------
-const dataStore = {
-  items: [] as Array<{ id: string; name: string; createdAt: string }>,
-};
-
-// Example CRUD routes using in-memory store
-app.get('/api/data', (c) => {
-  return c.json({ items: dataStore.items });
+// Example: List items from D1 database
+app.get('/api/items', async (c) => {
+  try {
+    const result = await c.env.DB.prepare('SELECT * FROM items ORDER BY created_at DESC').all();
+    return c.json({ items: result.results });
+  } catch (err) {
+    return c.json({ items: [], error: 'Failed to load items' }, 500);
+  }
 });
 
-app.post('/api/data', async (c) => {
+// Example: Create item
+app.post('/api/items', async (c) => {
   try {
     const body = await c.req.json();
-    const item = {
-      id: crypto.randomUUID(),
-      name: body.name || 'Untitled',
-      createdAt: new Date().toISOString(),
-    };
-    dataStore.items.push(item);
-    return c.json(item, 201);
+    const id = crypto.randomUUID();
+    const name = body.name || 'Untitled';
+    await c.env.DB.prepare('INSERT INTO items (id, name, created_at) VALUES (?, ?, ?)')
+      .bind(id, name, new Date().toISOString())
+      .run();
+    return c.json({ id, name, created_at: new Date().toISOString() }, 201);
   } catch (err) {
-    return c.json({ error: 'Invalid request body' }, 400);
+    return c.json({ error: 'Failed to create item' }, 400);
+  }
+});
+
+// Example: Delete item
+app.delete('/api/items/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await c.env.DB.prepare('DELETE FROM items WHERE id = ?').bind(id).run();
+    return c.json({ success: true });
+  } catch (err) {
+    return c.json({ error: 'Failed to delete item' }, 400);
   }
 });
 
@@ -219,8 +254,8 @@ function App() {
       .then(data => setMessage(data.status))
       .catch(() => setMessage('Error'));
 
-    // Test API endpoint
-    fetch('/api/data')
+    // Test API endpoint (D1 database)
+    fetch('/api/items')
       .then(res => res.json())
       .then(data => setApiData(data))
       .catch(() => setApiData({ error: 'API Error' }));
@@ -352,6 +387,11 @@ export default {
                 "run_worker_first": ["/api/*"],
                 "binding": "ASSETS"
             },
+            "d1_databases": [{
+                "binding": "DB",
+                "database_name": "app-db",
+                "database_id": "{{D1_ID}}"
+            }],
             "vars": {
                 "ENVIRONMENT": "production"
             },
@@ -383,8 +423,10 @@ bun run deploy
 
 ## API Endpoints
 
-- \`GET /health\` - Health check
-- \`GET /api/data\` - Sample data endpoint
+- \`GET /api/health\` - Health check
+- \`GET /api/items\` - List items (D1 database)
+- \`POST /api/items\` - Create item
+- \`DELETE /api/items/:id\` - Delete item
 `
     };
 
@@ -922,6 +964,26 @@ app.use('/api/*', cors({
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
 
+// Database initialization middleware - auto-creates tables on first request
+let dbInitialized = false;
+app.use('/api/*', async (c, next) => {
+  if (!dbInitialized && c.env.DB) {
+    try {
+      await c.env.DB.exec(\`
+        CREATE TABLE IF NOT EXISTS items (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      \`);
+      dbInitialized = true;
+    } catch (err) {
+      console.error('DB init error:', err);
+    }
+  }
+  await next();
+});
+
 // Health check
 app.get('/api/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -933,7 +995,7 @@ app.get('/api/items', async (c) => {
     const result = await c.env.DB.prepare('SELECT * FROM items ORDER BY created_at DESC').all();
     return c.json({ items: result.results });
   } catch (err) {
-    return c.json({ items: [], error: 'Database not initialized yet' });
+    return c.json({ items: [], error: 'Failed to load items' }, 500);
   }
 });
 

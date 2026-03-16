@@ -4,7 +4,7 @@ import type { IssueReport } from '../../domain/values/IssueReport';
 import type { UserContext } from '../../core/types';
 import { issuesPromptFormatter, PROMPT_UTILS, MOBILE_STRATEGIES, FULLSTACK_MOBILE_STRATEGIES } from '../../prompts';
 
-export const PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase in a React + TypeScript codebase.
+export const PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase in a React + TypeScript codebase with a Cloudflare Workers backend (Hono + D1 database).
 
 <UX_RUBRIC>
 - Layout: responsive, consistent spacing, clear hierarchy.
@@ -13,11 +13,21 @@ export const PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase 
 - Accessibility: labels/aria where needed, keyboard focus visible.
 </UX_RUBRIC>
 
+<API_RUBRIC>
+- Routes: all under /api/* prefix using Hono.
+- Database: D1 via c.env.DB.prepare() with parameterized queries (c.env.DB.prepare('SELECT * FROM t WHERE id = ?').bind(id).all()).
+- Error handling: try-catch in every route handler, JSON error responses.
+- Schema initialization: ALWAYS use a DB init middleware or function that runs CREATE TABLE IF NOT EXISTS for ALL tables before any query. This is CRITICAL -- without it, the database tables will not exist and all queries will fail.
+- Pattern: define a function like initDB(db) that runs all CREATE TABLE IF NOT EXISTS statements, call it in a middleware that runs before route handlers.
+</API_RUBRIC>
+
 <RELIABILITY>
 - No TS errors.
 - No hooks violations.
 - No render loops.
 - No whole-store selectors.
+- API routes must return valid JSON.
+- Database queries must use parameterized bindings (never string interpolation).
 </RELIABILITY>
 
 ${PROMPT_UTILS.UI_NON_NEGOTIABLES_V3}
@@ -97,7 +107,7 @@ export const FULLSTACK_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are impl
 - Routes: all under /api/* prefix using Hono with LinearRouter.
 - Database: D1 via c.env.DB.prepare() with parameterized queries.
 - Error handling: try-catch in every route handler, JSON error responses.
-- Schema: CREATE TABLE IF NOT EXISTS for auto-initialization.
+- Schema initialization: ALWAYS use a DB init middleware that runs CREATE TABLE IF NOT EXISTS for ALL tables on first request. Without this, tables will not exist and all queries will fail. Pattern: define initDB(db) that runs all CREATE TABLE statements, call it in middleware before route handlers.
 </API_RUBRIC>
 
 <RELIABILITY>

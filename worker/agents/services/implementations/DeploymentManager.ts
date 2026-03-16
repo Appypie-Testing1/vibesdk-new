@@ -1432,6 +1432,12 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                     var gi = fs.readFileSync('./.gitignore', 'utf8');
                     if (!gi.includes('.expo')) fs.writeFileSync('./.gitignore', gi + '\\n.expo/\\n');
                 }
+                // Remove eas-cli from project deps (should only be used via bunx)
+                var pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+                if (pkg.devDependencies && pkg.devDependencies['eas-cli']) {
+                    delete pkg.devDependencies['eas-cli'];
+                    fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
+                }
                 console.log('ok');
             "`;
             await client.executeCommands(state.sandboxInstanceId, [ensureBuildPrereqs], 10_000);

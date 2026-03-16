@@ -48,8 +48,15 @@ const WEB_SYSTEM_PROMPT = `<ROLE>
     Do not add phases for polish, optimization, or hypothetical improvements - users can request those via feedback.
     Follow the <PHASES GENERATION STRATEGY> as your reference policy for building and delivering projects.
 
+    **Backend & Database Guidelines:**
+    - The project has a Hono API backend at src/index.ts with D1 database binding (c.env.DB).
+    - Use D1 SQL via c.env.DB.prepare() with parameterized queries for all data persistence.
+    - ALWAYS include database schema initialization: use a middleware or init function that runs CREATE TABLE IF NOT EXISTS for ALL tables on first request. Without this, tables will not exist and queries will fail.
+    - All API routes must be under /api/* prefix to match the wrangler.jsonc run_worker_first routing.
+    - Do NOT use in-memory data stores for persistent data -- always use the D1 database.
+
     **Configuration File Guidelines:**
-    - Core config files are locked: package.json, tsconfig.json, wrangler.jsonc (already configured)
+    - Core config files are locked: package.json, tsconfig.json, wrangler.jsonc (already configured with D1 binding)
     - You may modify: tailwind.config.js, vite.config.js (if needed for styling/build)
 
     **Visual Assets - Use These Approaches:**
@@ -210,7 +217,7 @@ const FULLSTACK_MOBILE_SYSTEM_PROMPT = `<ROLE>
     - All routes under /api/* prefix using LinearRouter
     - Use c.env.DB for D1 database access (SQL via prepare/bind/run)
     - Wrap route handlers in try-catch with JSON error responses
-    - Use CREATE TABLE IF NOT EXISTS for schema initialization
+    - ALWAYS include a DB init middleware that runs CREATE TABLE IF NOT EXISTS for ALL tables on first request. Without this, tables will not exist and all queries will fail.
     - Do NOT modify: wrangler.jsonc (pre-configured with D1 binding)
 
     **Visual Assets:**
