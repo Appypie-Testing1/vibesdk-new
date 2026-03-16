@@ -1195,13 +1195,15 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             }
         );
 
-        // For fullstack mobile projects, auto-deploy to CF Workers in the background
+        // For fullstack mobile projects, silently deploy to CF Workers in the background
         // so the Hono API is live when the user scans the QR code in Expo Go.
-        // The deploy writes .api-url which the proxy reads to route /api/* requests.
+        // Uses deploymentManager directly (no broadcast callbacks) to avoid interfering
+        // with the code generation state machine — deployment status messages during
+        // generation would confuse the frontend and can halt phase progression.
         if (result?.previewURL && this.state.templateRenderMode === 'mobile-fullstack') {
-            this.logger.info('Auto-deploying fullstack mobile API to Cloudflare Workers');
-            this.deployToCloudflare().then((cfResult) => {
-                if (cfResult?.deploymentUrl) {
+            this.logger.info('Auto-deploying fullstack mobile API to Cloudflare Workers (silent)');
+            this.deploymentManager.deployToCloudflare({ target: 'platform' }).then((cfResult) => {
+                if (cfResult.deploymentUrl) {
                     this.logger.info('Auto CF deploy succeeded, API available for Expo Go', { url: cfResult.deploymentUrl });
                 } else {
                     this.logger.warn('Auto CF deploy returned no URL');
