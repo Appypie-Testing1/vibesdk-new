@@ -1176,10 +1176,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         // can route /api/* requests to the live Cloudflare Workers backend.
         if (deploymentUrl && state.templateRenderMode === 'mobile-fullstack' && state.sandboxInstanceId) {
             try {
-                await client.writeFiles(state.sandboxInstanceId, [{
-                    filePath: '.api-url',
-                    fileContents: deploymentUrl
-                }]);
+                await client.executeCommands(state.sandboxInstanceId, [`printf '%s' '${deploymentUrl.replace(/'/g, "'\\''")}' > .api-url`]);
                 logger.info('Wrote .api-url for fullstack mobile proxy', { deploymentUrl });
             } catch (err) {
                 logger.warn('Failed to write .api-url file', err);
