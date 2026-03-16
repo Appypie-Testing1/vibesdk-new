@@ -505,25 +505,8 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 instanceId: this.state.sandboxInstanceId,
             });
 
-            // For fullstack mobile projects, auto-deploy to CF Workers after all
-            // phases complete. This makes the Hono API live so Expo Go can reach
-            // /api/* endpoints via the proxy. Done here (not in deployToSandbox)
-            // to avoid interfering with phase generation.
-            if (this.state.templateRenderMode === 'mobile-fullstack' && this.state.sandboxInstanceId) {
-                this.logger.info('Auto-deploying fullstack mobile API to CF Workers (post-generation)');
-                this.deploymentManager.deployToCloudflare({ target: 'platform' }).then((cfResult) => {
-                    if (cfResult.deploymentUrl) {
-                        this.logger.info('Auto CF deploy succeeded', { url: cfResult.deploymentUrl });
-                        this.broadcast(WebSocketMessageResponses.CLOUDFLARE_DEPLOYMENT_COMPLETED, {
-                            message: 'API deployed - mobile app can now access backend',
-                            instanceId: this.state.sandboxInstanceId ?? '',
-                            deploymentUrl: cfResult.deploymentUrl,
-                        });
-                    }
-                }).catch((err) => {
-                    this.logger.warn('Auto CF deploy failed (non-blocking):', err);
-                });
-            }
+            // Fullstack mobile projects run wrangler dev locally in the sandbox
+            // proxy, so API is available immediately without CF Workers deployment.
         }
     }
     
