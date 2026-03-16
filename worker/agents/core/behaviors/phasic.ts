@@ -277,7 +277,16 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
                 phase: generatedPhases[generatedPhases.length - 1]
             });
         } else {
-            phaseConcept = this.state.blueprint.initialPhase;
+            phaseConcept = { ...this.state.blueprint.initialPhase };
+            // The blueprint's initialPhase should never be the last phase —
+            // the PhaseGeneration operation determines lastPhase dynamically
+            // based on actual implementation progress. Without this override,
+            // the LLM may set lastPhase:true on the initial phase, causing
+            // generation to stop at 1/N phases.
+            if (phaseConcept.lastPhase) {
+                this.logger.info('Overriding lastPhase=true on blueprint initialPhase');
+                phaseConcept.lastPhase = false;
+            }
             this.logger.info('Starting code generation from initial phase', {
                 phase: phaseConcept
             });

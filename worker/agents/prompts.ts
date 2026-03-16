@@ -966,8 +966,8 @@ export const MOBILE_STRATEGIES = {
         * Implement proper navigation with expo-router Stack/Tabs as needed.
         * Include meaningful content and working interactions (not just placeholders).
         * The initial phase should deliver an immediately usable and visually appealing mobile app.
-        * For simple apps (single screen, simple logic): deliver the complete app in 1 phase.
-        * For complex apps (multiple screens): deliver all screens with working navigation and core features.
+        * Phase 1 builds the foundation -- subsequent phases add features, polish, and refinement.
+        * NEVER set lastPhase: true on the initial phase. There are always more phases for features and polish.
 
     **Subsequent Phases: Features & Polish**
         * Add remaining features, refine interactions, and improve visual polish.
@@ -1061,8 +1061,8 @@ export const FULLSTACK_MOBILE_STRATEGIES = {
         * Connect frontend screens to API via lib/api-client.ts.
         * Include working CRUD operations with real database persistence.
         * The initial phase should deliver an immediately usable app with real data.
-        * For simple apps (single screen + basic CRUD): deliver the complete app in 1 phase.
-        * For complex apps (multiple screens): deliver all screens with working navigation, API routes, and core features.
+        * Phase 1 builds the foundation -- subsequent phases add features, polish, and refinement.
+        * NEVER set lastPhase: true on the initial phase. There are always more phases for features and polish.
 
     **Subsequent Phases: Features & Polish**
         * Add remaining features, refine interactions, and improve visual polish.

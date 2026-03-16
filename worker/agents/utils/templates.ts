@@ -603,7 +603,7 @@ dist/
                 'react-native-safe-area-context': '~5.6.0',
                 'react-native-screens': '~4.16.0',
                 'react-native-web': '~0.21.0',
-                'react-native-worklets': '~0.5.0',
+                'react-native-worklets': '0.5.1',
             },
             devDependencies: {
                 '@babel/core': '^7.25.0',
@@ -1135,7 +1135,7 @@ dist/
                 'react-native-safe-area-context': '~5.6.0',
                 'react-native-screens': '~4.16.0',
                 'react-native-web': '~0.21.0',
-                'react-native-worklets': '~0.5.0',
+                'react-native-worklets': '0.5.1',
                 'hono': '^4.11.0',
                 'drizzle-orm': '^0.39.0',
             },
