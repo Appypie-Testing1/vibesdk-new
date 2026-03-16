@@ -125,7 +125,7 @@ Failure to have a compatible package.json would result in the app un-previewable
 ${VITE_CONFIG_MINIMAL}
 \`\`\`
 
-5. **Database:** This project has a D1 database pre-configured (binding: DB). Use c.env.DB.prepare() for SQL queries with parameterized bindings. ALWAYS include a DB init middleware that runs CREATE TABLE IF NOT EXISTS for ALL your tables on first request. Without this, tables will not exist and queries will fail.
+5. **Database:** This project has a D1 database pre-configured (binding: DB). Use c.env.DB.prepare() for SQL queries with parameterized bindings. ALWAYS define an initDB(db) function with one db.prepare('CREATE TABLE IF NOT EXISTS ...').run() call per table, called from a middleware before route handlers. NEVER use db.exec() with template literals or multi-statement strings -- they truncate and cause SQLITE_ERROR. Without DB init, tables will not exist and queries will fail.
 
 6. **API Routes:** All backend routes must be under /api/* prefix. The Hono worker is at src/index.ts. Do NOT use in-memory data stores for persistent data -- use D1.
 
@@ -162,18 +162,15 @@ app.use('/api/*', cors({
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Database initialization middleware - runs CREATE TABLE IF NOT EXISTS on first request
+// Database initialization - one prepare().run() call per table (never use exec() with multi-statement strings)
+async function initDB(db: D1Database) {
+  await db.prepare('CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime(\\'now\\')))').run();
+}
 let dbInitialized = false;
 app.use('/api/*', async (c, next) => {
   if (!dbInitialized && c.env.DB) {
     try {
-      await c.env.DB.exec(\`
-        CREATE TABLE IF NOT EXISTS items (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-      \`);
+      await initDB(c.env.DB);
       dbInitialized = true;
     } catch (err) {
       console.error('DB init error:', err);
@@ -971,18 +968,15 @@ app.use('/api/*', cors({
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Database initialization middleware - auto-creates tables on first request
+// Database initialization - one prepare().run() call per table (never use exec() with multi-statement strings)
+async function initDB(db: D1Database) {
+  await db.prepare('CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime(\\'now\\')))').run();
+}
 let dbInitialized = false;
 app.use('/api/*', async (c, next) => {
   if (!dbInitialized && c.env.DB) {
     try {
-      await c.env.DB.exec(\`
-        CREATE TABLE IF NOT EXISTS items (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-      \`);
+      await initDB(c.env.DB);
       dbInitialized = true;
     } catch (err) {
       console.error('DB init error:', err);

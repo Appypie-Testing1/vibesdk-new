@@ -17,8 +17,13 @@ export const PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase 
 - Routes: all under /api/* prefix using Hono.
 - Database: D1 via c.env.DB.prepare() with parameterized queries (c.env.DB.prepare('SELECT * FROM t WHERE id = ?').bind(id).all()).
 - Error handling: try-catch in every route handler, JSON error responses.
-- Schema initialization: ALWAYS use a DB init middleware or function that runs CREATE TABLE IF NOT EXISTS for ALL tables before any query. This is CRITICAL -- without it, the database tables will not exist and all queries will fail.
-- Pattern: define a function like initDB(db) that runs all CREATE TABLE IF NOT EXISTS statements, call it in a middleware that runs before route handlers.
+- Schema initialization: ALWAYS define an initDB(db) function that creates ALL tables. Call it in a middleware before route handlers. This is CRITICAL -- without it, database tables will not exist and all queries will fail.
+- IMPORTANT: Use ONE db.prepare('CREATE TABLE IF NOT EXISTS ...').run() call per table. NEVER use db.exec() with template literals or multi-statement strings -- they cause truncation errors. Each CREATE TABLE must be a separate prepare().run() call on a single line.
+- Example:
+  async function initDB(db: D1Database) {
+    await db.prepare('CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL)').run();
+    await db.prepare('CREATE TABLE IF NOT EXISTS posts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, content TEXT, created_at TEXT NOT NULL DEFAULT (datetime(\'now\')))').run();
+  }
 </API_RUBRIC>
 
 <RELIABILITY>
@@ -107,7 +112,13 @@ export const FULLSTACK_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are impl
 - Routes: all under /api/* prefix using Hono with LinearRouter.
 - Database: D1 via c.env.DB.prepare() with parameterized queries.
 - Error handling: try-catch in every route handler, JSON error responses.
-- Schema initialization: ALWAYS use a DB init middleware that runs CREATE TABLE IF NOT EXISTS for ALL tables on first request. Without this, tables will not exist and all queries will fail. Pattern: define initDB(db) that runs all CREATE TABLE statements, call it in middleware before route handlers.
+- Schema initialization: ALWAYS define an initDB(db) function that creates ALL tables. Call it in a middleware before route handlers. Without this, tables will not exist and all queries will fail.
+- IMPORTANT: Use ONE db.prepare('CREATE TABLE IF NOT EXISTS ...').run() call per table. NEVER use db.exec() with template literals or multi-statement strings -- they cause truncation errors. Each CREATE TABLE must be a separate prepare().run() call on a single line.
+- Example:
+  async function initDB(db: D1Database) {
+    await db.prepare('CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL)').run();
+    await db.prepare('CREATE TABLE IF NOT EXISTS posts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL)').run();
+  }
 </API_RUBRIC>
 
 <RELIABILITY>

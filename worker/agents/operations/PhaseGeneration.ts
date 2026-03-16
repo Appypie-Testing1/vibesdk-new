@@ -51,7 +51,7 @@ const WEB_SYSTEM_PROMPT = `<ROLE>
     **Backend & Database Guidelines:**
     - The project has a Hono API backend at src/index.ts with D1 database binding (c.env.DB).
     - Use D1 SQL via c.env.DB.prepare() with parameterized queries for all data persistence.
-    - ALWAYS include database schema initialization: use a middleware or init function that runs CREATE TABLE IF NOT EXISTS for ALL tables on first request. Without this, tables will not exist and queries will fail.
+    - ALWAYS include database schema initialization: define an initDB(db) function with one db.prepare('CREATE TABLE IF NOT EXISTS ...').run() call per table. Call it in a middleware before route handlers. NEVER use db.exec() with template literals or multi-statement strings.
     - All API routes must be under /api/* prefix to match the wrangler.jsonc run_worker_first routing.
     - Do NOT use in-memory data stores for persistent data -- always use the D1 database.
 
@@ -217,7 +217,7 @@ const FULLSTACK_MOBILE_SYSTEM_PROMPT = `<ROLE>
     - All routes under /api/* prefix using LinearRouter
     - Use c.env.DB for D1 database access (SQL via prepare/bind/run)
     - Wrap route handlers in try-catch with JSON error responses
-    - ALWAYS include a DB init middleware that runs CREATE TABLE IF NOT EXISTS for ALL tables on first request. Without this, tables will not exist and all queries will fail.
+    - ALWAYS define initDB(db) with one db.prepare('CREATE TABLE IF NOT EXISTS ...').run() per table. Call it in middleware before route handlers. NEVER use db.exec() with template literals -- they truncate and cause SQLITE_ERROR.
     - Do NOT modify: wrangler.jsonc (pre-configured with D1 binding)
 
     **Visual Assets:**
