@@ -838,7 +838,10 @@ To build a valid, previewable Expo/React Native + Cloudflare Workers fullstack p
 
 5. The Hono API worker is at api/src/index.ts with D1 database binding.
 
-6. Frontend screens call the API via lib/api-client.ts using the API_URL env var.
+6. **CRITICAL API CALLS**: ALL frontend API calls MUST use \`apiClient\` from \`lib/api-client.ts\`. NEVER use raw \`fetch()\` for API endpoints. The api-client handles base URL resolution for both web and native (Expo Go). Without it, API calls will fail on native devices.
+   - Do NOT modify lib/api-client.ts -- it is pre-configured.
+   - Example: \`import { apiClient } from '../lib/api-client'; const data = await apiClient.get('/api/products');\`
+   - NEVER write: \`fetch('/api/products')\` -- this FAILS on native because there is no origin.
 
 7. These packages are pre-installed: expo, expo-router, expo-constants, expo-font, expo-linking, expo-status-bar, expo-system-ui, react-native, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens, react-native-web, hono, drizzle-orm. Do NOT add them again.
 
@@ -1434,8 +1437,8 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         renderMode: 'mobile-fullstack',
         initCommand: 'node _expo-proxy.cjs',
         frameworks: ['react-native', 'expo', 'expo-router', 'hono', 'drizzle-orm'],
-        importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'api/src/index.ts', 'lib/api-client.ts', 'package.json', 'wrangler.jsonc'],
-        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'eas.json', 'babel.config.js', 'wrangler.jsonc', '.api-url'],
+        importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'api/src/index.ts', 'package.json', 'wrangler.jsonc'],
+        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'eas.json', 'babel.config.js', 'wrangler.jsonc', '.api-url', 'lib/api-client.ts'],
         redactedFiles: [],
         disabled: false,
     };

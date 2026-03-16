@@ -138,7 +138,7 @@ export const FULLSTACK_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are impl
 - NEVER import from 'react-dom' or use web-specific APIs (document, window.location, etc.)
 - Navigation: use expo-router (Link, useRouter, Stack, Tabs) -- NOT @react-navigation directly.
 - Icons: Do NOT use any icon library. Use emoji or Unicode symbols in Text components instead.
-- API calls: use lib/api-client.ts for all backend communication.
+- API calls: ALWAYS use \`import { apiClient } from '../lib/api-client'\` for ALL backend communication. NEVER use raw fetch() for /api/* endpoints -- it FAILS on native devices. Do NOT modify or regenerate lib/api-client.ts.
 - package.json: KEEP ALL existing template dependencies.
 
 **Backend (api/ directory):**

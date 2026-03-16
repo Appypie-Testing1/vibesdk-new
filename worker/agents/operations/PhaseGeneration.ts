@@ -208,8 +208,8 @@ const FULLSTACK_MOBILE_SYSTEM_PROMPT = `<ROLE>
     - All UI MUST use React Native components: View, Text, TouchableOpacity, ScrollView, FlatList, TextInput, Image, etc.
     - All styling MUST use StyleSheet.create() -- NO Tailwind CSS, NO className, NO HTML elements
     - Navigation uses expo-router (file-based routing in app/ directory)
-    - API calls via lib/api-client.ts
-    - Do NOT modify: app.json, metro.config.js, tsconfig.json (pre-configured)
+    - API calls: ALWAYS use \`import { apiClient } from '../lib/api-client'\`. NEVER use raw fetch() for API endpoints -- it fails on native. Do NOT modify lib/api-client.ts.
+    - Do NOT modify: app.json, metro.config.js, tsconfig.json, lib/api-client.ts (pre-configured)
     - There are NO shadcn components -- this is NOT a web-only project
 
     **Backend (api/ directory):**
