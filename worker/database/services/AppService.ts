@@ -404,8 +404,8 @@ export class AppService extends BaseService {
      * Check if user owns an app
      */
     async checkAppOwnership(appId: string, userId: string): Promise<OwnershipResult> {
-        // Use read replica for ownership checks
-        const readDb = this.getReadDb('fast');
+        // Use fresh read to avoid replica lag on newly created apps
+        const readDb = this.getReadDb('fresh');
         const app = await readDb
             .select({
                 id: schema.apps.id,

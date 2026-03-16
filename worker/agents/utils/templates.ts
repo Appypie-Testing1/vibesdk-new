@@ -697,6 +697,7 @@ const INTERNAL_PORT = PUBLIC_PORT + 1;
 let metroReady = false;
 let metroDead = false;
 let metroExitCode = null;
+const lastErrors = [];
 
 // Start Expo dev server on internal port
 const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
@@ -704,8 +705,8 @@ const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--
   env: { ...process.env, PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
 });
 expo.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); if (/Metro waiting|Bundler is ready|listening on/i.test(s)) { metroReady = true; console.log('[proxy] Metro is ready'); } });
-expo.stderr.on('data', (d) => { process.stderr.write(d); });
-expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); metroDead = true; });
+expo.stderr.on('data', (d) => { const s = d.toString(); process.stderr.write(d); lastErrors.push(s); if (lastErrors.length > 30) lastErrors.shift(); });
+expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); metroDead = true; lastErrors.push(String(err)); });
 expo.on('exit', (code) => { console.error('[proxy] Expo exited with code ' + code); metroDead = true; metroExitCode = code; });
 
 // Probe Metro readiness every 3s until ready
@@ -725,14 +726,20 @@ function sanitizeHeaders(headers) {
   return h;
 }
 
+function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
 const LOADING_PAGE = '<html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3"><style>body{display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui;background:#f5f5f5;color:#333}div{text-align:center}.spin{width:32px;height:32px;border:3px solid #ddd;border-top-color:#666;border-radius:50%;animation:s 0.8s linear infinite;margin:0 auto 16px}@keyframes s{to{transform:rotate(360deg)}}</style></head><body><div><div class="spin"></div><p>Starting Expo dev server...</p><p style="font-size:12px;color:#999">This may take 30-60 seconds on first launch</p></div></body></html>';
-const ERROR_PAGE = '<html><head><meta charset="utf-8"><style>body{display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui;background:#fef2f2;color:#991b1b}div{text-align:center;max-width:400px;padding:24px}</style></head><body><div><h2>Metro Bundler Crashed</h2><p>The Expo dev server exited unexpectedly. Check container logs for details.</p></div></body></html>';
+
+function buildErrorPage() {
+  const errText = escapeHtml(lastErrors.join('').trim().slice(-2000));
+  return '<html><head><meta charset="utf-8"><style>body{display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;font-family:system-ui;background:#fef2f2;color:#991b1b}div{text-align:center;max-width:700px;padding:24px}pre{text-align:left;background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:8px;font-size:12px;overflow-x:auto;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word}</style></head><body><div><h2>Metro Bundler Crashed</h2><p>The Expo dev server exited unexpectedly (code: ' + (metroExitCode || 'unknown') + ')</p>' + (errText ? '<pre>' + errText + '</pre>' : '<p>No error output captured.</p>') + '</div></body></html>';
+}
 
 // HTTP proxy -- sanitize headers, forward to Expo
 const server = http.createServer((clientReq, clientRes) => {
   if (metroDead) {
     clientRes.writeHead(503, { 'Content-Type': 'text/html' });
-    clientRes.end(ERROR_PAGE);
+    clientRes.end(buildErrorPage());
     return;
   }
   const proxyReq = http.request(
@@ -1230,6 +1237,7 @@ const INTERNAL_PORT = PUBLIC_PORT + 1;
 let metroReady = false;
 let metroDead = false;
 let metroExitCode = null;
+const lastErrors = [];
 
 // Start Expo dev server on internal port
 const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
@@ -1237,8 +1245,8 @@ const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--
   env: { ...process.env, PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
 });
 expo.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); if (/Metro waiting|Bundler is ready|listening on/i.test(s)) { metroReady = true; console.log('[proxy] Metro is ready'); } });
-expo.stderr.on('data', (d) => { process.stderr.write(d); });
-expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); metroDead = true; });
+expo.stderr.on('data', (d) => { const s = d.toString(); process.stderr.write(d); lastErrors.push(s); if (lastErrors.length > 30) lastErrors.shift(); });
+expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); metroDead = true; lastErrors.push(String(err)); });
 expo.on('exit', (code) => { console.error('[proxy] Expo exited with code ' + code); metroDead = true; metroExitCode = code; });
 
 // Probe Metro readiness every 3s until ready
@@ -1258,14 +1266,20 @@ function sanitizeHeaders(headers) {
   return h;
 }
 
+function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
 const LOADING_PAGE = '<html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3"><style>body{display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui;background:#f5f5f5;color:#333}div{text-align:center}.spin{width:32px;height:32px;border:3px solid #ddd;border-top-color:#666;border-radius:50%;animation:s 0.8s linear infinite;margin:0 auto 16px}@keyframes s{to{transform:rotate(360deg)}}</style></head><body><div><div class="spin"></div><p>Starting Expo dev server...</p><p style="font-size:12px;color:#999">This may take 30-60 seconds on first launch</p></div></body></html>';
-const ERROR_PAGE = '<html><head><meta charset="utf-8"><style>body{display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui;background:#fef2f2;color:#991b1b}div{text-align:center;max-width:400px;padding:24px}</style></head><body><div><h2>Metro Bundler Crashed</h2><p>The Expo dev server exited unexpectedly. Check container logs for details.</p></div></body></html>';
+
+function buildErrorPage() {
+  const errText = escapeHtml(lastErrors.join('').trim().slice(-2000));
+  return '<html><head><meta charset="utf-8"><style>body{display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;font-family:system-ui;background:#fef2f2;color:#991b1b}div{text-align:center;max-width:700px;padding:24px}pre{text-align:left;background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:8px;font-size:12px;overflow-x:auto;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word}</style></head><body><div><h2>Metro Bundler Crashed</h2><p>The Expo dev server exited unexpectedly (code: ' + (metroExitCode || 'unknown') + ')</p>' + (errText ? '<pre>' + errText + '</pre>' : '<p>No error output captured.</p>') + '</div></body></html>';
+}
 
 // HTTP proxy
 const server = http.createServer((clientReq, clientRes) => {
   if (metroDead) {
     clientRes.writeHead(503, { 'Content-Type': 'text/html' });
-    clientRes.end(ERROR_PAGE);
+    clientRes.end(buildErrorPage());
     return;
   }
   const proxyReq = http.request(
