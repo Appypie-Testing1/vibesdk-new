@@ -1191,14 +1191,18 @@ dist/
             "preview_urls": false
         }, null, 2),
         'metro.config.js': `const { getDefaultConfig } = require('expo/metro-config');
+const path = require('path');
 
 const config = getDefaultConfig(__dirname);
 
 // Disable package exports to fix React 19 web bundling.
 config.resolver.unstable_enablePackageExports = false;
 
-// Exclude api/ directory from Metro bundling (it's the Workers backend)
-config.resolver.blockList = [/api\\/.*$/];
+// Exclude the project's api/ directory from Metro bundling (Workers backend).
+// Use absolute path so we don't accidentally block node_modules/*/api/ paths
+// (e.g. expo-router/build/api/ which is needed for the router to work).
+const apiDir = path.resolve(__dirname, 'api');
+config.resolver.blockList = [new RegExp(apiDir + '/')];
 
 // Sanitize proxy headers to prevent Metro 0.83.x "TypeError: Invalid URL".
 config.server = {
