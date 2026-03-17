@@ -687,32 +687,61 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
 // reach the Expo dev server. Behind nested proxies (Cloudflare -> sandbox),
 // these headers can contain comma-separated duplicates like "https, https"
 // which cause Expo to construct malformed manifest URLs.
+// Auto-restarts Metro when it crashes (e.g. file watcher ENOENT during bun install).
 const http = require('http');
 const net = require('net');
 const { spawn } = require('child_process');
 
 const PUBLIC_PORT = parseInt(process.env.PORT || '8001', 10);
 const INTERNAL_PORT = PUBLIC_PORT + 1;
+const MAX_RESTARTS = 5;
+const RESTART_DELAY_MS = 3000;
+
+let expo = null;
 let metroReady = false;
 let metroDead = false;
 let metroExitCode = null;
+let restartCount = 0;
+let shuttingDown = false;
 const lastErrors = [];
 
-// Start Expo dev server on internal port
-const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
-  stdio: ['inherit', 'pipe', 'pipe'],
-  env: { ...process.env, PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
-});
-expo.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); if (/Metro waiting|Bundler is ready|listening on/i.test(s)) { metroReady = true; console.log('[proxy] Metro is ready'); } });
-expo.stderr.on('data', (d) => { const s = d.toString(); process.stderr.write(d); lastErrors.push(s); if (lastErrors.length > 30) lastErrors.shift(); });
-expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); metroDead = true; lastErrors.push(String(err)); });
-expo.on('exit', (code) => { console.error('[proxy] Expo exited with code ' + code); metroDead = true; metroExitCode = code; });
+function startMetro() {
+  metroReady = false;
+  metroDead = false;
+  metroExitCode = null;
+  lastErrors.length = 0;
 
-// Probe Metro readiness every 3s until ready
-const probe = setInterval(() => {
-  if (metroReady || metroDead) { clearInterval(probe); return; }
-  const req = http.get({ hostname: '127.0.0.1', port: INTERNAL_PORT, path: '/status', timeout: 2000 }, (res) => {
-    if (!metroReady) { metroReady = true; clearInterval(probe); console.log('[proxy] Metro responded on port ' + INTERNAL_PORT); }
+  console.log('[proxy] Starting Expo dev server' + (restartCount > 0 ? ' (restart #' + restartCount + ')' : '') + '...');
+  expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
+    stdio: ['inherit', 'pipe', 'pipe'],
+    env: { ...process.env, PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
+  });
+  expo.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); if (/Metro waiting|Bundler is ready|listening on/i.test(s)) { metroReady = true; console.log('[proxy] Metro is ready'); } });
+  expo.stderr.on('data', (d) => { const s = d.toString(); process.stderr.write(d); lastErrors.push(s); if (lastErrors.length > 30) lastErrors.shift(); });
+  expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); lastErrors.push(String(err)); handleMetroExit(1); });
+  expo.on('exit', (code) => { console.error('[proxy] Expo exited with code ' + code); handleMetroExit(code); });
+}
+
+function handleMetroExit(code) {
+  metroExitCode = code;
+  if (shuttingDown) { metroDead = true; return; }
+  // Auto-restart on crash (non-zero exit), up to MAX_RESTARTS
+  if (code !== 0 && restartCount < MAX_RESTARTS) {
+    restartCount++;
+    console.log('[proxy] Metro crashed, restarting in ' + (RESTART_DELAY_MS / 1000) + 's (' + restartCount + '/' + MAX_RESTARTS + ')...');
+    setTimeout(startMetro, RESTART_DELAY_MS);
+  } else {
+    metroDead = true;
+  }
+}
+
+startMetro();
+
+// Probe Metro readiness every 3s
+setInterval(() => {
+  if (metroReady || metroDead || !expo) return;
+  const req = http.get({ hostname: '127.0.0.1', port: INTERNAL_PORT, path: '/status', timeout: 2000 }, () => {
+    if (!metroReady) { metroReady = true; console.log('[proxy] Metro responded on port ' + INTERNAL_PORT); }
   });
   req.on('error', () => {});
   req.on('timeout', () => { req.destroy(); });
@@ -774,8 +803,8 @@ server.listen(PUBLIC_PORT, '0.0.0.0', () => {
   console.log('[proxy] Listening on port ' + PUBLIC_PORT + ', forwarding to Expo on port ' + INTERNAL_PORT);
 });
 
-process.on('SIGTERM', () => { expo.kill(); server.close(); });
-process.on('SIGINT', () => { expo.kill(); server.close(); });
+process.on('SIGTERM', () => { shuttingDown = true; if (expo) expo.kill(); server.close(); });
+process.on('SIGINT', () => { shuttingDown = true; if (expo) expo.kill(); server.close(); });
 `,
     };
 
@@ -1248,6 +1277,7 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
         }, null, 2),
         '_expo-proxy.cjs': `// Reverse proxy: routes /api/* to deployed CF Workers backend,
 // everything else to the Expo Metro dev server.
+// Auto-restarts Metro when it crashes (e.g. file watcher ENOENT during bun install).
 const http = require('http');
 const https = require('https');
 const net = require('net');
@@ -1256,9 +1286,15 @@ const { spawn } = require('child_process');
 
 const PUBLIC_PORT = parseInt(process.env.PORT || '8001', 10);
 const INTERNAL_PORT = PUBLIC_PORT + 1;
+const MAX_RESTARTS = 5;
+const RESTART_DELAY_MS = 3000;
+
+let expo = null;
 let metroReady = false;
 let metroDead = false;
 let metroExitCode = null;
+let restartCount = 0;
+let shuttingDown = false;
 const lastErrors = [];
 
 // Read deployed API URL from .api-url file (written after CF Workers deploy)
@@ -1275,21 +1311,42 @@ function getApiUrl() {
   return cachedApiUrl;
 }
 
-// Start Expo dev server on internal port
-const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
-  stdio: ['inherit', 'pipe', 'pipe'],
-  env: { ...process.env, PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
-});
-expo.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); if (/Metro waiting|Bundler is ready|listening on/i.test(s)) { metroReady = true; console.log('[proxy] Metro is ready'); } });
-expo.stderr.on('data', (d) => { const s = d.toString(); process.stderr.write(d); lastErrors.push(s); if (lastErrors.length > 30) lastErrors.shift(); });
-expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); metroDead = true; lastErrors.push(String(err)); });
-expo.on('exit', (code) => { console.error('[proxy] Expo exited with code ' + code); metroDead = true; metroExitCode = code; });
+function startMetro() {
+  metroReady = false;
+  metroDead = false;
+  metroExitCode = null;
+  lastErrors.length = 0;
 
-// Probe Metro readiness every 3s until ready
-const probe = setInterval(() => {
-  if (metroReady || metroDead) { clearInterval(probe); return; }
-  const req = http.get({ hostname: '127.0.0.1', port: INTERNAL_PORT, path: '/status', timeout: 2000 }, (res) => {
-    if (!metroReady) { metroReady = true; clearInterval(probe); console.log('[proxy] Metro responded on port ' + INTERNAL_PORT); }
+  console.log('[proxy] Starting Expo dev server' + (restartCount > 0 ? ' (restart #' + restartCount + ')' : '') + '...');
+  expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
+    stdio: ['inherit', 'pipe', 'pipe'],
+    env: { ...process.env, PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
+  });
+  expo.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); if (/Metro waiting|Bundler is ready|listening on/i.test(s)) { metroReady = true; console.log('[proxy] Metro is ready'); } });
+  expo.stderr.on('data', (d) => { const s = d.toString(); process.stderr.write(d); lastErrors.push(s); if (lastErrors.length > 30) lastErrors.shift(); });
+  expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); lastErrors.push(String(err)); handleMetroExit(1); });
+  expo.on('exit', (code) => { console.error('[proxy] Expo exited with code ' + code); handleMetroExit(code); });
+}
+
+function handleMetroExit(code) {
+  metroExitCode = code;
+  if (shuttingDown) { metroDead = true; return; }
+  if (code !== 0 && restartCount < MAX_RESTARTS) {
+    restartCount++;
+    console.log('[proxy] Metro crashed, restarting in ' + (RESTART_DELAY_MS / 1000) + 's (' + restartCount + '/' + MAX_RESTARTS + ')...');
+    setTimeout(startMetro, RESTART_DELAY_MS);
+  } else {
+    metroDead = true;
+  }
+}
+
+startMetro();
+
+// Probe Metro readiness every 3s
+setInterval(() => {
+  if (metroReady || metroDead || !expo) return;
+  const req = http.get({ hostname: '127.0.0.1', port: INTERNAL_PORT, path: '/status', timeout: 2000 }, () => {
+    if (!metroReady) { metroReady = true; console.log('[proxy] Metro responded on port ' + INTERNAL_PORT); }
   });
   req.on('error', () => {});
   req.on('timeout', () => { req.destroy(); });
@@ -1419,8 +1476,8 @@ server.listen(PUBLIC_PORT, '0.0.0.0', () => {
   console.log('[proxy] /api/* routes proxy to deployed backend (reads .api-url)');
 });
 
-process.on('SIGTERM', () => { expo.kill(); server.close(); });
-process.on('SIGINT', () => { expo.kill(); server.close(); });
+process.on('SIGTERM', () => { shuttingDown = true; if (expo) expo.kill(); server.close(); });
+process.on('SIGINT', () => { shuttingDown = true; if (expo) expo.kill(); server.close(); });
 `,
     };
 
