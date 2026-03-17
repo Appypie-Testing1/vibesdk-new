@@ -508,8 +508,29 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             // For fullstack mobile projects, auto-deploy to CF Workers after all
             // phases complete so the proxy can route /api/* requests.
             if (this.state.templateRenderMode === 'mobile-fullstack' && this.state.sandboxInstanceId) {
+                // Write .api-url eagerly — the URL is deterministic and the proxy
+                // needs it immediately. If deploy hasn't finished yet the proxy will
+                // get a 502 from CF Workers, which is better than a 503 "not ready".
+                const previewDomain = getPreviewDomain(this.env);
+                const protocol = getProtocolForHost(previewDomain);
+                const expectedUrl = `${protocol}://${this.state.projectName}.${previewDomain}`;
+                const client = this.deploymentManager.getClient();
+                client.executeCommands(this.state.sandboxInstanceId, [
+                    `printf '%s' '${expectedUrl.replace(/'/g, "'\\''")}' > .api-url`
+                ]).then(() => {
+                    this.logger.info('Wrote .api-url eagerly before deploy', { expectedUrl });
+                }).catch((err) => {
+                    this.logger.warn('Failed to write .api-url eagerly', err);
+                });
+
+                // Deploy only the API worker — skip expo export (build:web) which
+                // frequently fails on LLM-generated code errors and blocks the
+                // entire deploy. The proxy only needs the Hono API worker running.
                 this.logger.info('Auto-deploying fullstack mobile API to CF Workers (post-generation)');
-                this.deploymentManager.deployToCloudflare({ target: 'platform' }).then((cfResult) => {
+                this.deploymentManager.deployToCloudflare({
+                    target: 'platform',
+                    buildCommand: 'bun run build:worker',
+                }).then((cfResult) => {
                     if (cfResult.deploymentUrl) {
                         this.logger.info('Auto CF deploy succeeded', { url: cfResult.deploymentUrl });
                     }

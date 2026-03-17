@@ -1791,28 +1791,29 @@ export class SandboxSdkClient extends BaseSandboxService {
     // ==========================================
     // DEPLOYMENT
     // ==========================================
-    async deployToCloudflareWorkers(instanceId: string, target: DeploymentTarget = 'platform'): Promise<DeploymentResult> {
+    async deployToCloudflareWorkers(instanceId: string, target: DeploymentTarget = 'platform', options?: { buildCommand?: string }): Promise<DeploymentResult> {
         try {
             this.logger.info('Starting deployment', { instanceId });
-            
+
             // Get project metadata
             const metadata = await this.getInstanceMetadata(instanceId);
             const projectName = metadata?.projectName || instanceId;
-            
+
             // Get credentials from environment (secure - no exposure to external processes)
             const accountId = env.CLOUDFLARE_ACCOUNT_ID;
             const apiToken = env.CLOUDFLARE_API_TOKEN;
-            
+
             if (!accountId || !apiToken) {
                 throw new Error('CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be set in environment');
             }
-            
+
             this.logger.info('Processing deployment', { instanceId });
-            
+
             // Step 1: Run build commands (bun run build && bunx wrangler build)
             // Expo export is significantly slower than Vite — give it more time
-            this.logger.info('Building project');
-            const buildResult = await this.executeCommand(instanceId, 'bun run build', { timeout: 180000 });
+            const buildCmd = options?.buildCommand ?? 'bun run build';
+            this.logger.info('Building project', { buildCommand: buildCmd });
+            const buildResult = await this.executeCommand(instanceId, buildCmd, { timeout: 180000 });
             this.logger.info('Build result', { exitCode: buildResult.exitCode, stdout: buildResult.stdout?.substring(0, 500), stderr: buildResult.stderr?.substring(0, 500) });
             if (buildResult.exitCode !== 0) {
                 this.logger.warn('Build step failed or not available', buildResult.stdout, buildResult.stderr);

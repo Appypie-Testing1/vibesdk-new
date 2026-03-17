@@ -1095,6 +1095,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
     async deployToCloudflare(request?: {
         target?: DeploymentTarget;
         callbacks?: CloudflareDeploymentCallbacks;
+        buildCommand?: string;
     }): Promise<{ deploymentUrl: string | null; deploymentId?: string }> {
         const state = this.getState();
         const logger = this.getLog();
@@ -1134,9 +1135,11 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         });
 
         // Deploy to Cloudflare
+        const deployOpts = request?.buildCommand ? { buildCommand: request.buildCommand } : undefined;
         const deploymentResult = await client.deployToCloudflareWorkers(
             state.sandboxInstanceId,
-            target
+            target,
+            deployOpts
         );
 
         logger.info('Deployment result:', deploymentResult);

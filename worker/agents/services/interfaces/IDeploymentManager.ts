@@ -100,6 +100,7 @@ export interface IDeploymentManager {
     deployToCloudflare(request?: {
         target?: DeploymentTarget;
         callbacks?: CloudflareDeploymentCallbacks;
+        buildCommand?: string;
     }): Promise<{ deploymentUrl: string | null; deploymentId?: string }>;
 
 }

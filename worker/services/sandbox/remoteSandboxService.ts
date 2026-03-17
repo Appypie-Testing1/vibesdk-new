@@ -190,7 +190,7 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
      * @param instanceId The ID of the runner instance to deploy
      * @param credentials Optional Cloudflare deployment credentials
      */
-    async deployToCloudflareWorkers(instanceId: string, target: DeploymentTarget = 'platform'): Promise<DeploymentResult> {
+    async deployToCloudflareWorkers(instanceId: string, target: DeploymentTarget = 'platform', _options?: { buildCommand?: string }): Promise<DeploymentResult> {
         if (target === 'user') {
             return {
                 success: false,
