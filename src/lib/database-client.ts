@@ -59,8 +59,48 @@ class DatabaseClient {
 		return getCurrentAppId();
 	}
 
+	/**
+	 * Read the CSRF token from the csrf-token cookie (set by the platform on GET requests).
+	 */
+	private getCsrfToken(): string | null {
+		const match = document.cookie.match(/csrf-token=([^;]+)/);
+		if (!match) return null;
+		try {
+			const data = JSON.parse(decodeURIComponent(match[1]));
+			return data.token;
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Fetch wrapper that includes credentials (cookies) and CSRF token header.
+	 */
+	private async fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
+		const headers: Record<string, string> = {};
+		const existing = options.headers;
+		if (existing) {
+			if (existing instanceof Headers) {
+				existing.forEach((v, k) => { headers[k] = v; });
+			} else if (Array.isArray(existing)) {
+				for (const [k, v] of existing) headers[k] = v;
+			} else {
+				Object.assign(headers, existing);
+			}
+		}
+		const csrfToken = this.getCsrfToken();
+		if (csrfToken) {
+			headers['X-CSRF-Token'] = csrfToken;
+		}
+		return fetch(url, {
+			...options,
+			headers,
+			credentials: 'include',
+		});
+	}
+
 	async initializeDatabase(): Promise<{ success: boolean; message: string }> {
-		const response = await fetch(`${this.baseUrl}/init`, {
+		const response = await this.fetchWithAuth(`${this.baseUrl}/init`, {
 			method: 'POST',
 		});
 		if (!response.ok) throw new Error('Failed to initialize database');
@@ -76,7 +116,7 @@ class DatabaseClient {
 		created_by: string;
 		config?: Record<string, unknown>;
 	}): Promise<{ success: boolean; id: string }> {
-		const response = await fetch(`${this.baseUrl}/apps`, {
+		const response = await this.fetchWithAuth(`${this.baseUrl}/apps`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(appData),
@@ -87,7 +127,7 @@ class DatabaseClient {
 
 	async getApp(appId?: string): Promise<AppMetadata | null> {
 		const id = this.getAppId(appId);
-		const response = await fetch(`${this.baseUrl}/apps/${id}`);
+		const response = await this.fetchWithAuth(`${this.baseUrl}/apps/${id}`);
 		if (!response.ok) {
 			if (response.status === 404) return null;
 			throw new Error('Failed to get app');
@@ -96,7 +136,7 @@ class DatabaseClient {
 	}
 
 	async getAllApps(userId: string): Promise<AppMetadata[]> {
-		const response = await fetch(`${this.baseUrl}/apps?userId=${userId}`);
+		const response = await this.fetchWithAuth(`${this.baseUrl}/apps?userId=${userId}`);
 		if (!response.ok) throw new Error('Failed to get apps');
 		return response.json();
 	}
@@ -112,7 +152,7 @@ class DatabaseClient {
 		appId?: string
 	): Promise<{ success: boolean }> {
 		const id = this.getAppId(appId);
-		const response = await fetch(`${this.baseUrl}/apps/${id}`, {
+		const response = await this.fetchWithAuth(`${this.baseUrl}/apps/${id}`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(updates),
@@ -123,7 +163,7 @@ class DatabaseClient {
 
 	async deleteApp(appId?: string): Promise<{ success: boolean }> {
 		const id = this.getAppId(appId);
-		const response = await fetch(`${this.baseUrl}/apps/${id}`, {
+		const response = await this.fetchWithAuth(`${this.baseUrl}/apps/${id}`, {
 			method: 'DELETE',
 		});
 		if (!response.ok) throw new Error('Failed to delete app');
@@ -133,7 +173,7 @@ class DatabaseClient {
 	// User input storage
 	async saveUserInput(inputData: Record<string, unknown>, appId?: string): Promise<{ success: boolean; id: string }> {
 		const id = this.getAppId(appId);
-		const response = await fetch(`${this.baseUrl}/apps/${id}/data`, {
+		const response = await this.fetchWithAuth(`${this.baseUrl}/apps/${id}/data`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
@@ -147,7 +187,7 @@ class DatabaseClient {
 
 	async getUserInputs(appId?: string): Promise<UserInput[]> {
 		const id = this.getAppId(appId);
-		const response = await fetch(`${this.baseUrl}/apps/${id}/data?type=user_input`);
+		const response = await this.fetchWithAuth(`${this.baseUrl}/apps/${id}/data?type=user_input`);
 		if (!response.ok) throw new Error('Failed to get user inputs');
 		const data = await response.json();
 		return data.map((item: Record<string, unknown>) => ({
@@ -166,7 +206,7 @@ class DatabaseClient {
 		appId?: string
 	): Promise<{ success: boolean; id: string }> {
 		const id = this.getAppId(appId);
-		const response = await fetch(`${this.baseUrl}/apps/${id}/executions`, {
+		const response = await this.fetchWithAuth(`${this.baseUrl}/apps/${id}/executions`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
@@ -181,7 +221,7 @@ class DatabaseClient {
 
 	async getExecutions(limit: number = 10, appId?: string): Promise<ExecutionResult[]> {
 		const id = this.getAppId(appId);
-		const response = await fetch(`${this.baseUrl}/apps/${id}/executions?limit=${limit}`);
+		const response = await this.fetchWithAuth(`${this.baseUrl}/apps/${id}/executions?limit=${limit}`);
 		if (!response.ok) throw new Error('Failed to get executions');
 		const data = await response.json();
 		return data.map((item: Record<string, unknown>) => ({
@@ -197,7 +237,7 @@ class DatabaseClient {
 	// Performance metrics
 	async savePerformanceMetric(metricName: string, metricValue: number, appId?: string): Promise<{ success: boolean; id: string }> {
 		const id = this.getAppId(appId);
-		const response = await fetch(`${this.baseUrl}/apps/${id}/data`, {
+		const response = await this.fetchWithAuth(`${this.baseUrl}/apps/${id}/data`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
@@ -214,7 +254,7 @@ class DatabaseClient {
 
 	async getPerformanceMetrics(appId?: string): Promise<PerformanceMetric[]> {
 		const id = this.getAppId(appId);
-		const response = await fetch(`${this.baseUrl}/apps/${id}/data?type=performance_metric`);
+		const response = await this.fetchWithAuth(`${this.baseUrl}/apps/${id}/data?type=performance_metric`);
 		if (!response.ok) throw new Error('Failed to get performance metrics');
 		const data = await response.json();
 		return data.map((item: Record<string, unknown>) => {
