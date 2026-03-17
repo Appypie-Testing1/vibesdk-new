@@ -505,8 +505,18 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 instanceId: this.state.sandboxInstanceId,
             });
 
-            // Fullstack mobile projects run wrangler dev locally in the sandbox
-            // proxy, so API is available immediately without CF Workers deployment.
+            // For fullstack mobile projects, auto-deploy to CF Workers after all
+            // phases complete so the proxy can route /api/* requests.
+            if (this.state.templateRenderMode === 'mobile-fullstack' && this.state.sandboxInstanceId) {
+                this.logger.info('Auto-deploying fullstack mobile API to CF Workers (post-generation)');
+                this.deploymentManager.deployToCloudflare({ target: 'platform' }).then((cfResult) => {
+                    if (cfResult.deploymentUrl) {
+                        this.logger.info('Auto CF deploy succeeded', { url: cfResult.deploymentUrl });
+                    }
+                }).catch((err) => {
+                    this.logger.warn('Auto CF deploy failed (non-blocking):', err);
+                });
+            }
         }
     }
     

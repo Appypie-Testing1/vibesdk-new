@@ -479,15 +479,16 @@ To build a valid, previewable Expo/React Native project (SDK 54, React Native 0.
 
 5. All UI must use React Native components (View, Text, TouchableOpacity, etc.), NOT HTML elements.
 
-6. These packages are already installed: expo, expo-router, expo-constants, expo-font, expo-linking, expo-status-bar, expo-system-ui, react-native, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens, react-native-web. Do NOT add them again with exec_commands.
+6. These packages are already installed: expo, expo-router, expo-constants, expo-font, expo-linking, expo-status-bar, expo-system-ui, react-native, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens, react-native-web, @react-native-async-storage/async-storage. Do NOT add them again with exec_commands.
 
-7. **CRITICAL**: If your code imports ANY package not listed above, you MUST install it with exec_commands("bun add <package>") BEFORE calling deploy_preview. Missing dependencies cause Metro bundler to crash with "Unable to resolve module" errors. Common packages that need explicit installation: date-fns, zustand, @react-native-async-storage/async-storage, expo-image, expo-linear-gradient, expo-splash-screen, etc.
+7. **CRITICAL**: If your code imports ANY package not listed above, you MUST install it with exec_commands("bun add <package>") BEFORE calling deploy_preview. Missing dependencies cause Metro bundler to crash with "Unable to resolve module" errors. Common packages that need explicit installation: date-fns, zustand, expo-image, expo-linear-gradient, expo-splash-screen, etc.
 
 8. **BANNED PACKAGES** -- Do NOT use these. They fail to install or are incompatible with Expo SDK 54:
    - lucide-react-native (use emoji or Unicode symbols for icons instead)
    - @expo/vector-icons (not compatible with SDK 54)
    - react-native-vector-icons (requires native linking)
    - react-native-svg (often causes build failures)
+   - @react-native-async-storage/async-storage@2.x (v2 requires KMP Maven repo not available in EAS Build -- v1.23.1 is pre-installed, do NOT upgrade it)
    - Any package requiring native compilation or pod install
    For icons, use emoji characters (e.g. "+" for add, "x" for delete, etc.) or simple Text components.
 `;
@@ -604,6 +605,7 @@ dist/
                 'react-native-screens': '~4.16.0',
                 'react-native-web': '~0.21.0',
                 'react-native-worklets': '0.5.1',
+                '@react-native-async-storage/async-storage': '1.23.1',
             },
             devDependencies: {
                 '@babel/core': '^7.25.0',
@@ -843,12 +845,13 @@ To build a valid, previewable Expo/React Native + Cloudflare Workers fullstack p
    - Example: \`import { apiClient } from '../lib/api-client'; const data = await apiClient.get('/api/products');\`
    - NEVER write: \`fetch('/api/products')\` -- this FAILS on native because there is no origin.
 
-7. These packages are pre-installed: expo, expo-router, expo-constants, expo-font, expo-linking, expo-status-bar, expo-system-ui, react-native, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens, react-native-web, hono, drizzle-orm. Do NOT add them again.
+7. These packages are pre-installed: expo, expo-router, expo-constants, expo-font, expo-linking, expo-status-bar, expo-system-ui, react-native, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens, react-native-web, @react-native-async-storage/async-storage, hono, drizzle-orm. Do NOT add them again.
 
 8. **CRITICAL**: If your code imports ANY package not listed above, you MUST install it with exec_commands("bun add <package>") BEFORE calling deploy_preview.
 
 9. **BANNED PACKAGES** -- Do NOT use these. They fail to install or are incompatible with Expo SDK 54:
    - lucide-react-native, @expo/vector-icons, react-native-vector-icons, react-native-svg
+   - @react-native-async-storage/async-storage@2.x (v2 requires KMP Maven repo not in EAS Build -- v1.23.1 is pre-installed, do NOT upgrade)
    - Any package requiring native compilation or pod install
    For icons, use emoji characters or simple Text components.
 
@@ -1136,6 +1139,7 @@ dist/
                 'react-native-screens': '~4.16.0',
                 'react-native-web': '~0.21.0',
                 'react-native-worklets': '0.5.1',
+                '@react-native-async-storage/async-storage': '1.23.1',
                 'hono': '^4.11.0',
                 'drizzle-orm': '^0.39.0',
             },
@@ -1238,49 +1242,50 @@ html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
                 production: {},
             },
         }, null, 2),
-        '_expo-proxy.cjs': `// Reverse proxy: routes /api/* to local wrangler dev (Hono + D1),
+        '_expo-proxy.cjs': `// Reverse proxy: routes /api/* to deployed CF Workers backend,
 // everything else to the Expo Metro dev server.
 const http = require('http');
+const https = require('https');
 const net = require('net');
-const { spawn, execSync } = require('child_process');
+const fs = require('fs');
+const { spawn } = require('child_process');
 
 const PUBLIC_PORT = parseInt(process.env.PORT || '8001', 10);
-const METRO_PORT = PUBLIC_PORT + 1;
-const API_PORT = PUBLIC_PORT + 2;
+const INTERNAL_PORT = PUBLIC_PORT + 1;
 let metroReady = false;
 let metroDead = false;
 let metroExitCode = null;
-let apiReady = false;
 const lastErrors = [];
 
-// Ensure dist/client exists so wrangler dev does not fail on missing assets dir
-try { execSync('mkdir -p dist/client'); } catch {}
+// Read deployed API URL from .api-url file (written after CF Workers deploy)
+let cachedApiUrl = null;
+let apiUrlCheckedAt = 0;
+function getApiUrl() {
+  const now = Date.now();
+  if (cachedApiUrl && now - apiUrlCheckedAt < 5000) return cachedApiUrl;
+  try {
+    cachedApiUrl = fs.readFileSync('.api-url', 'utf-8').trim();
+    apiUrlCheckedAt = now;
+    if (cachedApiUrl) console.log('[proxy] API URL loaded: ' + cachedApiUrl);
+  } catch { cachedApiUrl = null; }
+  return cachedApiUrl;
+}
 
 // Start Expo dev server on internal port
-const expo = spawn('npx', ['expo', 'start', '--port', String(METRO_PORT), '--host', 'lan'], {
+const expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
   stdio: ['inherit', 'pipe', 'pipe'],
-  env: { ...process.env, PORT: String(METRO_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
+  env: { ...process.env, PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
 });
 expo.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); if (/Metro waiting|Bundler is ready|listening on/i.test(s)) { metroReady = true; console.log('[proxy] Metro is ready'); } });
 expo.stderr.on('data', (d) => { const s = d.toString(); process.stderr.write(d); lastErrors.push(s); if (lastErrors.length > 30) lastErrors.shift(); });
 expo.on('error', (err) => { console.error('[proxy] Failed to start Expo:', err); metroDead = true; lastErrors.push(String(err)); });
 expo.on('exit', (code) => { console.error('[proxy] Expo exited with code ' + code); metroDead = true; metroExitCode = code; });
 
-// Start wrangler dev for API (Hono + local D1)
-const wrangler = spawn('npx', ['wrangler', 'dev', '--port', String(API_PORT), '--ip', '127.0.0.1'], {
-  stdio: ['inherit', 'pipe', 'pipe'],
-  env: { ...process.env, PORT: undefined },
-});
-wrangler.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); if (/Ready on|Listening|ready at/i.test(s)) { apiReady = true; console.log('[proxy] Wrangler API ready on port ' + API_PORT); } });
-wrangler.stderr.on('data', (d) => { process.stderr.write(d); });
-wrangler.on('error', (err) => { console.error('[proxy] Wrangler failed to start:', err); });
-wrangler.on('exit', (code) => { console.error('[proxy] Wrangler exited with code ' + code); });
-
 // Probe Metro readiness every 3s until ready
 const probe = setInterval(() => {
   if (metroReady || metroDead) { clearInterval(probe); return; }
-  const req = http.get({ hostname: '127.0.0.1', port: METRO_PORT, path: '/status', timeout: 2000 }, (res) => {
-    if (!metroReady) { metroReady = true; clearInterval(probe); console.log('[proxy] Metro responded on port ' + METRO_PORT); }
+  const req = http.get({ hostname: '127.0.0.1', port: INTERNAL_PORT, path: '/status', timeout: 2000 }, (res) => {
+    if (!metroReady) { metroReady = true; clearInterval(probe); console.log('[proxy] Metro responded on port ' + INTERNAL_PORT); }
   });
   req.on('error', () => {});
   req.on('timeout', () => { req.destroy(); });
@@ -1302,33 +1307,60 @@ function buildErrorPage() {
   return '<html><head><meta charset="utf-8"><style>body{display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;font-family:system-ui;background:#fef2f2;color:#991b1b}div{text-align:center;max-width:700px;padding:24px}pre{text-align:left;background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:8px;font-size:12px;overflow-x:auto;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word}</style></head><body><div><h2>Metro Bundler Crashed</h2><p>The Expo dev server exited unexpectedly (code: ' + (metroExitCode || 'unknown') + ')</p>' + (errText ? '<pre>' + errText + '</pre>' : '<p>No error output captured.</p>') + '</div></body></html>';
 }
 
-// Proxy /api/* to local wrangler dev server
+// Proxy /api/* to deployed CF Workers backend
 function proxyApiRequest(clientReq, clientRes) {
-  const proxyReq = http.request({
-    hostname: '127.0.0.1',
-    port: API_PORT,
-    path: clientReq.url,
-    method: clientReq.method,
-    headers: { ...clientReq.headers, host: '127.0.0.1:' + API_PORT },
-  }, (proxyRes) => {
-    const h = { ...proxyRes.headers };
-    h['access-control-allow-origin'] = '*';
-    h['access-control-allow-methods'] = 'GET,POST,PUT,DELETE,OPTIONS';
-    h['access-control-allow-headers'] = 'Content-Type,Authorization';
-    clientRes.writeHead(proxyRes.statusCode, h);
-    proxyRes.pipe(clientRes, { end: true });
-  });
-  proxyReq.on('error', (err) => {
-    console.error('[proxy] API proxy error:', err.message);
-    clientRes.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-    clientRes.end(JSON.stringify({ error: 'API server starting up, please retry...' }));
-  });
-  clientReq.pipe(proxyReq, { end: true });
+  const apiUrl = getApiUrl();
+  if (!apiUrl) {
+    clientRes.writeHead(503, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    clientRes.end(JSON.stringify({ error: 'API not ready. Deploy the app first.' }));
+    return;
+  }
+  try {
+    const parsed = new URL(apiUrl);
+    const mod = parsed.protocol === 'https:' ? https : http;
+    const opts = {
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path: clientReq.url,
+      method: clientReq.method,
+      headers: {
+        'content-type': clientReq.headers['content-type'] || 'application/json',
+        'host': parsed.hostname,
+      },
+      rejectUnauthorized: true,
+    };
+    if (clientReq.headers['authorization']) opts.headers['authorization'] = clientReq.headers['authorization'];
+    console.log('[proxy] /api -> ' + parsed.hostname + clientReq.url);
+    const proxyReq = mod.request(opts, (proxyRes) => {
+      const h = {};
+      h['content-type'] = proxyRes.headers['content-type'] || 'application/json';
+      h['access-control-allow-origin'] = '*';
+      h['access-control-allow-methods'] = 'GET,POST,PUT,DELETE,OPTIONS';
+      h['access-control-allow-headers'] = 'Content-Type,Authorization';
+      clientRes.writeHead(proxyRes.statusCode, h);
+      proxyRes.pipe(clientRes, { end: true });
+    });
+    proxyReq.on('error', (err) => {
+      console.error('[proxy] API proxy error:', err.message);
+      clientRes.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      clientRes.end(JSON.stringify({ error: 'API unreachable: ' + err.message }));
+    });
+    proxyReq.setTimeout(15000, () => {
+      proxyReq.destroy();
+      clientRes.writeHead(504, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      clientRes.end(JSON.stringify({ error: 'API request timed out' }));
+    });
+    clientReq.pipe(proxyReq, { end: true });
+  } catch (err) {
+    console.error('[proxy] API proxy setup error:', err.message);
+    clientRes.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    clientRes.end(JSON.stringify({ error: 'Proxy error: ' + err.message }));
+  }
 }
 
 // HTTP proxy
 const server = http.createServer((clientReq, clientRes) => {
-  // Route /api/* to local wrangler dev
+  // Route /api/* to deployed CF Workers backend
   if (clientReq.url && clientReq.url.startsWith('/api/')) {
     if (clientReq.method === 'OPTIONS') {
       clientRes.writeHead(204, {
@@ -1350,7 +1382,7 @@ const server = http.createServer((clientReq, clientRes) => {
     return;
   }
   const proxyReq = http.request(
-    { hostname: '127.0.0.1', port: METRO_PORT, path: clientReq.url, method: clientReq.method, headers: sanitizeHeaders(clientReq.headers) },
+    { hostname: '127.0.0.1', port: INTERNAL_PORT, path: clientReq.url, method: clientReq.method, headers: sanitizeHeaders(clientReq.headers) },
     (proxyRes) => {
       clientRes.writeHead(proxyRes.statusCode, proxyRes.headers);
       proxyRes.pipe(clientRes, { end: true });
@@ -1363,9 +1395,9 @@ const server = http.createServer((clientReq, clientRes) => {
   clientReq.pipe(proxyReq, { end: true });
 });
 
-// WebSocket proxy (Metro hot reload)
+// WebSocket proxy
 server.on('upgrade', (req, socket, head) => {
-  const proxySocket = net.connect(METRO_PORT, '127.0.0.1', () => {
+  const proxySocket = net.connect(INTERNAL_PORT, '127.0.0.1', () => {
     const sanitized = sanitizeHeaders(req.headers);
     const headerLines = Object.entries(sanitized).map(([k, v]) => k + ': ' + v).join('\\r\\n');
     proxySocket.write(
@@ -1379,12 +1411,12 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 server.listen(PUBLIC_PORT, '0.0.0.0', () => {
-  console.log('[proxy] Listening on port ' + PUBLIC_PORT);
-  console.log('[proxy] Metro on port ' + METRO_PORT + ', API (wrangler dev) on port ' + API_PORT);
+  console.log('[proxy] Listening on port ' + PUBLIC_PORT + ', Metro on port ' + INTERNAL_PORT);
+  console.log('[proxy] /api/* routes proxy to deployed backend (reads .api-url)');
 });
 
-process.on('SIGTERM', () => { expo.kill(); wrangler.kill(); server.close(); });
-process.on('SIGINT', () => { expo.kill(); wrangler.kill(); server.close(); });
+process.on('SIGTERM', () => { expo.kill(); server.close(); });
+process.on('SIGINT', () => { expo.kill(); server.close(); });
 `,
     };
 
@@ -1429,7 +1461,7 @@ process.on('SIGINT', () => { expo.kill(); wrangler.kill(); server.close(); });
         initCommand: 'node _expo-proxy.cjs',
         frameworks: ['react-native', 'expo', 'expo-router', 'hono', 'drizzle-orm'],
         importantFiles: ['app/index.tsx', 'app/_layout.tsx', 'api/src/index.ts', 'package.json', 'wrangler.jsonc'],
-        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'eas.json', 'babel.config.js', 'wrangler.jsonc', 'lib/api-client.ts'],
+        dontTouchFiles: ['app.json', 'metro.config.js', '_expo-proxy.cjs', 'eas.json', 'babel.config.js', 'wrangler.jsonc', '.api-url', 'lib/api-client.ts'],
         redactedFiles: [],
         disabled: false,
     };
