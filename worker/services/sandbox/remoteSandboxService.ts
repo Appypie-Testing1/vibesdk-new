@@ -36,9 +36,12 @@ import { env } from 'cloudflare:workers'
 import z from 'zod';
 import { FileOutputType } from 'worker/agents/schemas';
 
-export async function runnerFetch(url: string, method: 'GET' | 'POST' | 'DELETE', headers: Headers, body: string | undefined) {
-    // Use direct fetch for runner service communication
-    return await fetch(url, { method, headers, body });
+const DEFAULT_FETCH_TIMEOUT_MS = 120_000; // 2 minutes
+
+export async function runnerFetch(url: string, method: 'GET' | 'POST' | 'DELETE', headers: Headers, body: string | undefined, timeoutMs?: number) {
+    // Use direct fetch with a timeout to prevent hanging forever
+    const signal = AbortSignal.timeout(timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS);
+    return await fetch(url, { method, headers, body, signal });
 }
 
 /**
@@ -63,7 +66,8 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
         method: 'GET' | 'POST' | 'DELETE',
         schema?: T,
         body?: unknown,
-        resetPrevious: boolean = false
+        resetPrevious: boolean = false,
+        timeoutMs?: number
     ): Promise<z.infer<T>> {
         const url = `${RemoteSandboxServiceClient.sandboxServiceUrl}${endpoint}`;
 
@@ -76,7 +80,7 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
                 headers.set('x-container-action', 'reset');
             }
 
-            const response = await runnerFetch(url, method, headers, body ? JSON.stringify(body) : undefined);
+            const response = await runnerFetch(url, method, headers, body ? JSON.stringify(body) : undefined, timeoutMs);
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -107,10 +111,14 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
             // this.logger.info('Response validated', { url });
             return validation.data;
         } catch (error) {
-            this.logger.error('Error making request to runner service', error, { url });
+            const isTimeout = error instanceof DOMException && error.name === 'TimeoutError';
+            const errorMsg = isTimeout
+                ? `Request timed out after ${(timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS) / 1000}s`
+                : (error instanceof Error ? error.message : String(error));
+            this.logger.error('Error making request to runner service', { error: errorMsg, url });
             return {
                 success: false,
-                error: "Failed to validate response"
+                error: errorMsg
             };
         }
     }
@@ -161,7 +169,9 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
      */
     async executeCommands(instanceId: string, commands: string[], timeout?: number): Promise<ExecuteCommandsResponse> {
         const requestBody: ExecuteCommandsRequest = { commands, timeout };
-        return this.makeRequest(`/instances/${instanceId}/commands`, 'POST', ExecuteCommandsResponseSchema, requestBody);
+        // Set fetch timeout slightly longer than command timeout to allow runner to respond
+        const fetchTimeout = timeout ? timeout + 15_000 : undefined;
+        return this.makeRequest(`/instances/${instanceId}/commands`, 'POST', ExecuteCommandsResponseSchema, requestBody, false, fetchTimeout);
     }
 
     /**

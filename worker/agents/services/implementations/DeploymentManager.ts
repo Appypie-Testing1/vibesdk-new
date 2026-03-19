@@ -1451,6 +1451,18 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         logger.info('Triggering EAS build', { platform, sandboxInstanceId: state.sandboxInstanceId });
 
         try {
+            callbacks?.onProgress?.('Checking sandbox health...');
+
+            // Verify the sandbox is reachable before starting the multi-step process
+            const healthCheck = await client.getInstanceStatus(state.sandboxInstanceId);
+            if (!healthCheck.success || !healthCheck.isHealthy) {
+                const error = `Sandbox instance is not healthy. ${healthCheck.error || 'Try regenerating or refreshing the preview.'}`;
+                logger.error('Sandbox health check failed before EAS build', { error: healthCheck.error });
+                callbacks?.onError?.(error);
+                return null;
+            }
+            logger.info('Sandbox health check passed');
+
             callbacks?.onProgress?.('Preparing project for EAS build...');
 
             // EAS CLI requires a git repository with committed files
@@ -1506,7 +1518,10 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 }
                 console.log('ok');
             "`;
-            await client.executeCommands(state.sandboxInstanceId, [ensureBuildPrereqs], 10_000);
+            const prereqResult = await client.executeCommands(state.sandboxInstanceId, [ensureBuildPrereqs], 10_000);
+            if (!prereqResult.success) {
+                logger.warn('Build prerequisites may have failed', { error: prereqResult.error });
+            }
 
             // Ensure lib/api-client.ts has standalone APK support (reads extra.apiUrl).
             // Older projects may have the old template without this fallback.
