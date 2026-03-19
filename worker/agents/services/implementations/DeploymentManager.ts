@@ -22,6 +22,67 @@ const PER_ATTEMPT_TIMEOUT_MS = 60000;  // 60 seconds per individual attempt
 const MASTER_DEPLOYMENT_TIMEOUT_MS = 300000;  // 5 minutes total
 const HEALTH_CHECK_INTERVAL_MS = 30000;
 
+// Standalone api-client.ts for EAS builds (reads apiUrl from app.json extra)
+const EAS_API_CLIENT_TEMPLATE = `import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+
+function getBaseUrl(): string {
+  if (Platform.OS === 'web') return '';
+  const debuggerHost = Constants.expoConfig?.hostUri
+    ?? (Constants as Record<string, unknown>).manifest2?.extra?.expoGo?.debuggerHost as string | undefined;
+  if (debuggerHost) {
+    const host = debuggerHost.split(':')[0];
+    return 'https://' + host;
+  }
+  const apiUrl = Constants.expoConfig?.extra?.apiUrl;
+  if (apiUrl && !apiUrl.startsWith('__')) return apiUrl;
+  return '';
+}
+
+const BASE_URL = getBaseUrl();
+const MAX_RETRIES = 4;
+const RETRY_DELAY_MS = 3000;
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const url = BASE_URL + path;
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+      });
+      if (res.ok) return res.json() as Promise<T>;
+      if (res.status >= 500 && attempt < MAX_RETRIES) {
+        lastError = new Error(res.statusText);
+        await delay(RETRY_DELAY_MS);
+        continue;
+      }
+      const error = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error((error as Record<string, string>).error || res.statusText);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < MAX_RETRIES) { await delay(RETRY_DELAY_MS); continue; }
+    }
+  }
+  throw lastError || new Error('Request failed');
+}
+
+export const apiClient = {
+  get: <T>(path: string) => request<T>(path),
+  post: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
+  put: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
+  delete: <T>(path: string) =>
+    request<T>(path, { method: 'DELETE' }),
+};
+`;
+
 /**
  * Manages deployment operations for sandbox instances
  * Handles instance creation, file deployment, analysis, and GitHub/Cloudflare export
@@ -1474,124 +1535,85 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             }
             logger.info('Sandbox health check passed');
 
-            callbacks?.onProgress?.('Configuring project files...');
+            callbacks?.onProgress?.('Reading project files...');
 
-            // Bake the deployed API URL into app.json and api-client.ts so the
-            // standalone APK/IPA can reach the CF Workers API without a proxy.
+            // Use writeFiles/getFiles API instead of fragile shell commands (node -e, heredoc)
             const previewDomain = getPreviewDomain(this.env);
             const protocol = getProtocolForHost(previewDomain);
             const deployedApiUrl = `${protocol}://${state.projectName}.${previewDomain}`;
-            logger.info('Baking API URL for standalone build', { deployedApiUrl });
-
-            // Ensure build prerequisites: slug, name, android.package, ios.bundleIdentifier, extra.apiUrl, babel.config.js, .gitignore
-            // IMPORTANT: .gitignore MUST be created BEFORE git add -A to avoid staging node_modules/
             const safeSlug = state.projectName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
-            const ensureBuildPrereqs = `node -e "
-                var fs = require('fs');
-                var a = JSON.parse(fs.readFileSync('./app.json', 'utf8'));
-                a.expo = a.expo || {};
-                a.expo.slug = '${safeSlug}';
-                a.expo.name = '${state.projectName.replace(/'/g, "\\'")}';
-                var bundleId = 'com.expo.' + '${safeSlug}'.replace(/[^a-zA-Z0-9]/g, '');
-                if (!a.expo.android) a.expo.android = {};
-                if (!a.expo.android.package) a.expo.android.package = bundleId;
-                if (!a.expo.ios) a.expo.ios = {};
-                if (!a.expo.ios.bundleIdentifier) a.expo.ios.bundleIdentifier = bundleId;
-                if (!a.expo.extra) a.expo.extra = {};
-                a.expo.extra.apiUrl = '${deployedApiUrl}';
-                fs.writeFileSync('./app.json', JSON.stringify(a, null, 2));
-                if (!fs.existsSync('./babel.config.js')) {
-                    fs.writeFileSync('./babel.config.js',
-                        'module.exports = function (api) {\\n' +
-                        '  api.cache(true);\\n' +
-                        '  return {\\n' +
-                        '    presets: [\"babel-preset-expo\"],\\n' +
-                        '    plugins: [\"react-native-reanimated/plugin\"],\\n' +
-                        '  };\\n' +
-                        '};\\n'
-                    );
-                }
-                if (!fs.existsSync('./.gitignore')) {
-                    fs.writeFileSync('./.gitignore', 'node_modules/\\n.expo/\\ndist/\\n*.tsbuildinfo\\n');
-                } else {
-                    var gi = fs.readFileSync('./.gitignore', 'utf8');
-                    if (!gi.includes('.expo')) fs.writeFileSync('./.gitignore', gi + '\\n.expo/\\n');
-                }
-                var pj = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-                if (pj.devDependencies && pj.devDependencies['eas-cli']) {
-                    delete pj.devDependencies['eas-cli'];
-                    fs.writeFileSync('./package.json', JSON.stringify(pj, null, 2));
-                }
-                console.log('ok');
-            "`;
-            const prereqResult = await client.executeCommands(state.sandboxInstanceId, [ensureBuildPrereqs], 15_000);
-            if (!prereqResult.success) {
-                logger.warn('Build prerequisites may have failed', { error: prereqResult.error, output: prereqResult.results?.[0]?.output?.slice(0, 300) });
+            const bundleId = 'com.expo.' + safeSlug.replace(/[^a-zA-Z0-9]/g, '');
+            logger.info('Preparing EAS build files', { deployedApiUrl, safeSlug, bundleId });
+
+            // Read current app.json and package.json from sandbox
+            const currentFiles = await client.getFiles(state.sandboxInstanceId, ['app.json', 'package.json', '.gitignore']);
+            const appJsonFile = currentFiles.files?.find(f => f.filePath === 'app.json');
+            const pkgJsonFile = currentFiles.files?.find(f => f.filePath === 'package.json');
+            const gitignoreFile = currentFiles.files?.find(f => f.filePath === '.gitignore');
+
+            // Patch app.json with slug, name, bundleIdentifier, apiUrl
+            let appJson: Record<string, Record<string, unknown>>;
+            try {
+                appJson = JSON.parse(appJsonFile?.fileContents || '{"expo":{}}');
+            } catch {
+                appJson = { expo: {} };
+            }
+            appJson.expo = appJson.expo || {};
+            appJson.expo.slug = safeSlug;
+            appJson.expo.name = state.projectName;
+            const android = (appJson.expo.android || {}) as Record<string, unknown>;
+            if (!android.package) android.package = bundleId;
+            appJson.expo.android = android;
+            const ios = (appJson.expo.ios || {}) as Record<string, unknown>;
+            if (!ios.bundleIdentifier) ios.bundleIdentifier = bundleId;
+            appJson.expo.ios = ios;
+            const extra = (appJson.expo.extra || {}) as Record<string, unknown>;
+            extra.apiUrl = deployedApiUrl;
+            appJson.expo.extra = extra;
+
+            // Patch package.json: remove eas-cli from devDependencies if present
+            let pkgJson: Record<string, Record<string, unknown>>;
+            try {
+                pkgJson = JSON.parse(pkgJsonFile?.fileContents || '{}');
+            } catch {
+                pkgJson = {};
+            }
+            if (pkgJson.devDependencies && (pkgJson.devDependencies as Record<string, unknown>)['eas-cli']) {
+                delete (pkgJson.devDependencies as Record<string, unknown>)['eas-cli'];
             }
 
-            // Ensure lib/api-client.ts has standalone APK support (reads extra.apiUrl).
-            // Older projects may have the old template without this fallback.
-            const apiClientContent = `import { Platform } from 'react-native';
-import Constants from 'expo-constants';
+            // Ensure .gitignore has node_modules and .expo
+            let gitignoreContent = gitignoreFile?.fileContents || '';
+            if (!gitignoreContent.includes('node_modules')) {
+                gitignoreContent = 'node_modules/\n.expo/\ndist/\n*.tsbuildinfo\n';
+            } else if (!gitignoreContent.includes('.expo')) {
+                gitignoreContent += '\n.expo/\n';
+            }
 
-function getBaseUrl(): string {
-  if (Platform.OS === 'web') return '';
-  const debuggerHost = Constants.expoConfig?.hostUri
-    ?? (Constants as Record<string, unknown>).manifest2?.extra?.expoGo?.debuggerHost as string | undefined;
-  if (debuggerHost) {
-    const host = debuggerHost.split(':')[0];
-    return 'https://' + host;
-  }
-  const apiUrl = Constants.expoConfig?.extra?.apiUrl;
-  if (apiUrl && !apiUrl.startsWith('__')) return apiUrl;
-  return '';
-}
+            callbacks?.onProgress?.('Writing build configuration...');
 
-const BASE_URL = getBaseUrl();
-const MAX_RETRIES = 4;
-const RETRY_DELAY_MS = 3000;
+            // Write all files at once via reliable writeFiles API
+            const filesToWrite: { filePath: string; fileContents: string }[] = [
+                { filePath: 'app.json', fileContents: JSON.stringify(appJson, null, 2) },
+                { filePath: 'package.json', fileContents: JSON.stringify(pkgJson, null, 2) },
+                { filePath: '.gitignore', fileContents: gitignoreContent },
+                { filePath: 'lib/api-client.ts', fileContents: EAS_API_CLIENT_TEMPLATE },
+            ];
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+            // Add babel.config.js only if it doesn't exist
+            const babelCheck = await client.getFiles(state.sandboxInstanceId, ['babel.config.js']);
+            if (!babelCheck.files?.find(f => f.filePath === 'babel.config.js')?.fileContents) {
+                filesToWrite.push({
+                    filePath: 'babel.config.js',
+                    fileContents: 'module.exports = function (api) {\n  api.cache(true);\n  return {\n    presets: ["babel-preset-expo"],\n    plugins: ["react-native-reanimated/plugin"],\n  };\n};\n'
+                });
+            }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = BASE_URL + path;
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const res = await fetch(url, {
-        ...options,
-        headers: { 'Content-Type': 'application/json', ...options?.headers },
-      });
-      if (res.ok) return res.json() as Promise<T>;
-      if (res.status >= 500 && attempt < MAX_RETRIES) {
-        lastError = new Error(res.statusText);
-        await delay(RETRY_DELAY_MS);
-        continue;
-      }
-      const error = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error((error as Record<string, string>).error || res.statusText);
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-      if (attempt < MAX_RETRIES) { await delay(RETRY_DELAY_MS); continue; }
-    }
-  }
-  throw lastError || new Error('Request failed');
-}
-
-export const apiClient = {
-  get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
-  put: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
-  delete: <T>(path: string) =>
-    request<T>(path, { method: 'DELETE' }),
-};
-`;
-            const writeApiClient = `cat > lib/api-client.ts << 'APICLIENT_EOF'\n${apiClientContent}APICLIENT_EOF`;
-            await client.executeCommands(state.sandboxInstanceId, [writeApiClient], 10_000);
+            const writeResult = await client.writeFiles(state.sandboxInstanceId, filesToWrite);
+            if (!writeResult.success) {
+                logger.warn('writeFiles for build prereqs may have partially failed', { error: writeResult.error });
+            }
+            logger.info('Build prerequisite files written successfully');
 
             callbacks?.onProgress?.('Initializing git repository...');
 
