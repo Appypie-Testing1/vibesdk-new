@@ -137,6 +137,21 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             this.logger.info("Deployment to sandbox service and initial commands predictions completed successfully");
                 await this.executeCommands(setupCommands.commands);
                 this.logger.info("Initial commands executed successfully");
+
+            // For fullstack mobile: deploy the template's default API immediately
+            // so /api/health works before code generation starts.
+            // Check both templateRenderMode and templateName since the render mode
+            // may not be set yet during early initialization.
+            if ((this.state.templateRenderMode === 'mobile-fullstack' || this.state.templateName === 'expo-fullstack') && this.state.sandboxInstanceId) {
+                // .api-url is now included in the initial files via createNewInstance().
+                // Fire-and-forget: deploy the template default API so the health check works.
+                this.deploymentManager.deployToCloudflare({
+                    target: 'platform',
+                    buildCommand: 'bun run build:worker',
+                }).then(r => {
+                    if (r.deploymentUrl) this.logger.info('Initial API deploy succeeded', { url: r.deploymentUrl });
+                }).catch(e => this.logger.warn('Initial API deploy failed (will retry after generation)', e));
+            }
         } catch (error) {
             this.logger.error("Error during async initialization:", error);
             // throw error;
@@ -507,21 +522,22 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
             // For fullstack mobile projects, auto-deploy to CF Workers after all
             // phases complete so the proxy can route /api/* requests.
-            if (this.state.templateRenderMode === 'mobile-fullstack' && this.state.sandboxInstanceId) {
+            if ((this.state.templateRenderMode === 'mobile-fullstack' || this.state.templateName === 'expo-fullstack') && this.state.sandboxInstanceId) {
                 const previewDomain = getPreviewDomain(this.env);
                 const protocol = getProtocolForHost(previewDomain);
                 const expectedUrl = `${protocol}://${this.state.projectName}.${previewDomain}`;
                 const client = this.deploymentManager.getClient();
                 const sandboxId = this.state.sandboxInstanceId;
 
-                // Write .api-url eagerly so the proxy can start routing immediately.
-                // If deploy fails we clear it so the proxy returns a clean 503.
-                client.executeCommands(sandboxId, [
-                    `printf '%s' '${expectedUrl.replace(/'/g, "'\\''")}' > .api-url`
+                // Ensure .api-url exists via writeFiles (reliable, awaited).
+                // The file should already exist from createNewInstance, but this
+                // covers projects created before that fix was deployed.
+                client.writeFiles(sandboxId, [
+                    { filePath: '.api-url', fileContents: expectedUrl }
                 ]).then(() => {
-                    this.logger.info('Wrote .api-url eagerly before deploy', { expectedUrl });
+                    this.logger.info('Ensured .api-url via writeFiles', { expectedUrl });
                 }).catch((err) => {
-                    this.logger.warn('Failed to write .api-url eagerly', err);
+                    this.logger.warn('Failed to write .api-url via writeFiles', err);
                 });
 
                 // Deploy only the API worker — skip expo export (build:web) which
@@ -540,21 +556,18 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                                 instanceId: sandboxId,
                                 deploymentUrl: cfResult.deploymentUrl,
                             });
-                        } else if (attempt < 2) {
+                        } else if (attempt < 3) {
                             this.logger.warn('Auto CF deploy returned no URL, retrying', { attempt });
-                            setTimeout(() => attemptDeploy(attempt + 1), 5000);
+                            setTimeout(() => attemptDeploy(attempt + 1), 8000);
                         } else {
-                            this.logger.error('Auto CF deploy failed after retries');
-                            // Clear .api-url so proxy returns 503 instead of 502
-                            client.executeCommands(sandboxId, ['rm -f .api-url']).catch(() => {});
+                            this.logger.error('Auto CF deploy failed after retries — .api-url kept for retry via client');
                         }
                     }).catch((err) => {
                         this.logger.warn('Auto CF deploy failed', err, { attempt });
-                        if (attempt < 2) {
-                            setTimeout(() => attemptDeploy(attempt + 1), 5000);
+                        if (attempt < 3) {
+                            setTimeout(() => attemptDeploy(attempt + 1), 8000);
                         } else {
-                            // Clear .api-url so proxy returns 503 instead of 502
-                            client.executeCommands(sandboxId, ['rm -f .api-url']).catch(() => {});
+                            this.logger.error('Auto CF deploy permanently failed — .api-url kept for retry via client');
                         }
                     });
                 };

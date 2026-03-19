@@ -489,6 +489,24 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
                 await this.ensureMetroConfig(sandboxInstanceId);
                 await this.autoInstallMissingDependencies(sandboxInstanceId);
             }
+
+            // Ensure .api-url exists for fullstack mobile projects so the proxy
+            // can route /api/* requests. Uses writeFiles (reliable) instead of
+            // executeCommands (fire-and-forget). Covers existing projects that
+            // were created before .api-url was included in initial files.
+            if (state.templateRenderMode === 'mobile-fullstack' || state.templateName === 'expo-fullstack') {
+                const previewDomain = getPreviewDomain(this.env);
+                const protocol = getProtocolForHost(previewDomain);
+                const apiUrl = `${protocol}://${state.projectName}.${previewDomain}`;
+                try {
+                    await this.getClient().writeFiles(sandboxInstanceId, [
+                        { filePath: '.api-url', fileContents: apiUrl }
+                    ]);
+                    logger.info('Wrote .api-url via writeFiles', { apiUrl });
+                } catch (e) {
+                    logger.warn('Failed to write .api-url via writeFiles', e);
+                }
+            }
         }
 
         // Clear logs if requested
@@ -587,7 +605,8 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
 
         // For fullstack mobile projects, bake the deployed API URL into app.json
         // so standalone APK/IPA builds can reach the CF Workers API directly.
-        if (state.templateRenderMode === 'mobile-fullstack') {
+        // Also include .api-url so the proxy can route /api/* from first boot.
+        if (state.templateRenderMode === 'mobile-fullstack' || state.templateName === 'expo-fullstack') {
             const previewDomain = getPreviewDomain(this.env);
             const protocol = getProtocolForHost(previewDomain);
             const apiUrl = `${protocol}://${projectName}.${previewDomain}`;
@@ -596,6 +615,12 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
                 appJsonFile.fileContents = appJsonFile.fileContents
                     .replace(/__API_URL__/g, apiUrl)
                     .replace(/expo-fullstack-app/g, projectName);
+            }
+            // Write .api-url as a regular file so the sandbox proxy can route
+            // /api/* requests immediately. This is more reliable than using
+            // executeCommands (fire-and-forget) which can fail silently.
+            if (!files.find(f => f.filePath === '.api-url')) {
+                files.push({ filePath: '.api-url', fileContents: apiUrl, filePurpose: 'Deployed API URL for proxy routing' });
             }
         }
 
@@ -1400,6 +1425,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         expoToken: string,
         callbacks?: {
             onStatus?: (build: EasBuildState) => void;
+            onProgress?: (message: string) => void;
             onError?: (error: string) => void;
             scheduleAlarm?: (delayMs: number) => void;
         }
@@ -1425,6 +1451,8 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         logger.info('Triggering EAS build', { platform, sandboxInstanceId: state.sandboxInstanceId });
 
         try {
+            callbacks?.onProgress?.('Preparing project for EAS build...');
+
             // EAS CLI requires a git repository with committed files
             const gitInit = 'git init && git add -A && git commit -m "eas-build" --no-verify';
             const gitResult = await client.executeCommands(state.sandboxInstanceId, [gitInit], 30_000);
@@ -1544,9 +1572,13 @@ export const apiClient = {
             const writeApiClient = `cat > lib/api-client.ts << 'APICLIENT_EOF'\n${apiClientContent}APICLIENT_EOF`;
             await client.executeCommands(state.sandboxInstanceId, [writeApiClient], 10_000);
 
+            callbacks?.onProgress?.('Fixing native dependencies...');
+
             // Fix outdated native dependencies (e.g. react-native-screens must be ~4.16.0 for RN 0.81)
             const fixDeps = 'bunx expo install --fix 2>&1 || true';
             await client.executeCommands(state.sandboxInstanceId, [fixDeps], 60_000);
+
+            callbacks?.onProgress?.('Linking Expo project...');
 
             // Create EAS project via Expo API and inject projectId into app.json
             const easProjectResult = await this.ensureEasProject(state.sandboxInstanceId, expoToken, client, logger);
@@ -1560,6 +1592,8 @@ export const apiClient = {
             // Commit the updated app.json with projectId
             const gitCommit = 'git add -A && git commit -m "eas-project-config" --no-verify';
             await client.executeCommands(state.sandboxInstanceId, [gitCommit], 15_000);
+
+            callbacks?.onProgress?.(`Submitting ${platform} build to EAS...`);
 
             const command = `EXPO_TOKEN=${expoToken} bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 120_000);

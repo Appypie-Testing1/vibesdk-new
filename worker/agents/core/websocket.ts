@@ -276,6 +276,15 @@ export function handleWebSocketMessage(
                                 status: build.status,
                             });
                         },
+                        onProgress: (message) => {
+                            // Send intermediate progress so user sees what's happening
+                            sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_STATUS, {
+                                buildId: '',
+                                platform: platform as 'ios' | 'android',
+                                status: 'pending',
+                                progress: message,
+                            });
+                        },
                         onError: (error) => {
                             sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_ERROR, {
                                 buildId: '',
@@ -287,7 +296,11 @@ export function handleWebSocketMessage(
                     });
                 }).catch((error: unknown) => {
                     logger.error('Error triggering EAS build:', error);
-                    sendError(connection, `Error triggering EAS build: ${error instanceof Error ? error.message : String(error)}`);
+                    sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_ERROR, {
+                        buildId: '',
+                        platform: platform as 'ios' | 'android',
+                        error: error instanceof Error ? error.message : String(error),
+                    });
                 });
                 break;
             }

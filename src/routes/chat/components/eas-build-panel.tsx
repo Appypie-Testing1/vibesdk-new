@@ -8,6 +8,7 @@ export interface EasBuildInfo {
     buildId: string;
     platform: EasBuildPlatform;
     status: EasBuildStatus;
+    progress?: string;
     downloadUrl?: string;
     error?: string;
 }
@@ -121,7 +122,10 @@ export function EasBuildPanel({
 
                     {isBuilding && (
                         <p className="text-text-tertiary mt-1">
-                            EAS Build is running in the cloud. This usually takes 5-15 minutes.
+                            {easBuild.progress || (easBuild.buildId
+                                ? 'EAS Build is running in the cloud. This usually takes 5-15 minutes.'
+                                : 'Setting up build environment...'
+                            )}
                         </p>
                     )}
 

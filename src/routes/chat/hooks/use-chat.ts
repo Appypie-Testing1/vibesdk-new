@@ -137,6 +137,7 @@ export function useChat({
 		buildId: string;
 		platform: 'ios' | 'android';
 		status: 'pending' | 'in-progress' | 'finished' | 'errored' | 'cancelled';
+		progress?: string;
 		downloadUrl?: string;
 		error?: string;
 	} | null>(null);
@@ -263,11 +264,11 @@ export function useChat({
 					const base = prev ?? { buildId: update.buildId, platform: update.platform as 'ios' | 'android', status: 'pending' as const };
 					switch (update.type) {
 						case 'status':
-							return { ...base, buildId: update.buildId, platform: update.platform as 'ios' | 'android', status: (update.status ?? base.status) as typeof base.status };
+							return { ...base, buildId: update.buildId, platform: update.platform as 'ios' | 'android', status: (update.status ?? base.status) as typeof base.status, progress: update.progress };
 						case 'complete':
-							return { ...base, buildId: update.buildId, platform: update.platform as 'ios' | 'android', status: 'finished' as const, downloadUrl: update.downloadUrl, error: undefined };
+							return { ...base, buildId: update.buildId, platform: update.platform as 'ios' | 'android', status: 'finished' as const, downloadUrl: update.downloadUrl, error: undefined, progress: undefined };
 						case 'error':
-							return { ...base, buildId: update.buildId, platform: update.platform as 'ios' | 'android', status: 'errored' as const, error: update.error };
+							return { ...base, buildId: update.buildId, platform: update.platform as 'ios' | 'android', status: 'errored' as const, error: update.error, progress: undefined };
 						default:
 							return prev;
 					}

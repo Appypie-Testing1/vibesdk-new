@@ -104,6 +104,7 @@ export interface HandleMessageDeps {
         buildId: string;
         platform: string;
         status?: string;
+        progress?: string;
         artifactUrl?: string;
         downloadUrl?: string;
         error?: string;
@@ -1043,12 +1044,13 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'eas_build_status': {
-                logger.info('EAS build status update', { buildId: message.buildId, status: message.status });
+                logger.info('EAS build status update', { buildId: message.buildId, status: message.status, progress: message.progress });
                 deps.onEasBuildUpdate?.({
                     type: 'status',
                     buildId: message.buildId,
                     platform: message.platform,
                     status: message.status,
+                    progress: message.progress,
                 });
                 break;
             }
