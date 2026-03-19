@@ -1561,11 +1561,16 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             const bundleId = 'com.expo.' + safeSlug.replace(/[^a-zA-Z0-9]/g, '');
             logger.info('Preparing EAS build files', { deployedApiUrl, safeSlug, bundleId });
 
-            // Read current app.json and package.json from sandbox
-            const currentFiles = await client.getFiles(state.sandboxInstanceId, ['app.json', 'package.json', '.gitignore']);
+            // Read current files from sandbox — keep originals so we can restore after EAS submit
+            const currentFiles = await client.getFiles(state.sandboxInstanceId, ['app.json', 'package.json', '.gitignore', 'lib/api-client.ts', 'bun.lockb']);
             const appJsonFile = currentFiles.files?.find(f => f.filePath === 'app.json');
             const pkgJsonFile = currentFiles.files?.find(f => f.filePath === 'package.json');
             const gitignoreFile = currentFiles.files?.find(f => f.filePath === '.gitignore');
+
+            // Snapshot original file contents for restoration after EAS build submit
+            const originalAppJson = appJsonFile?.fileContents || '';
+            const originalPkgJson = pkgJsonFile?.fileContents || '';
+            const originalApiClient = currentFiles.files?.find(f => f.filePath === 'lib/api-client.ts')?.fileContents || '';
 
             // Patch app.json with slug, name, bundleIdentifier, apiUrl
             let appJson: Record<string, Record<string, unknown>>;
@@ -1689,6 +1694,25 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
 
             const command = `EXPO_TOKEN=${expoToken} bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 120_000);
+
+            // Restore original project files so the Metro dev server (web preview) isn't
+            // broken by EAS-specific changes (different package versions, patched app.json, etc.)
+            try {
+                const restoreFiles: { filePath: string; fileContents: string }[] = [];
+                if (originalAppJson) restoreFiles.push({ filePath: 'app.json', fileContents: originalAppJson });
+                if (originalPkgJson) restoreFiles.push({ filePath: 'package.json', fileContents: originalPkgJson });
+                if (originalApiClient) restoreFiles.push({ filePath: 'lib/api-client.ts', fileContents: originalApiClient });
+                if (restoreFiles.length > 0) {
+                    await client.writeFiles(state.sandboxInstanceId, restoreFiles);
+                    // Reinstall original dependencies to match restored package.json
+                    await client.executeCommands(state.sandboxInstanceId, ['bun install 2>&1 || true'], 60_000);
+                    logger.info('Restored original project files after EAS build submit');
+                }
+            } catch (restoreError) {
+                logger.warn('Failed to restore original files after EAS build submit', {
+                    error: restoreError instanceof Error ? restoreError.message : String(restoreError)
+                });
+            }
 
             if (!result.success || !result.results[0]?.success) {
                 const error = result.results[0]?.error || result.error || 'EAS build command failed';
