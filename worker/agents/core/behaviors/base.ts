@@ -508,14 +508,15 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             // For fullstack mobile projects, auto-deploy to CF Workers after all
             // phases complete so the proxy can route /api/* requests.
             if (this.state.templateRenderMode === 'mobile-fullstack' && this.state.sandboxInstanceId) {
-                // Write .api-url eagerly — the URL is deterministic and the proxy
-                // needs it immediately. If deploy hasn't finished yet the proxy will
-                // get a 502 from CF Workers, which is better than a 503 "not ready".
                 const previewDomain = getPreviewDomain(this.env);
                 const protocol = getProtocolForHost(previewDomain);
                 const expectedUrl = `${protocol}://${this.state.projectName}.${previewDomain}`;
                 const client = this.deploymentManager.getClient();
-                client.executeCommands(this.state.sandboxInstanceId, [
+                const sandboxId = this.state.sandboxInstanceId;
+
+                // Write .api-url eagerly so the proxy can start routing immediately.
+                // If deploy fails we clear it so the proxy returns a clean 503.
+                client.executeCommands(sandboxId, [
                     `printf '%s' '${expectedUrl.replace(/'/g, "'\\''")}' > .api-url`
                 ]).then(() => {
                     this.logger.info('Wrote .api-url eagerly before deploy', { expectedUrl });
@@ -527,16 +528,37 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 // frequently fails on LLM-generated code errors and blocks the
                 // entire deploy. The proxy only needs the Hono API worker running.
                 this.logger.info('Auto-deploying fullstack mobile API to CF Workers (post-generation)');
-                this.deploymentManager.deployToCloudflare({
-                    target: 'platform',
-                    buildCommand: 'bun run build:worker',
-                }).then((cfResult) => {
-                    if (cfResult.deploymentUrl) {
-                        this.logger.info('Auto CF deploy succeeded', { url: cfResult.deploymentUrl });
-                    }
-                }).catch((err) => {
-                    this.logger.warn('Auto CF deploy failed (non-blocking):', err);
-                });
+                const attemptDeploy = (attempt: number) => {
+                    this.deploymentManager.deployToCloudflare({
+                        target: 'platform',
+                        buildCommand: 'bun run build:worker',
+                    }).then((cfResult) => {
+                        if (cfResult.deploymentUrl) {
+                            this.logger.info('Auto CF deploy succeeded', { url: cfResult.deploymentUrl, attempt });
+                            this.broadcast(WebSocketMessageResponses.CLOUDFLARE_DEPLOYMENT_COMPLETED, {
+                                message: 'API deployed successfully',
+                                instanceId: sandboxId,
+                                deploymentUrl: cfResult.deploymentUrl,
+                            });
+                        } else if (attempt < 2) {
+                            this.logger.warn('Auto CF deploy returned no URL, retrying', { attempt });
+                            setTimeout(() => attemptDeploy(attempt + 1), 5000);
+                        } else {
+                            this.logger.error('Auto CF deploy failed after retries');
+                            // Clear .api-url so proxy returns 503 instead of 502
+                            client.executeCommands(sandboxId, ['rm -f .api-url']).catch(() => {});
+                        }
+                    }).catch((err) => {
+                        this.logger.warn('Auto CF deploy failed', err, { attempt });
+                        if (attempt < 2) {
+                            setTimeout(() => attemptDeploy(attempt + 1), 5000);
+                        } else {
+                            // Clear .api-url so proxy returns 503 instead of 502
+                            client.executeCommands(sandboxId, ['rm -f .api-url']).catch(() => {});
+                        }
+                    });
+                };
+                attemptDeploy(1);
             }
         }
     }

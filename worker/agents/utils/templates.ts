@@ -1074,40 +1074,66 @@ CREATE TABLE IF NOT EXISTS items (
 `,
         'lib/api-client.ts': `
 // API client for communicating with the Hono backend.
-// On web: relative paths (same origin, proxied to local wrangler dev).
-// On native (Expo Go): derives the dev proxy URL from the Expo manifest
-// so /api/* requests go through the proxy to the local wrangler dev server.
+// - Web preview: relative paths (same origin, proxied by _expo-proxy.cjs)
+// - Expo Go (dev): derives proxy URL from Expo manifest hostUri
+// - Standalone APK/IPA: uses the deployed CF Workers API URL from app.json extra.apiUrl
+// Includes retry logic for 5xx errors (API may still be deploying).
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 function getBaseUrl(): string {
   if (Platform.OS === 'web') return '';
-  // On native, build the base URL from the Expo manifest host
+  // In Expo Go (development), route through the sandbox proxy
   const debuggerHost = Constants.expoConfig?.hostUri
     ?? (Constants as Record<string, unknown> ).manifest2?.extra?.expoGo?.debuggerHost as string | undefined;
   if (debuggerHost) {
     const host = debuggerHost.split(':')[0];
     return 'https://' + host;
   }
+  // In standalone builds (APK/IPA), use the deployed API URL from app config
+  const apiUrl = Constants.expoConfig?.extra?.apiUrl;
+  if (apiUrl && !apiUrl.startsWith('__')) return apiUrl;
   return '';
 }
 
 const BASE_URL = getBaseUrl();
+const MAX_RETRIES = 4;
+const RETRY_DELAY_MS = 3000;
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = BASE_URL + path;
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((error as Record<string, string>).error || res.statusText);
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options?.headers,
+        },
+      });
+      if (res.ok) return res.json() as Promise<T>;
+      // Retry on server errors (API may still be deploying)
+      if (res.status >= 500 && attempt < MAX_RETRIES) {
+        lastError = new Error(res.statusText);
+        await delay(RETRY_DELAY_MS);
+        continue;
+      }
+      const error = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error((error as Record<string, string>).error || res.statusText);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < MAX_RETRIES) {
+        await delay(RETRY_DELAY_MS);
+        continue;
+      }
+    }
   }
-  return res.json() as Promise<T>;
+  throw lastError || new Error('Request failed');
 }
 
 export const apiClient = {
@@ -1137,6 +1163,7 @@ dist/
                 android: { package: 'com.expo.fullstackapp' },
                 web: { bundler: 'metro' },
                 plugins: ['expo-router'],
+                extra: { apiUrl: '__API_URL__' },
             }
         }, null, 2),
         'package.json': JSON.stringify({

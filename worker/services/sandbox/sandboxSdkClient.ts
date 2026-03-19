@@ -863,23 +863,35 @@ export class SandboxSdkClient extends BaseSandboxService {
     private async updateProjectConfiguration(instanceId: string, projectName: string): Promise<void> {
         try {
             const session = await this.getInstanceSession(instanceId);
-            
+
             // Update package.json with new project name (top-level only)
             this.logger.info(`Updating package.json with project name: ${projectName}`);
             const packageJsonResult = await session.exec(`sed -i '1,10s/^[ \t]*"name"[ ]*:[ ]*"[^"]*"/  "name": "${projectName}"/' package.json`);
-            
+
             if (packageJsonResult.exitCode !== 0) {
                 this.logger.warn('Failed to update package.json', packageJsonResult.stderr);
             }
-            
+
             // Update wrangler.jsonc with new project name (top-level only)
             this.logger.info(`Updating wrangler.jsonc with project name: ${projectName}`);
             const wranglerResult = await session.exec(`sed -i '0,/"name":/s/"name"[ ]*:[ ]*"[^"]*"/"name": "${projectName}"/' wrangler.jsonc`);
-               
+
             if (wranglerResult.exitCode !== 0) {
                 this.logger.warn('Failed to update wrangler.jsonc', wranglerResult.stderr);
             }
-            
+
+            // Update app.json with project name and deployed API URL.
+            // Standalone APK/IPA builds need the API URL baked in at build time
+            // since there is no sandbox proxy to route /api/* requests.
+            const apiUrl = `${this.getProtocolForHost()}://${projectName}.${getPreviewDomain(env)}`;
+            this.logger.info(`Updating app.json with project name and API URL`, { projectName, apiUrl });
+            const appJsonResult = await session.exec(
+                `sed -i 's|expo-fullstack-app|${projectName}|g; s|__API_URL__|${apiUrl}|g' app.json`
+            );
+            if (appJsonResult.exitCode !== 0) {
+                this.logger.warn('Failed to update app.json', appJsonResult.stderr);
+            }
+
             this.logger.info('Project configuration updated successfully');
         } catch (error) {
             this.logger.error(`Error updating project configuration: ${error}`);

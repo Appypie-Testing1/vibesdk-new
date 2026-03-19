@@ -16,6 +16,7 @@ import { getSandboxService } from '../../../services/sandbox/factory';
 import { validateAndCleanBootstrapCommands } from 'worker/agents/utils/common';
 import { DeploymentTarget, EasBuildPlatform, EasBuildState } from '../../core/types';
 import { BaseProjectState } from '../../core/state';
+import { getPreviewDomain, getProtocolForHost } from '../../../utils/urls';
 
 const PER_ATTEMPT_TIMEOUT_MS = 60000;  // 60 seconds per individual attempt
 const MASTER_DEPLOYMENT_TIMEOUT_MS = 300000;  // 5 minutes total
@@ -583,6 +584,20 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
 
         // Get latest files and sanitize worker entry point
         const files = DeploymentManager.sanitizeFiles(this.fileManager.getAllFiles(), state.templateRenderMode);
+
+        // For fullstack mobile projects, bake the deployed API URL into app.json
+        // so standalone APK/IPA builds can reach the CF Workers API directly.
+        if (state.templateRenderMode === 'mobile-fullstack') {
+            const previewDomain = getPreviewDomain(this.env);
+            const protocol = getProtocolForHost(previewDomain);
+            const apiUrl = `${protocol}://${projectName}.${previewDomain}`;
+            const appJsonFile = files.find(f => f.filePath === 'app.json');
+            if (appJsonFile) {
+                appJsonFile.fileContents = appJsonFile.fileContents
+                    .replace(/__API_URL__/g, apiUrl)
+                    .replace(/expo-fullstack-app/g, projectName);
+            }
+        }
 
         this.getLog().info('Files to deploy', {
             files: files.map(f => f.filePath)
@@ -1417,7 +1432,14 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 logger.warn('Git init for EAS may have failed (could already exist)', { error: gitResult.error });
             }
 
-            // Ensure build prerequisites: android.package, ios.bundleIdentifier, babel.config.js, .gitignore
+            // Bake the deployed API URL into app.json and api-client.ts so the
+            // standalone APK/IPA can reach the CF Workers API without a proxy.
+            const previewDomain = getPreviewDomain(this.env);
+            const protocol = getProtocolForHost(previewDomain);
+            const deployedApiUrl = `${protocol}://${state.projectName}.${previewDomain}`;
+            logger.info('Baking API URL for standalone build', { deployedApiUrl });
+
+            // Ensure build prerequisites: android.package, ios.bundleIdentifier, extra.apiUrl, babel.config.js, .gitignore
             const ensureBuildPrereqs = `node -e "
                 var fs = require('fs');
                 var a = JSON.parse(fs.readFileSync('./app.json', 'utf8'));
@@ -1428,6 +1450,8 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 if (!a.expo.android.package) a.expo.android.package = pkg;
                 if (!a.expo.ios) a.expo.ios = {};
                 if (!a.expo.ios.bundleIdentifier) a.expo.ios.bundleIdentifier = pkg;
+                if (!a.expo.extra) a.expo.extra = {};
+                a.expo.extra.apiUrl = '${deployedApiUrl}';
                 fs.writeFileSync('./app.json', JSON.stringify(a, null, 2));
                 if (!fs.existsSync('./babel.config.js')) {
                     fs.writeFileSync('./babel.config.js',
@@ -1455,6 +1479,70 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 console.log('ok');
             "`;
             await client.executeCommands(state.sandboxInstanceId, [ensureBuildPrereqs], 10_000);
+
+            // Ensure lib/api-client.ts has standalone APK support (reads extra.apiUrl).
+            // Older projects may have the old template without this fallback.
+            const apiClientContent = `import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+
+function getBaseUrl(): string {
+  if (Platform.OS === 'web') return '';
+  const debuggerHost = Constants.expoConfig?.hostUri
+    ?? (Constants as Record<string, unknown>).manifest2?.extra?.expoGo?.debuggerHost as string | undefined;
+  if (debuggerHost) {
+    const host = debuggerHost.split(':')[0];
+    return 'https://' + host;
+  }
+  const apiUrl = Constants.expoConfig?.extra?.apiUrl;
+  if (apiUrl && !apiUrl.startsWith('__')) return apiUrl;
+  return '';
+}
+
+const BASE_URL = getBaseUrl();
+const MAX_RETRIES = 4;
+const RETRY_DELAY_MS = 3000;
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const url = BASE_URL + path;
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+      });
+      if (res.ok) return res.json() as Promise<T>;
+      if (res.status >= 500 && attempt < MAX_RETRIES) {
+        lastError = new Error(res.statusText);
+        await delay(RETRY_DELAY_MS);
+        continue;
+      }
+      const error = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error((error as Record<string, string>).error || res.statusText);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < MAX_RETRIES) { await delay(RETRY_DELAY_MS); continue; }
+    }
+  }
+  throw lastError || new Error('Request failed');
+}
+
+export const apiClient = {
+  get: <T>(path: string) => request<T>(path),
+  post: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
+  put: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
+  delete: <T>(path: string) =>
+    request<T>(path, { method: 'DELETE' }),
+};
+`;
+            const writeApiClient = `cat > lib/api-client.ts << 'APICLIENT_EOF'\n${apiClientContent}APICLIENT_EOF`;
+            await client.executeCommands(state.sandboxInstanceId, [writeApiClient], 10_000);
 
             // Fix outdated native dependencies (e.g. react-native-screens must be ~4.16.0 for RN 0.81)
             const fixDeps = 'bunx expo install --fix 2>&1 || true';

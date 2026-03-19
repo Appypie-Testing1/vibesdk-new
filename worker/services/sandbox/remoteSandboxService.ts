@@ -190,7 +190,7 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
      * @param instanceId The ID of the runner instance to deploy
      * @param credentials Optional Cloudflare deployment credentials
      */
-    async deployToCloudflareWorkers(instanceId: string, target: DeploymentTarget = 'platform', _options?: { buildCommand?: string }): Promise<DeploymentResult> {
+    async deployToCloudflareWorkers(instanceId: string, target: DeploymentTarget = 'platform', options?: { buildCommand?: string }): Promise<DeploymentResult> {
         if (target === 'user') {
             return {
                 success: false,
@@ -198,7 +198,8 @@ export class RemoteSandboxServiceClient extends BaseSandboxService{
                 error: 'unsupported_target'
             };
         }
-        return this.makeRequest(`/instances/${instanceId}/deploy`, 'POST', DeploymentResultSchema);
+        const body = options?.buildCommand ? { buildCommand: options.buildCommand } : undefined;
+        return this.makeRequest(`/instances/${instanceId}/deploy`, 'POST', DeploymentResultSchema, body);
     }
 
     /**
