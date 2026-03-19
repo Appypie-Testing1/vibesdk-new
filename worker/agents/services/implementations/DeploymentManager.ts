@@ -1306,6 +1306,22 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
     private static readonly EAS_MAX_POLL_FAILURES = 5;
 
     /**
+     * Retrieve the EXPO_TOKEN stored in the sandbox during triggerEasBuild.
+     * Falls back to null if the file doesn't exist or can't be read.
+     */
+    async getExpoTokenFromSandbox(): Promise<string | null> {
+        const state = this.getState();
+        if (!state.sandboxInstanceId) return null;
+        try {
+            const files = await this.getClient().getFiles(state.sandboxInstanceId, ['.expo-token']);
+            const content = files.files?.find(f => f.filePath === '.expo-token')?.fileContents?.trim();
+            return content || null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
      * Ensure the EAS project is configured in app.json.
      * Strategy 1: Run `yes | eas init` in the sandbox to auto-accept prompts.
      * Strategy 2: Use Expo REST + GraphQL API to create project and inject projectId.
@@ -1649,6 +1665,16 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             await client.executeCommands(state.sandboxInstanceId, [gitCommit], 15_000);
 
             callbacks?.onProgress?.(`Submitting ${platform} build to EAS...`);
+
+            // Persist EXPO_TOKEN in sandbox so alarm-based polling can use it
+            // without needing the vault (vault session expires after DO hibernation)
+            await client.writeFiles(state.sandboxInstanceId, [
+                { filePath: '.expo-token', fileContents: expoToken }
+            ]);
+            // Ensure .gitignore excludes the token file
+            await client.executeCommands(state.sandboxInstanceId, [
+                'grep -qxF ".expo-token" .gitignore || echo ".expo-token" >> .gitignore'
+            ], 5_000);
 
             const command = `EXPO_TOKEN=${expoToken} bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 120_000);
