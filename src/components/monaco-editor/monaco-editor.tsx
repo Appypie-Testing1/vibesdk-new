@@ -263,10 +263,14 @@ export const MonacoEditor = memo<MonacoEditorProps>(function MonacoEditor({
 				editorDomNode.removeEventListener('wheel', handleWheel);
 				editorDomNode.removeEventListener('keydown', handleKeydown);
 			}
-			const model = editor.current?.getModel();
-			if (model) {
-				model.dispose();
-			}
+			// Disable TS diagnostics before disposal to prevent the worker from
+			// attempting getQuickInfoAtPosition on a model that's about to be disposed.
+			const disabledDiag = { noSemanticValidation: true, noSyntaxValidation: true, noSuggestionDiagnostics: true };
+			monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions(disabledDiag);
+			monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions(disabledDiag);
+			// Detach model before disposing editor — prevents the TS worker from
+			// accessing a stale inmemory://model/* URI after disposal.
+			editor.current?.setModel(null);
 			editor.current?.dispose();
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
