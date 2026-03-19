@@ -1479,17 +1479,20 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             const deployedApiUrl = `${protocol}://${state.projectName}.${previewDomain}`;
             logger.info('Baking API URL for standalone build', { deployedApiUrl });
 
-            // Ensure build prerequisites: android.package, ios.bundleIdentifier, extra.apiUrl, babel.config.js, .gitignore
+            // Ensure build prerequisites: slug, name, android.package, ios.bundleIdentifier, extra.apiUrl, babel.config.js, .gitignore
+            // Use the actual project name for slug so the EAS project matches.
+            const safeSlug = state.projectName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
             const ensureBuildPrereqs = `node -e "
                 var fs = require('fs');
                 var a = JSON.parse(fs.readFileSync('./app.json', 'utf8'));
-                var slug = (a.expo && a.expo.slug) || 'myapp';
-                var pkg = 'com.expo.' + slug.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
                 a.expo = a.expo || {};
+                a.expo.slug = '${safeSlug}';
+                a.expo.name = '${state.projectName.replace(/'/g, "\\'")}';
+                var bundleId = 'com.expo.' + '${safeSlug}'.replace(/[^a-zA-Z0-9]/g, '');
                 if (!a.expo.android) a.expo.android = {};
-                if (!a.expo.android.package) a.expo.android.package = pkg;
+                if (!a.expo.android.package) a.expo.android.package = bundleId;
                 if (!a.expo.ios) a.expo.ios = {};
-                if (!a.expo.ios.bundleIdentifier) a.expo.ios.bundleIdentifier = pkg;
+                if (!a.expo.ios.bundleIdentifier) a.expo.ios.bundleIdentifier = bundleId;
                 if (!a.expo.extra) a.expo.extra = {};
                 a.expo.extra.apiUrl = '${deployedApiUrl}';
                 fs.writeFileSync('./app.json', JSON.stringify(a, null, 2));
@@ -1510,11 +1513,10 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                     var gi = fs.readFileSync('./.gitignore', 'utf8');
                     if (!gi.includes('.expo')) fs.writeFileSync('./.gitignore', gi + '\\n.expo/\\n');
                 }
-                // Remove eas-cli from project deps (should only be used via bunx)
-                var pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-                if (pkg.devDependencies && pkg.devDependencies['eas-cli']) {
-                    delete pkg.devDependencies['eas-cli'];
-                    fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
+                var pj = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+                if (pj.devDependencies && pj.devDependencies['eas-cli']) {
+                    delete pj.devDependencies['eas-cli'];
+                    fs.writeFileSync('./package.json', JSON.stringify(pj, null, 2));
                 }
                 console.log('ok');
             "`;
