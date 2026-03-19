@@ -1442,10 +1442,21 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         }
 
         if (state.easBuild && (state.easBuild.status === 'pending' || state.easBuild.status === 'in-progress')) {
-            const error = `An EAS build is already ${state.easBuild.status} (${state.easBuild.buildId})`;
-            logger.error(error);
-            callbacks?.onError?.(error);
-            return null;
+            // Allow retrigger if the previous attempt is stale (>10 min old or has no buildId)
+            const isStale = !state.easBuild.buildId
+                || (Date.now() - state.easBuild.startedAt > 10 * 60_000);
+            if (!isStale) {
+                const error = `An EAS build is already ${state.easBuild.status} (${state.easBuild.buildId})`;
+                logger.error(error);
+                callbacks?.onError?.(error);
+                return null;
+            }
+            logger.info('Clearing stale EAS build state', {
+                buildId: state.easBuild.buildId,
+                status: state.easBuild.status,
+                ageMs: Date.now() - state.easBuild.startedAt,
+            });
+            this.setState({ ...this.getState(), easBuild: undefined });
         }
 
         logger.info('Triggering EAS build', { platform, sandboxInstanceId: state.sandboxInstanceId });
@@ -1463,14 +1474,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             }
             logger.info('Sandbox health check passed');
 
-            callbacks?.onProgress?.('Preparing project for EAS build...');
-
-            // EAS CLI requires a git repository with committed files
-            const gitInit = 'git init && git add -A && git commit -m "eas-build" --no-verify';
-            const gitResult = await client.executeCommands(state.sandboxInstanceId, [gitInit], 30_000);
-            if (!gitResult.success) {
-                logger.warn('Git init for EAS may have failed (could already exist)', { error: gitResult.error });
-            }
+            callbacks?.onProgress?.('Configuring project files...');
 
             // Bake the deployed API URL into app.json and api-client.ts so the
             // standalone APK/IPA can reach the CF Workers API without a proxy.
@@ -1480,7 +1484,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             logger.info('Baking API URL for standalone build', { deployedApiUrl });
 
             // Ensure build prerequisites: slug, name, android.package, ios.bundleIdentifier, extra.apiUrl, babel.config.js, .gitignore
-            // Use the actual project name for slug so the EAS project matches.
+            // IMPORTANT: .gitignore MUST be created BEFORE git add -A to avoid staging node_modules/
             const safeSlug = state.projectName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
             const ensureBuildPrereqs = `node -e "
                 var fs = require('fs');
@@ -1520,9 +1524,9 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 }
                 console.log('ok');
             "`;
-            const prereqResult = await client.executeCommands(state.sandboxInstanceId, [ensureBuildPrereqs], 10_000);
+            const prereqResult = await client.executeCommands(state.sandboxInstanceId, [ensureBuildPrereqs], 15_000);
             if (!prereqResult.success) {
-                logger.warn('Build prerequisites may have failed', { error: prereqResult.error });
+                logger.warn('Build prerequisites may have failed', { error: prereqResult.error, output: prereqResult.results?.[0]?.output?.slice(0, 300) });
             }
 
             // Ensure lib/api-client.ts has standalone APK support (reads extra.apiUrl).
@@ -1588,6 +1592,18 @@ export const apiClient = {
 `;
             const writeApiClient = `cat > lib/api-client.ts << 'APICLIENT_EOF'\n${apiClientContent}APICLIENT_EOF`;
             await client.executeCommands(state.sandboxInstanceId, [writeApiClient], 10_000);
+
+            callbacks?.onProgress?.('Initializing git repository...');
+
+            // EAS CLI requires a git repository with committed files
+            // .gitignore was ensured above to prevent staging node_modules/
+            const gitInit = 'git init && git add -A && git commit -m "eas-build" --no-verify 2>&1';
+            const gitResult = await client.executeCommands(state.sandboxInstanceId, [gitInit], 30_000);
+            if (!gitResult.success) {
+                logger.warn('Git init for EAS may have failed (could already exist)', { error: gitResult.error });
+            } else {
+                logger.info('Git init complete', { output: gitResult.results?.[0]?.output?.slice(0, 200) });
+            }
 
             callbacks?.onProgress?.('Fixing native dependencies...');
 
