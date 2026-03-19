@@ -1645,9 +1645,20 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
 
             callbacks?.onProgress?.('Fixing native dependencies...');
 
-            // Fix outdated native dependencies (e.g. react-native-screens must be ~4.16.0 for RN 0.81)
+            // Re-install packages via `expo install` to ensure SDK-compatible versions.
+            // Packages installed by LLM via `bun add` may have wrong versions (e.g. expo-image
+            // from npm latest instead of SDK-pinned version, causing Android build failures).
+            // Also run `--fix` to correct any remaining version mismatches.
             const fixDeps = 'bunx expo install --fix 2>&1 || true';
             await client.executeCommands(state.sandboxInstanceId, [fixDeps], 60_000);
+
+            // Explicitly reinstall expo-image via expo install if present (bun add gets wrong version)
+            const reinstallExpoImage = 'node -e "const p=require(\'./package.json\');if(p.dependencies && p.dependencies[\'expo-image\']){console.log(\'reinstall\')}else{console.log(\'skip\')}"';
+            const checkResult = await client.executeCommands(state.sandboxInstanceId, [reinstallExpoImage], 5_000);
+            if (checkResult.results?.[0]?.output?.trim() === 'reinstall') {
+                callbacks?.onProgress?.('Fixing expo-image version...');
+                await client.executeCommands(state.sandboxInstanceId, ['bunx expo install expo-image 2>&1 || true'], 30_000);
+            }
 
             callbacks?.onProgress?.('Linking Expo project...');
 

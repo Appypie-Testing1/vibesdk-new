@@ -605,16 +605,21 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
 
         this.logger().info('EAS build poll triggered', { buildId: easBuild.buildId });
 
-        // Retrieve EXPO_TOKEN from vault
-        const expoToken = await this.getDecryptedSecret({ envVarName: 'EXPO_TOKEN' });
+        // Retrieve EXPO_TOKEN: try vault first, fall back to sandbox-persisted token
+        // (vault session may expire after DO hibernation between poll intervals)
+        let expoToken = await this.getDecryptedSecret({ envVarName: 'EXPO_TOKEN' });
         if (!expoToken) {
-            this.logger().error('EXPO_TOKEN not found during EAS poll');
+            this.logger().info('Vault token unavailable during poll, trying sandbox fallback');
+            expoToken = await this.deploymentManager.getExpoTokenFromSandbox();
+        }
+        if (!expoToken) {
+            this.logger().error('EXPO_TOKEN not found during EAS poll (vault + sandbox fallback)');
             const errorBuild = { ...easBuild, status: 'errored' as const, error: 'EXPO_TOKEN not available' };
             this.setState({ ...this.state, easBuild: errorBuild });
             this.broadcast(WebSocketMessageResponses.EAS_BUILD_ERROR, {
                 buildId: easBuild.buildId,
                 platform: easBuild.platform,
-                error: 'EXPO_TOKEN not available. Please reconfigure your Expo token.',
+                error: 'EXPO_TOKEN not available. Please unlock your vault or reconfigure your Expo token.',
             });
             return;
         }
