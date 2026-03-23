@@ -1897,30 +1897,15 @@ export class SandboxSdkClient extends BaseSandboxService {
                 this.logger.warn('Dynamic import compilation step failed (non-fatal):', err);
             }
 
-            // Step 2: Parse wrangler config — prefer fresh read from disk over KV snapshot.
-            // KV snapshot is written once at setup time; if D1 provisioning failed then and
-            // was later retried, the KV still has {{D1_ID}} placeholders while disk is updated.
-            this.logger.info('Reading wrangler configuration');
-            let wranglerConfigContent: string | null = null;
-            try {
-                const session = await this.getInstanceSession(instanceId);
-                const freshConfig = await session.readFile(`/workspace/${instanceId}/wrangler.jsonc`);
-                if (freshConfig.success && freshConfig.content) {
-                    wranglerConfigContent = freshConfig.content;
-                    this.logger.info('Using fresh wrangler.jsonc from disk');
-                    // Update KV snapshot so future deploys also get the latest
-                    await env.VibecoderStore.put(this.getWranglerKVKey(instanceId), freshConfig.content);
-                }
-            } catch (readErr) {
-                this.logger.warn('Failed to read fresh wrangler.jsonc from disk, falling back to KV', {
-                    error: readErr instanceof Error ? readErr.message : String(readErr)
-                });
-            }
+            // Step 2: Parse wrangler config from KV (stored during setupInstance after
+            // resource provisioning resolves placeholders like {{D1_ID}}).
+            this.logger.info('Reading wrangler configuration from KV');
+            const wranglerConfigContent = await env.VibecoderStore.get(this.getWranglerKVKey(instanceId));
+
             if (!wranglerConfigContent) {
-                wranglerConfigContent = await env.VibecoderStore.get(this.getWranglerKVKey(instanceId));
-            }
-            if (!wranglerConfigContent) {
-                throw new Error(`Wrangler config not found for ${instanceId} (neither disk nor KV)`);
+                throw new Error(`Wrangler config not found in KV for ${instanceId}`);
+            } else {
+                this.logger.info('Using wrangler configuration from KV');
             }
             
             const config = parseWranglerConfig(wranglerConfigContent);
