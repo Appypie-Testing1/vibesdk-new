@@ -138,20 +138,9 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 await this.executeCommands(setupCommands.commands);
                 this.logger.info("Initial commands executed successfully");
 
-            // For fullstack mobile: deploy the template's default API immediately
-            // so /api/health works before code generation starts.
-            // Check both templateRenderMode and templateName since the render mode
-            // may not be set yet during early initialization.
-            if ((this.state.templateRenderMode === 'mobile-fullstack' || this.state.templateName === 'expo-fullstack') && this.state.sandboxInstanceId) {
-                // .api-url is now included in the initial files via createNewInstance().
-                // Fire-and-forget: deploy the template default API so the health check works.
-                this.deploymentManager.deployToCloudflare({
-                    target: 'platform',
-                    buildCommand: 'bun run build:worker',
-                }).then(r => {
-                    if (r.deploymentUrl) this.logger.info('Initial API deploy succeeded', { url: r.deploymentUrl });
-                }).catch(e => this.logger.warn('Initial API deploy failed (will retry after generation)', e));
-            }
+            // For fullstack mobile: CF Workers deploy is deferred until all code
+            // generation phases complete (see post-generation auto-deploy below).
+            // Deploying the empty template here causes a 404 and wastes build time.
         } catch (error) {
             this.logger.error("Error during async initialization:", error);
             // throw error;
@@ -1202,7 +1191,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         return `Failed to deploy: ${response?.tunnelURL}`;
     }
 
-    async deployToSandbox(files: FileOutputType[] = [], redeploy: boolean = false, commitMessage?: string, clearLogs: boolean = false): Promise<PreviewType | null> {
+    async deployToSandbox(files: FileOutputType[] = [], redeploy: boolean = false, commitMessage?: string, clearLogs: boolean = false, skipScreenshot: boolean = false): Promise<PreviewType | null> {
         // Only deploy if project is previewable
         if (!this.isPreviewable()) {
             throw new Error('Project is not previewable');
@@ -1249,9 +1238,11 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                     this.broadcast(WebSocketMessageResponses.DEPLOYMENT_STARTED, data);
                 },
                 onCompleted: (data) => {
-                    const broadcastData = computeExpoDeepLink && data.previewURL
-                        ? { ...data, expoDeepLink: computeExpoDeepLink(data.previewURL) }
-                        : data;
+                    const broadcastData = {
+                        ...data,
+                        ...(computeExpoDeepLink && data.previewURL ? { expoDeepLink: computeExpoDeepLink(data.previewURL) } : {}),
+                        ...(skipScreenshot ? { skipScreenshot: true } : {}),
+                    };
                     this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, broadcastData);
                 },
                 onError: (data) => {

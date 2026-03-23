@@ -50,6 +50,7 @@ export interface HandleMessageDeps {
     setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
     setIsInitialStateRestored: React.Dispatch<React.SetStateAction<boolean>>;
     setShouldRefreshPreview: React.Dispatch<React.SetStateAction<boolean>>;
+    setSkipScreenshot: React.Dispatch<React.SetStateAction<boolean>>;
     setIsDeploying: React.Dispatch<React.SetStateAction<boolean>>;
     setCloudflareDeploymentUrl: React.Dispatch<React.SetStateAction<string>>;
     setDeploymentError: React.Dispatch<React.SetStateAction<string | undefined>>;
@@ -142,6 +143,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             setIsThinking,
             setIsInitialStateRestored,
             setShouldRefreshPreview,
+            setSkipScreenshot,
             setIsDeploying,
             setCloudflareDeploymentUrl,
             setDeploymentError,
@@ -631,6 +633,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setIsPreviewDeploying(false);
                 const finalPreviewURL = getPreviewUrl(message.previewURL, message.tunnelURL);
                 setPreviewUrl(finalPreviewURL);
+                setSkipScreenshot(!!message.skipScreenshot);
                 if (message.expoDeepLink) {
                     setExpoDeepLink(message.expoDeepLink);
                 }

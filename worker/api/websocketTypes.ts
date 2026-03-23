@@ -99,6 +99,7 @@ export type DeploymentCompletedMessage = {
 	instanceId: string;
 	message: string;
 	expoDeepLink?: string;
+	skipScreenshot?: boolean;
 };
 
 type PreviewForceRefreshMessage = {

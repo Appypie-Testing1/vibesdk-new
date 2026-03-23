@@ -9,6 +9,7 @@ interface PreviewIframeProps {
     shouldRefreshPreview?: boolean;
     manualRefreshTrigger?: number;
     webSocket?: WebSocket | null;
+    skipScreenshot?: boolean;
 }
 
 // ============================================================================
@@ -40,7 +41,7 @@ const getRetryDelay = (attempt: number): number => {
 // ============================================================================
 
 export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
-	({ src, className = '', title = 'Preview', shouldRefreshPreview = false, manualRefreshTrigger, webSocket }, ref) => {
+	({ src, className = '', title = 'Preview', shouldRefreshPreview = false, manualRefreshTrigger, webSocket, skipScreenshot = false }, ref) => {
 
 		const [loadState, setLoadState] = useState<LoadState>({
 			status: 'idle',
@@ -179,7 +180,9 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 						...prev,
 						status: 'loaded',
 					}));
-					requestScreenshot(url);
+					if (!skipScreenshot) {
+						requestScreenshot(url);
+					}
 				}, waitTime);
 			} else {
 				const delay = getRetryDelay(attempt);

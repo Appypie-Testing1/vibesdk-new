@@ -137,6 +137,7 @@ export default function Chat() {
 		handleDeployToSnappy,
 		// Preview refresh control
 		shouldRefreshPreview,
+		skipScreenshot,
 		// Preview deployment state
 		isPreviewDeploying,
 		// Issue tracking and debugging state
@@ -890,6 +891,7 @@ export default function Chat() {
 								previewAvailable={previewAvailable}
 								showTooltip={showTooltip}
 								shouldRefreshPreview={shouldRefreshPreview}
+								skipScreenshot={skipScreenshot}
 								manualRefreshTrigger={manualRefreshTrigger}
 								onManualRefresh={() => setManualRefreshTrigger(Date.now())}
 								blueprint={blueprint}

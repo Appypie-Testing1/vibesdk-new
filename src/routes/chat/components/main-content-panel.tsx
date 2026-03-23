@@ -34,6 +34,7 @@ interface MainContentPanelProps {
 	previewAvailable: boolean;
 	showTooltip: boolean;
 	shouldRefreshPreview: boolean;
+	skipScreenshot?: boolean;
 	manualRefreshTrigger: number;
 	onManualRefresh: () => void;
 
@@ -83,6 +84,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		previewAvailable,
 		showTooltip,
 		shouldRefreshPreview,
+		skipScreenshot,
 		manualRefreshTrigger,
 		onManualRefresh,
 		blueprint,
@@ -212,6 +214,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 						className="flex-1 w-full h-full border-0"
 						title="Preview"
 						shouldRefreshPreview={shouldRefreshPreview}
+						skipScreenshot={skipScreenshot}
 						manualRefreshTrigger={manualRefreshTrigger}
 						webSocket={websocket}
 					/>

@@ -667,7 +667,9 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
         }
 
         if (safeFiles.length > 0) {
-            await this.deployToSandbox(safeFiles, false, phase.name, true);
+            // Skip screenshot capture for intermediate phases — only capture on final phase
+            const skipScreenshot = !phase.lastPhase;
+            await this.deployToSandbox(safeFiles, false, phase.name, true, skipScreenshot);
             // Skip static analysis/code fixes for mobile — Expo containers don't
             // have eslint configured and tsc with RN types is extremely slow
             if (postPhaseFixing && this.state.templateRenderMode !== 'mobile' && this.state.templateRenderMode !== 'mobile-fullstack') {

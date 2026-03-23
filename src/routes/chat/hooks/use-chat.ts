@@ -155,6 +155,9 @@ export function useChat({
 	
 	// Preview refresh state - triggers preview reload after deployment
 	const [shouldRefreshPreview, setShouldRefreshPreview] = useState(false);
+
+	// Skip screenshot during intermediate phase deploys
+	const [skipScreenshot, setSkipScreenshot] = useState(false);
 	
 	// Track whether we've completed initial state restoration to avoid disrupting active sessions
 	const [isInitialStateRestored, setIsInitialStateRestored] = useState(false);
@@ -222,6 +225,7 @@ export function useChat({
 			setIsThinking,
 			setIsInitialStateRestored,
 			setShouldRefreshPreview,
+			setSkipScreenshot,
 			setIsDeploying,
 			setCloudflareDeploymentUrl,
 			setDeploymentError,
@@ -800,6 +804,7 @@ export function useChat({
 		handleDeployToSnappy,
 		// Preview refresh control
 		shouldRefreshPreview,
+		skipScreenshot,
 		// Preview deployment state
 		isPreviewDeploying,
 		// Phase progress visual indicator
