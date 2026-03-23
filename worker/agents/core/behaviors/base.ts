@@ -509,8 +509,9 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 instanceId: this.state.sandboxInstanceId,
             });
 
-            // For fullstack mobile projects, auto-deploy to CF Workers after all
-            // phases complete so the proxy can route /api/* requests.
+            // For fullstack mobile projects, ensure .api-url exists so the proxy
+            // is ready when the user deploys manually via the Deploy button.
+            // No auto CF deploy — user controls when to deploy.
             if ((this.state.templateRenderMode === 'mobile-fullstack' || this.state.templateName === 'expo-fullstack') && this.state.sandboxInstanceId) {
                 const previewDomain = getPreviewDomain(this.env);
                 const protocol = getProtocolForHost(previewDomain);
@@ -518,9 +519,6 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 const client = this.deploymentManager.getClient();
                 const sandboxId = this.state.sandboxInstanceId;
 
-                // Ensure .api-url exists via writeFiles (reliable, awaited).
-                // The file should already exist from createNewInstance, but this
-                // covers projects created before that fix was deployed.
                 client.writeFiles(sandboxId, [
                     { filePath: '.api-url', fileContents: expectedUrl }
                 ]).then(() => {
@@ -528,39 +526,6 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 }).catch((err) => {
                     this.logger.warn('Failed to write .api-url via writeFiles', err);
                 });
-
-                // Deploy only the API worker — skip expo export (build:web) which
-                // frequently fails on LLM-generated code errors and blocks the
-                // entire deploy. The proxy only needs the Hono API worker running.
-                this.logger.info('Auto-deploying fullstack mobile API to CF Workers (post-generation)');
-                const attemptDeploy = (attempt: number) => {
-                    this.deploymentManager.deployToCloudflare({
-                        target: 'platform',
-                        buildCommand: 'bun run build:worker',
-                    }).then((cfResult) => {
-                        if (cfResult.deploymentUrl) {
-                            this.logger.info('Auto CF deploy succeeded', { url: cfResult.deploymentUrl, attempt });
-                            this.broadcast(WebSocketMessageResponses.CLOUDFLARE_DEPLOYMENT_COMPLETED, {
-                                message: 'API deployed successfully',
-                                instanceId: sandboxId,
-                                deploymentUrl: cfResult.deploymentUrl,
-                            });
-                        } else if (attempt < 3) {
-                            this.logger.warn('Auto CF deploy returned no URL, retrying', { attempt });
-                            setTimeout(() => attemptDeploy(attempt + 1), 8000);
-                        } else {
-                            this.logger.error('Auto CF deploy failed after retries — .api-url kept for retry via client');
-                        }
-                    }).catch((err) => {
-                        this.logger.warn('Auto CF deploy failed', err, { attempt });
-                        if (attempt < 3) {
-                            setTimeout(() => attemptDeploy(attempt + 1), 8000);
-                        } else {
-                            this.logger.error('Auto CF deploy permanently failed — .api-url kept for retry via client');
-                        }
-                    });
-                };
-                attemptDeploy(1);
             }
         }
     }

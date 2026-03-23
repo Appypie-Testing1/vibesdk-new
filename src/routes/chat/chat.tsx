@@ -489,11 +489,11 @@ export default function Chat() {
 			hasSeenPreview.current = true;
 		} else if (previewUrl) {
 			const isExistingChat = urlChatId !== 'new';
-			const isMobile = templateDetails?.renderMode === 'mobile' || templateDetails?.renderMode === 'mobile-fullstack';
+			// For phasic mode: only switch to preview after generation completes
+			// (not during intermediate phases which cause jarring UI jumps)
 			const shouldSwitch =
 				behaviorType === 'agentic' ||
-				isMobile ||
-				(behaviorType === 'phasic' && isPhase1Complete) ||
+				(behaviorType === 'phasic' && !isGenerating && isPhase1Complete) ||
 				(isExistingChat && behaviorType !== 'phasic');
 
 			if (shouldSwitch) {
@@ -508,7 +508,7 @@ export default function Chat() {
 
 		// Update ref for next comparison
 		prevMarkdownCountRef.current = markdownFiles.length;
-	}, [previewUrl, isPhase1Complete, isStaticContent, files, activeFilePath, behaviorType, hasDocumentation, projectType, urlChatId, templateDetails]);
+	}, [previewUrl, isPhase1Complete, isGenerating, isStaticContent, files, activeFilePath, behaviorType, hasDocumentation, projectType, urlChatId, templateDetails]);
 
 	useEffect(() => {
 		if (chatId) {
