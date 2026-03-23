@@ -198,6 +198,7 @@ export function buildWorkerBindings(
 	if (config.d1_databases) {
 		for (const d1 of config.d1_databases) {
 			if (!d1.database_id || d1.database_id.startsWith('{{')) {
+				console.warn(`[buildWorkerBindings] Skipping D1 binding "${d1.binding}" — database_id is unresolved: ${d1.database_id || '(empty)'}. The deployed worker will have NO database connection.`);
 				continue;
 			}
 			bindings.push({

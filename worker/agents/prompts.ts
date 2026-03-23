@@ -1122,7 +1122,7 @@ const styles = StyleSheet.create({
 - Use React Native components ONLY: View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Switch
 - Import from 'react-native' and 'expo-*' packages
 - For navigation: use expo-router (Stack, Tabs, Link, useRouter)
-- For icons: use \`@expo/vector-icons\` (SLASH not hyphen)
+- For icons: use emoji or Unicode symbols in Text components (e.g. "+" for add, "\u2715" for close). Do NOT install any icon library.
 
 5) Styling Rules
 - ALWAYS use StyleSheet.create() for styles

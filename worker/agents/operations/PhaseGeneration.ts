@@ -418,18 +418,29 @@ ${serialized}`;
     return serialized;
 };
 
-const userPromptFormatter = (isFinal: boolean, issues: IssueReport, userSuggestions?: string[], isUserSuggestedPhase?: boolean, imageUrls?: string[]) => {
+const userPromptFormatter = (isFinal: boolean, issues: IssueReport, userSuggestions?: string[], isUserSuggestedPhase?: boolean, imageUrls?: string[], renderMode?: string) => {
     let prompt = isFinal ? LAST_PHASE_PROMPT : NEXT_PHASE_USER_PROMPT;
     prompt = prompt
         .replaceAll('{{issues}}', issuesPromptFormatterWithGuidelines(issues))
         .replaceAll('{{userSuggestions}}', formatUserSuggestions(userSuggestions, imageUrls));
-    
+
     if (isUserSuggestedPhase) {
         prompt = prompt.replaceAll('{{generateInstructions}}', 'User submitted feedback. Please thoroughly review the user needs and generate the next phase of the application accordingly, completely addressing their pain points in the right and proper way. And name the phase accordingly.');
     } else {
         prompt = prompt.replaceAll('{{generateInstructions}}', 'Generate the next phase of the application.');
     }
-    
+
+    // Strip web-specific directives for mobile projects
+    if (renderMode === 'mobile' || renderMode === 'mobile-fullstack') {
+        // Remove Tailwind/shadcn UI layout non-negotiables block
+        prompt = prompt.replace(/\s*\*\*UI LAYOUT NON-NEGOTIABLES \(Tailwind.*?\n(?:.*?shadcn.*?\n)*.*?file description\n/s, '\n');
+        // Remove Tailwind Class Errors from priority list
+        prompt = prompt.replace(/\s*\d+\.\s*\*\*Tailwind Class Errors\*\*.*\n/, '\n');
+        // Remove CSS/Tailwind references from review criteria
+        prompt = prompt.replace(/Missing or incorrect CSS classes, incorrect framework usage \(e\.g\., wrong Tailwind class\)\./, 'Missing or incorrect styles.');
+        prompt = prompt.replace(/\s*\d+\.\s*\*\*Library version issues:?\*\*.*Tailwind v3 vs\. v4\).*\n/, '\n');
+    }
+
     return PROMPT_UTILS.verifyPrompt(prompt);
 }
 export class PhaseGenerationOperation extends AgentOperation<PhasicGenerationContext, PhaseGenerationInputs, PhaseConceptGenerationSchemaType> {
@@ -451,7 +462,8 @@ export class PhaseGenerationOperation extends AgentOperation<PhasicGenerationCon
     
             // Create user message with optional images
             const imageUrls = userContext?.images?.map(img => img.publicUrl).filter(Boolean) as string[] | undefined;
-            const userPrompt = userPromptFormatter(isFinal, issues, userContext?.suggestions, isUserSuggestedPhase, imageUrls);
+            const renderMode = context.templateDetails?.renderMode;
+            const userPrompt = userPromptFormatter(isFinal, issues, userContext?.suggestions, isUserSuggestedPhase, imageUrls, renderMode);
             const userMessage = userContext?.images && userContext.images.length > 0
                 ? createMultiModalUserMessage(
                     userPrompt,
@@ -459,8 +471,7 @@ export class PhaseGenerationOperation extends AgentOperation<PhasicGenerationCon
                     'high'
                 )
                 : createUserMessage(userPrompt);
-            
-            const renderMode = context.templateDetails?.renderMode;
+
             const systemPrompt = renderMode === 'mobile-fullstack'
                 ? FULLSTACK_MOBILE_SYSTEM_PROMPT
                 : renderMode === 'mobile'

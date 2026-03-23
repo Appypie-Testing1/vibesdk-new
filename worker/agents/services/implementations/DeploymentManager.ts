@@ -1278,12 +1278,14 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
 
         // For fullstack mobile projects, write deployed URL so the dev proxy
         // can route /api/* requests to the live Cloudflare Workers backend.
-        if (deploymentUrl && state.templateRenderMode === 'mobile-fullstack' && state.sandboxInstanceId) {
+        if (deploymentUrl && (state.templateRenderMode === 'mobile-fullstack' || state.templateName === 'expo-fullstack') && state.sandboxInstanceId) {
             try {
-                await client.executeCommands(state.sandboxInstanceId, [`printf '%s' '${deploymentUrl.replace(/'/g, "'\\''")}' > .api-url`]);
-                logger.info('Wrote .api-url for fullstack mobile proxy', { deploymentUrl });
+                await client.writeFiles(state.sandboxInstanceId, [
+                    { filePath: '.api-url', fileContents: deploymentUrl }
+                ]);
+                logger.info('Wrote .api-url via writeFiles after CF deploy', { deploymentUrl });
             } catch (err) {
-                logger.warn('Failed to write .api-url file', err);
+                logger.warn('Failed to write .api-url after CF deploy', err);
             }
         }
 
@@ -1436,7 +1438,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         const b64Script = btoa(scriptContent);
 
         const apiResult = await client.executeCommands(sandboxId, [
-            `echo '${b64Script}' | base64 -d > /tmp/_eas_setup.js && EXPO_TOKEN=${expoToken} node /tmp/_eas_setup.js`
+            `echo '${b64Script}' | base64 -d > /tmp/_eas_setup.js && EXPO_TOKEN='${expoToken}' node /tmp/_eas_setup.js`
         ], 30_000);
 
         const rawOutput = apiResult.results?.[0]?.output || apiResult.results?.[0]?.error || '';
@@ -1463,7 +1465,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 logger.info('EAS project created via sandbox API call', { projectId: result.projectId, account: result.account });
 
                 // Run eas init with the known projectId to finalize configuration
-                const initCmd = `EXPO_TOKEN=${expoToken} bunx eas-cli init --id ${result.projectId} --non-interactive 2>&1`;
+                const initCmd = `EXPO_TOKEN='${expoToken}' bunx eas-cli init --id ${result.projectId} --non-interactive 2>&1`;
                 const initResult = await client.executeCommands(sandboxId, [initCmd], 60_000);
                 logger.info('eas init --id result', {
                     success: initResult.success,
@@ -1692,7 +1694,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 'grep -qxF ".expo-token" .gitignore || echo ".expo-token" >> .gitignore'
             ], 5_000);
 
-            const command = `EXPO_TOKEN=${expoToken} bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
+            const command = `EXPO_TOKEN='${expoToken}' bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 120_000);
 
             // Restore original project files so the Metro dev server (web preview) isn't
@@ -1797,7 +1799,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         }
 
         try {
-            const command = `EXPO_TOKEN=${expoToken} bunx eas-cli build:view ${easBuild.buildId} --json`;
+            const command = `EXPO_TOKEN='${expoToken}' bunx eas-cli build:view ${easBuild.buildId} --json`;
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 30_000);
 
             if (!result.success || !result.results[0]?.success) {
@@ -1816,7 +1818,26 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 return true;
             }
 
-            const parsed = JSON.parse(result.results[0].output);
+            // EAS CLI may print banners/warnings before the JSON. Extract the last
+            // JSON-like line (starts with '{') to avoid parse failures.
+            const rawOutput = result.results[0].output?.trim() || '';
+            let parsed: Record<string, any>; // EAS CLI JSON structure varies
+            try {
+                parsed = JSON.parse(rawOutput);
+            } catch {
+                // Try extracting the last line that looks like JSON
+                const lines = rawOutput.split('\n');
+                const jsonLine = lines.reverse().find(l => l.trim().startsWith('{'));
+                if (!jsonLine) {
+                    logger.warn('EAS poll: could not parse build:view output', { output: rawOutput.slice(0, 500) });
+                    const failures = (easBuild.pollFailures ?? 0) + 1;
+                    const updatedBuild: EasBuildState = { ...easBuild, pollFailures: failures };
+                    this.setState({ ...this.getState(), easBuild: updatedBuild });
+                    callbacks?.scheduleAlarm?.(DeploymentManager.EAS_POLL_INTERVAL_MS);
+                    return true;
+                }
+                parsed = JSON.parse(jsonLine);
+            }
             const buildStatus = parsed.status as string;
 
             logger.info('EAS build status', { buildId: easBuild.buildId, status: buildStatus });
