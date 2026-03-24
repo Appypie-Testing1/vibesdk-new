@@ -74,8 +74,11 @@ export class ProjectObjective<
 				}
 			}
 
+			const isMobileFullstack = this.state.templateRenderMode === 'mobile-fullstack'
+				|| this.state.templateName === 'expo-fullstack';
 			const result = await this.deploymentManager.deployToCloudflare({
 				target,
+				buildCommand: isMobileFullstack ? 'bun run build:worker' : undefined,
 				callbacks: {
 					onStarted: (data) =>
 						this.broadcast(WebSocketMessageResponses.CLOUDFLARE_DEPLOYMENT_STARTED, data),
