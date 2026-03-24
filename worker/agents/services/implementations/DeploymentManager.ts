@@ -1783,7 +1783,6 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
     ): Promise<boolean> {
         const state = this.getState();
         const logger = this.getLog();
-        const client = this.getClient();
         const easBuild = state.easBuild;
 
         if (!easBuild || !state.sandboxInstanceId) {
@@ -1803,14 +1802,22 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
         }
 
         try {
-            const command = `EXPO_TOKEN='${expoToken}' bunx eas-cli build:view ${easBuild.buildId} --json`;
-            const result = await client.executeCommands(state.sandboxInstanceId, [command], 30_000);
+            // Poll build status via Expo GraphQL API directly (no sandbox/CLI dependency)
+            const gqlQuery = `query { builds { byId(buildId: "${easBuild.buildId}") { id status platform artifacts { buildUrl applicationArchiveUrl } error { message errorCode } } } }`;
+            const gqlResponse = await fetch('https://api.expo.dev/graphql', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${expoToken}`,
+                },
+                body: JSON.stringify({ query: gqlQuery }),
+            });
 
-            if (!result.success || !result.results[0]?.success) {
+            if (!gqlResponse.ok) {
                 const failures = (easBuild.pollFailures || 0) + 1;
-                logger.warn('EAS build status check failed', { error: result.results[0]?.error, failures });
+                logger.warn('EAS build status API call failed', { status: gqlResponse.status, failures });
                 if (failures >= DeploymentManager.EAS_MAX_POLL_FAILURES) {
-                    const error = `EAS build polling stopped after ${failures} consecutive failures: ${result.results[0]?.error || 'command failed'}`;
+                    const error = `EAS build polling stopped after ${failures} consecutive failures: HTTP ${gqlResponse.status}`;
                     const failedBuild: EasBuildState = { ...easBuild, status: 'errored', error, pollFailures: failures };
                     this.setState({ ...this.getState(), easBuild: failedBuild });
                     callbacks?.onError?.(easBuild.buildId, easBuild.platform, error);
@@ -1822,32 +1829,32 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 return true;
             }
 
-            // EAS CLI may print banners/warnings before the JSON. Extract the last
-            // JSON-like line (starts with '{') to avoid parse failures.
-            const rawOutput = result.results[0].output?.trim() || '';
-            let parsed: Record<string, any>; // EAS CLI JSON structure varies
-            try {
-                parsed = JSON.parse(rawOutput);
-            } catch {
-                // Try extracting the last line that looks like JSON
-                const lines = rawOutput.split('\n');
-                const jsonLine = lines.reverse().find(l => l.trim().startsWith('{'));
-                if (!jsonLine) {
-                    logger.warn('EAS poll: could not parse build:view output', { output: rawOutput.slice(0, 500) });
-                    const failures = (easBuild.pollFailures ?? 0) + 1;
-                    const updatedBuild: EasBuildState = { ...easBuild, pollFailures: failures };
-                    this.setState({ ...this.getState(), easBuild: updatedBuild });
-                    callbacks?.scheduleAlarm?.(DeploymentManager.EAS_POLL_INTERVAL_MS);
-                    return true;
+            const gqlData = await gqlResponse.json() as { data?: { builds?: { byId?: Record<string, any> } }; errors?: Array<{ message: string }> };
+            const buildData = gqlData.data?.builds?.byId;
+
+            if (!buildData || gqlData.errors?.length) {
+                const failures = (easBuild.pollFailures || 0) + 1;
+                const errMsg = gqlData.errors?.[0]?.message || 'Build not found';
+                logger.warn('EAS build status query failed', { error: errMsg, failures });
+                if (failures >= DeploymentManager.EAS_MAX_POLL_FAILURES) {
+                    const error = `EAS build polling stopped after ${failures} failures: ${errMsg}`;
+                    const failedBuild: EasBuildState = { ...easBuild, status: 'errored', error, pollFailures: failures };
+                    this.setState({ ...this.getState(), easBuild: failedBuild });
+                    callbacks?.onError?.(easBuild.buildId, easBuild.platform, error);
+                    return false;
                 }
-                parsed = JSON.parse(jsonLine);
+                const updatedBuild: EasBuildState = { ...easBuild, pollFailures: failures };
+                this.setState({ ...this.getState(), easBuild: updatedBuild });
+                callbacks?.scheduleAlarm?.(DeploymentManager.EAS_POLL_INTERVAL_MS);
+                return true;
             }
-            const buildStatus = parsed.status as string;
+
+            const buildStatus = (buildData.status as string || '').toLowerCase();
 
             logger.info('EAS build status', { buildId: easBuild.buildId, status: buildStatus });
 
             if (buildStatus === 'finished') {
-                const artifactUrl = parsed.artifacts?.buildUrl;
+                const artifactUrl = buildData.artifacts?.buildUrl || buildData.artifacts?.applicationArchiveUrl;
                 const completedBuild: EasBuildState = {
                     ...easBuild,
                     status: 'finished',
@@ -1875,9 +1882,9 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 return false;
             }
 
-            if (buildStatus === 'errored' || buildStatus === 'cancelled') {
-                const error = parsed.error?.message || `Build ${buildStatus}`;
-                const failedBuild: EasBuildState = { ...easBuild, status: buildStatus as 'errored' | 'cancelled', error };
+            if (buildStatus === 'errored' || buildStatus === 'canceled') {
+                const error = buildData.error?.message || `Build ${buildStatus}`;
+                const failedBuild: EasBuildState = { ...easBuild, status: 'errored', error };
                 this.setState({ ...this.getState(), easBuild: failedBuild });
                 callbacks?.onError?.(easBuild.buildId, easBuild.platform, error);
                 return false;
