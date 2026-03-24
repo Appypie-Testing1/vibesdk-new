@@ -26,6 +26,9 @@ const HEALTH_CHECK_INTERVAL_MS = 30000;
 const EAS_API_CLIENT_TEMPLATE = `import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
+// Hardcoded at EAS build time — reliable fallback when Constants.expoConfig is unavailable
+const BUILT_API_URL = '%%DEPLOYED_API_URL%%';
+
 function getBaseUrl(): string {
   if (Platform.OS === 'web') return '';
   const debuggerHost = Constants.expoConfig?.hostUri
@@ -36,6 +39,7 @@ function getBaseUrl(): string {
   }
   const apiUrl = Constants.expoConfig?.extra?.apiUrl;
   if (apiUrl && !apiUrl.startsWith('__')) return apiUrl;
+  if (BUILT_API_URL && !BUILT_API_URL.startsWith('%%')) return BUILT_API_URL;
   return '';
 }
 
@@ -1620,7 +1624,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 { filePath: 'app.json', fileContents: JSON.stringify(appJson, null, 2) },
                 { filePath: 'package.json', fileContents: JSON.stringify(pkgJson, null, 2) },
                 { filePath: '.gitignore', fileContents: gitignoreContent },
-                { filePath: 'lib/api-client.ts', fileContents: EAS_API_CLIENT_TEMPLATE },
+                { filePath: 'lib/api-client.ts', fileContents: EAS_API_CLIENT_TEMPLATE.replace('%%DEPLOYED_API_URL%%', deployedApiUrl) },
             ];
 
             // Add babel.config.js only if it doesn't exist
