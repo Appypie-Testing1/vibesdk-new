@@ -1686,6 +1686,42 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             const gitCommit = 'git add -A && git commit -m "eas-project-config" --no-verify';
             await client.executeCommands(state.sandboxInstanceId, [gitCommit], 15_000);
 
+            // Deploy CF Worker API so the standalone APK can reach /api/* endpoints.
+            // The sandbox proxy only works for dev preview (Expo Go / web); standalone
+            // APK calls the deployed Worker URL directly via extra.apiUrl.
+            if (state.templateRenderMode === 'mobile-fullstack' || state.templateName === 'expo-fullstack') {
+                callbacks?.onProgress?.('Deploying API backend...');
+
+                const deployResult = await client.deployToCloudflareWorkers(
+                    state.sandboxInstanceId,
+                    'platform',
+                    { buildCommand: 'bun run build:worker' }
+                );
+
+                if (!deployResult || !deployResult.success) {
+                    const error = `API backend deployment failed: ${deployResult?.error || deployResult?.message || 'Unknown error'}. The APK will not be able to reach the API.`;
+                    logger.error('CF Worker deploy failed before EAS build', { error: deployResult?.error });
+                    callbacks?.onError?.(error);
+                    return null;
+                }
+
+                logger.info('CF Worker API deployed for EAS build', {
+                    deployedUrl: deployResult.deployedUrl,
+                    deploymentId: deployResult.deploymentId,
+                });
+
+                // Write .api-url so the sandbox proxy also routes to the deployed Worker
+                if (deployResult.deployedUrl) {
+                    try {
+                        await client.writeFiles(state.sandboxInstanceId, [
+                            { filePath: '.api-url', fileContents: deployResult.deployedUrl }
+                        ]);
+                    } catch (err) {
+                        logger.warn('Failed to write .api-url after CF deploy', err);
+                    }
+                }
+            }
+
             callbacks?.onProgress?.(`Submitting ${platform} build to EAS...`);
 
             // Persist EXPO_TOKEN in sandbox so alarm-based polling can use it
