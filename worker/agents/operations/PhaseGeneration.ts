@@ -208,9 +208,9 @@ const FULLSTACK_MOBILE_SYSTEM_PROMPT = `<ROLE>
     - All UI MUST use React Native components: View, Text, TouchableOpacity, ScrollView, FlatList, TextInput, Image, etc.
     - All styling MUST use StyleSheet.create() -- NO Tailwind CSS, NO className, NO HTML elements
     - Navigation uses expo-router (file-based routing in app/ directory)
-    - API calls: ALWAYS use \`import { apiClient } from '../lib/api-client'\`. NEVER use raw fetch() for API endpoints -- it fails on native. Do NOT modify lib/api-client.ts.
     - Do NOT modify: app.json, metro.config.js, tsconfig.json, lib/api-client.ts (pre-configured)
     - There are NO shadcn components -- this is NOT a web-only project
+    - **API CLIENT RULE (MANDATORY):** ALL backend calls MUST use \`import { apiClient } from '../lib/api-client'\`. NEVER use raw fetch(), axios, or custom wrappers for /api/* endpoints. raw fetch('/api/...') has NO origin on standalone APK and WILL FAIL with a network error, showing blank screens. Only apiClient resolves the correct URL for web, Expo Go, and standalone builds. Example: \`const data = await apiClient.get<Product[]>('/api/products');\`
 
     **Backend (api/ directory):**
     - Hono API at api/src/index.ts with D1 database binding

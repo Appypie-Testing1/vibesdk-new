@@ -1058,7 +1058,7 @@ export const FULLSTACK_MOBILE_STRATEGIES = {
         * Build corresponding API endpoints in api/src/index.ts using Hono with D1 database.
         * Use React Native components exclusively: View, Text, TouchableOpacity, ScrollView, FlatList, TextInput, Image, etc.
         * Style with StyleSheet.create() -- do NOT use Tailwind CSS, HTML elements, or web-specific CSS.
-        * Connect frontend screens to API via lib/api-client.ts.
+        * Connect frontend screens to API ONLY via \`import { apiClient } from '../lib/api-client'\`. NEVER use raw fetch() or custom wrappers -- they break standalone APK builds.
         * Include working CRUD operations with real database persistence.
         * The initial phase should deliver an immediately usable app with real data.
         * Phase 1 builds the foundation -- subsequent phases add features, polish, and refinement.
@@ -1105,11 +1105,16 @@ const styles = StyleSheet.create({
   content: { padding: 16 },
 });
 
-2) API Integration Pattern
-- Use lib/api-client.ts for all API calls
-- Handle loading, error, and success states
-- Use useEffect for data fetching on mount
-- Use callbacks for mutations (create, update, delete)
+2) API Integration Pattern (MANDATORY -- violations break standalone APK)
+- ALWAYS use \`import { apiClient } from '../lib/api-client'\` for ALL backend calls.
+- NEVER use raw fetch(), axios, or custom wrappers for /api/* endpoints.
+- Handle loading, error, and success states.
+- Use useEffect for data fetching on mount, callbacks for mutations.
+- Example:
+  const [products, setProducts] = useState<Product[]>([]);
+  useEffect(() => {
+    apiClient.get<Product[]>('/api/products').then(setProducts).catch(console.error);
+  }, []);
 
 3) API Route Pattern (Hono + D1)
 - All routes under /api/* prefix

@@ -138,7 +138,6 @@ export const FULLSTACK_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are impl
 - NEVER import from 'react-dom' or use web-specific APIs (document, window.location, etc.)
 - Navigation: use expo-router (Link, useRouter, Stack, Tabs) -- NOT @react-navigation directly.
 - Icons: Do NOT use any icon library. Use emoji or Unicode symbols in Text components instead.
-- API calls: ALWAYS use \`import { apiClient } from '../lib/api-client'\` for ALL backend communication. NEVER use raw fetch() for /api/* endpoints -- it FAILS on native devices. Do NOT modify or regenerate lib/api-client.ts.
 - package.json: KEEP ALL existing template dependencies.
 
 **Backend (api/ directory):**
@@ -150,6 +149,39 @@ export const FULLSTACK_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are impl
 - CORS middleware for /api/* routes.
 - Return JSON responses with appropriate HTTP status codes.
 </CRITICAL_FULLSTACK_MOBILE_RULES>
+
+<API_CLIENT_MANDATORY>
+EVERY frontend file that communicates with the backend MUST use apiClient from lib/api-client.ts.
+This is non-negotiable -- the app is built as a standalone APK/IPA where raw fetch() with relative paths or localhost URLs will FAIL because there is no web server origin.
+
+CORRECT (the ONLY allowed pattern):
+\`\`\`typescript
+import { apiClient } from '../lib/api-client';
+
+// GET
+const products = await apiClient.get<Product[]>('/api/products');
+// GET with query params
+const filtered = await apiClient.get<Product[]>('/api/products?category=shoes');
+// POST
+const newOrder = await apiClient.post<Order>('/api/orders', { items, total });
+// PUT
+await apiClient.put('/api/products/' + id, updatedProduct);
+// DELETE
+await apiClient.delete('/api/products/' + id);
+\`\`\`
+
+FORBIDDEN (will break the standalone APK -- NEVER do any of these):
+- fetch('/api/products')                    -- no origin on native device
+- fetch('http://localhost:8081/api/...')     -- no dev server on standalone
+- fetch('http://hostname/api/...')           -- literal "hostname" is not a URL
+- fetch(\`\${baseUrl}/api/...\`)              -- custom base URL logic is wrong
+- axios.get('/api/...')                      -- does not use apiClient
+- Creating your own API wrapper function    -- use apiClient, do not reinvent it
+
+Do NOT modify, regenerate, or create alternatives to lib/api-client.ts. It is pre-configured and handles URL resolution for web, Expo Go, and standalone builds automatically.
+
+Violations of this rule cause the production APK to show blank screens with no data.
+</API_CLIENT_MANDATORY>
 
 ${FULLSTACK_MOBILE_STRATEGIES.UI_NON_NEGOTIABLES}
 

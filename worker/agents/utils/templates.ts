@@ -869,10 +869,13 @@ To build a valid, previewable Expo/React Native + Cloudflare Workers fullstack p
 
 5. The Hono API worker is at api/src/index.ts with D1 database binding.
 
-6. **CRITICAL API CALLS**: ALL frontend API calls MUST use \`apiClient\` from \`lib/api-client.ts\`. NEVER use raw \`fetch()\` for API endpoints. The api-client handles base URL resolution for both web and native (Expo Go). Without it, API calls will fail on native devices.
-   - Do NOT modify lib/api-client.ts -- it is pre-configured.
-   - Example: \`import { apiClient } from '../lib/api-client'; const data = await apiClient.get('/api/products');\`
-   - NEVER write: \`fetch('/api/products')\` -- this FAILS on native because there is no origin.
+6. **CRITICAL API CALLS (NON-NEGOTIABLE -- violations break the production APK):**
+   ALL frontend files that fetch data from the backend MUST use \`apiClient\` from \`lib/api-client.ts\`.
+   The standalone APK has no web server origin -- raw fetch('/api/...') resolves to nothing and silently fails, causing blank screens with no data.
+   - Do NOT modify, regenerate, or replace lib/api-client.ts -- it is pre-configured.
+   - CORRECT: \`import { apiClient } from '../lib/api-client'; const data = await apiClient.get<Product[]>('/api/products');\`
+   - FORBIDDEN: \`fetch('/api/products')\`, \`fetch('http://localhost:8081/api/...')\`, \`fetch('http://hostname/api/...')\`, \`axios.get('/api/...')\`, or any custom wrapper.
+   - This applies to EVERY screen and EVERY component that loads or submits data.
 
 7. These packages are pre-installed: expo, expo-router, expo-constants, expo-font, expo-linking, expo-status-bar, expo-system-ui, react-native, react-native-gesture-handler, react-native-reanimated, react-native-safe-area-context, react-native-screens, react-native-web, @react-native-async-storage/async-storage, hono, drizzle-orm. Do NOT add them again.
 
