@@ -1602,15 +1602,17 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             logger.info('Preparing EAS build files', { deployedApiUrl, safeSlug, bundleId });
 
             // Read current files from sandbox — keep originals so we can restore after EAS submit
-            const currentFiles = await client.getFiles(state.sandboxInstanceId, ['app.json', 'package.json', '.gitignore', 'lib/api-client.ts', 'bun.lockb']);
+            const currentFiles = await client.getFiles(state.sandboxInstanceId, ['app.json', 'package.json', '.gitignore', 'lib/api-client.ts', 'eas.json', 'bun.lockb']);
             const appJsonFile = currentFiles.files?.find(f => f.filePath === 'app.json');
             const pkgJsonFile = currentFiles.files?.find(f => f.filePath === 'package.json');
             const gitignoreFile = currentFiles.files?.find(f => f.filePath === '.gitignore');
+            const easJsonFile = currentFiles.files?.find(f => f.filePath === 'eas.json');
 
             // Snapshot original file contents for restoration after EAS build submit
             const originalAppJson = appJsonFile?.fileContents || '';
             const originalPkgJson = pkgJsonFile?.fileContents || '';
             const originalApiClient = currentFiles.files?.find(f => f.filePath === 'lib/api-client.ts')?.fileContents || '';
+            const originalEasJson = easJsonFile?.fileContents || '';
 
             // Patch app.json with slug, name, bundleIdentifier, apiUrl
             let appJson: Record<string, Record<string, unknown>>;
@@ -1637,6 +1639,22 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             extra.apiUrl = deployedApiUrl;
             appJson.expo.extra = extra;
 
+            // Patch eas.json: for iOS, use "store" distribution (internal/ad-hoc requires
+            // registered devices which can't be set up in non-interactive mode)
+            let easJson: Record<string, unknown>;
+            try {
+                easJson = JSON.parse(easJsonFile?.fileContents || '{}');
+            } catch {
+                easJson = {};
+            }
+            if (platform === 'ios') {
+                const build = (easJson.build || {}) as Record<string, Record<string, unknown>>;
+                const preview = build.preview || {};
+                preview.distribution = 'store';
+                build.preview = preview;
+                easJson.build = build;
+            }
+
             // Patch package.json: remove eas-cli from devDependencies if present
             let pkgJson: Record<string, Record<string, unknown>>;
             try {
@@ -1661,6 +1679,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             // Write all files at once via reliable writeFiles API
             const filesToWrite: { filePath: string; fileContents: string }[] = [
                 { filePath: 'app.json', fileContents: JSON.stringify(appJson, null, 2) },
+                { filePath: 'eas.json', fileContents: JSON.stringify(easJson, null, 2) },
                 { filePath: 'package.json', fileContents: JSON.stringify(pkgJson, null, 2) },
                 { filePath: '.gitignore', fileContents: gitignoreContent },
                 { filePath: 'lib/api-client.ts', fileContents: EAS_API_CLIENT_TEMPLATE.replace('%%DEPLOYED_API_URL%%', deployedApiUrl) },
@@ -1824,6 +1843,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             try {
                 const restoreFiles: { filePath: string; fileContents: string }[] = [];
                 if (originalAppJson) restoreFiles.push({ filePath: 'app.json', fileContents: originalAppJson });
+                if (originalEasJson) restoreFiles.push({ filePath: 'eas.json', fileContents: originalEasJson });
                 if (originalPkgJson) restoreFiles.push({ filePath: 'package.json', fileContents: originalPkgJson });
                 if (originalApiClient) restoreFiles.push({ filePath: 'lib/api-client.ts', fileContents: originalApiClient });
                 if (restoreFiles.length > 0) {
