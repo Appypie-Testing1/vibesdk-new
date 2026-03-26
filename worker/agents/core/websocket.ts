@@ -252,14 +252,13 @@ export function handleWebSocketMessage(
 
                 logger.info('EAS build trigger received', { platform });
 
-                agent.getDecryptedSecret({ envVarName: 'EXPO_TOKEN' }).then((expoToken) => {
+                agent.getDecryptedSecret({ envVarName: 'EXPO_TOKEN' }).then(async (expoToken) => {
                     if (!expoToken) {
                         sendToConnection(connection, WebSocketMessageResponses.VAULT_REQUIRED, {
                             reason: 'EXPO_TOKEN is required to build native apps with EAS. Create one at https://expo.dev/accounts/[username]/settings/access-tokens',
                             provider: 'expo',
                             envVarName: 'EXPO_TOKEN',
                         });
-                        // Also send build error so frontend clears the pending state
                         sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_ERROR, {
                             buildId: '',
                             platform: platform as 'ios' | 'android',
@@ -268,7 +267,37 @@ export function handleWebSocketMessage(
                         return;
                     }
 
-                    return agent.deploymentManager.triggerEasBuild(platform as 'ios' | 'android', expoToken, {
+                    // For iOS builds, fetch Apple Developer credentials from vault
+                    let appleCredentials: { appleId: string; teamId: string; appSpecificPassword?: string } | undefined;
+                    if (platform === 'ios') {
+                        const [appleId, teamId, appSpecificPassword] = await Promise.all([
+                            agent.getDecryptedSecret({ envVarName: 'EXPO_APPLE_ID' }),
+                            agent.getDecryptedSecret({ envVarName: 'EXPO_APPLE_TEAM_ID' }),
+                            agent.getDecryptedSecret({ envVarName: 'EXPO_APPLE_APP_SPECIFIC_PASSWORD' }),
+                        ]);
+
+                        if (!appleId || !teamId) {
+                            sendToConnection(connection, WebSocketMessageResponses.VAULT_REQUIRED, {
+                                reason: 'iOS builds require Apple Developer credentials. Add EXPO_APPLE_ID (your Apple ID email) and EXPO_APPLE_TEAM_ID (10-char Team ID from https://developer.apple.com/account) in the Vault.',
+                                provider: 'apple',
+                                envVarName: 'EXPO_APPLE_ID',
+                            });
+                            sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_ERROR, {
+                                buildId: '',
+                                platform: 'ios',
+                                error: 'iOS builds require Apple Developer credentials. Please add EXPO_APPLE_ID and EXPO_APPLE_TEAM_ID in the Vault.',
+                            });
+                            return;
+                        }
+
+                        appleCredentials = {
+                            appleId,
+                            teamId,
+                            appSpecificPassword: appSpecificPassword || undefined,
+                        };
+                    }
+
+                    return agent.deploymentManager.triggerEasBuild(platform as 'ios' | 'android', expoToken, appleCredentials, {
                         onStatus: (build) => {
                             broadcastToConnections(agent, WebSocketMessageResponses.EAS_BUILD_STATUS, {
                                 buildId: build.buildId,

@@ -203,6 +203,51 @@ export function getTemplatesData(): SecretTemplate[] {
 			required: false,
 			category: 'deployment',
 		},
+		{
+			id: 'EXPO_APPLE_ID',
+			displayName: 'Apple ID (for iOS builds)',
+			envVarName: 'EXPO_APPLE_ID',
+			provider: 'apple',
+			icon: '',
+			description:
+				'Apple ID email used for iOS code signing via EAS Build',
+			instructions:
+				'Use the Apple ID email associated with your Apple Developer account',
+			placeholder: 'you@example.com',
+			validation: '^[^@]+@[^@]+\\.[^@]+$',
+			required: false,
+			category: 'deployment',
+		},
+		{
+			id: 'EXPO_APPLE_TEAM_ID',
+			displayName: 'Apple Developer Team ID',
+			envVarName: 'EXPO_APPLE_TEAM_ID',
+			provider: 'apple',
+			icon: '',
+			description:
+				'10-character Apple Developer Team ID for iOS code signing',
+			instructions:
+				'Go to https://developer.apple.com/account → Membership Details → Team ID',
+			placeholder: 'ABCDE12345',
+			validation: '^[A-Z0-9]{10}$',
+			required: false,
+			category: 'deployment',
+		},
+		{
+			id: 'EXPO_APPLE_APP_SPECIFIC_PASSWORD',
+			displayName: 'Apple App-Specific Password',
+			envVarName: 'EXPO_APPLE_APP_SPECIFIC_PASSWORD',
+			provider: 'apple',
+			icon: '',
+			description:
+				'App-specific password for Apple accounts with 2FA (required for most accounts)',
+			instructions:
+				'Go to https://appleid.apple.com → Sign-In and Security → App-Specific Passwords → Generate',
+			placeholder: 'xxxx-xxxx-xxxx-xxxx',
+			validation: '^[a-z]{4}-[a-z]{4}-[a-z]{4}-[a-z]{4}$',
+			required: false,
+			category: 'deployment',
+		},
 
 		// Database & Storage
 		{

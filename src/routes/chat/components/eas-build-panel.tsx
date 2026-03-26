@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '../../../components/primitives/button';
-import { Loader, Download, Smartphone, AlertCircle } from 'lucide-react';
+import { Loader, Download, Smartphone, AlertCircle, Info } from 'lucide-react';
 import clsx from 'clsx';
 import type { EasBuildPlatform, EasBuildStatus } from '@/api-types';
+
+const IOS_CREDENTIAL_ERROR_PATTERN = /Apple Developer|signing|provisioning|code\s*sign|certificate|EXPO_APPLE/i;
 
 export interface EasBuildInfo {
     buildId: string;
@@ -54,6 +56,10 @@ export function EasBuildPanel({
     const isBuilding = easBuild?.status === 'pending' || easBuild?.status === 'in-progress';
     const isFinished = easBuild?.status === 'finished';
     const isErrored = easBuild?.status === 'errored' || easBuild?.status === 'cancelled';
+    const isIosCredentialError = useMemo(
+        () => isErrored && easBuild?.error ? IOS_CREDENTIAL_ERROR_PATTERN.test(easBuild.error) : false,
+        [isErrored, easBuild?.error]
+    );
 
     return (
         <div className="border rounded-lg p-3 bg-bg-2/50 border-text/10 mt-2">
@@ -102,6 +108,14 @@ export function EasBuildPanel({
                 </div>
             )}
 
+            {/* iOS credential info */}
+            {selectedPlatform === 'ios' && !isBuilding && (
+                <div className="flex items-start gap-1.5 mb-2 text-[11px] text-text-tertiary">
+                    <Info className="w-3 h-3 mt-0.5 shrink-0" />
+                    <span>Requires Apple Developer credentials (EXPO_APPLE_ID, EXPO_APPLE_TEAM_ID) in Vault</span>
+                </div>
+            )}
+
             {/* Build status */}
             {easBuild && (
                 <div className={clsx(
@@ -142,9 +156,18 @@ export function EasBuildPanel({
                     )}
 
                     {isErrored && easBuild.error && (
-                        <p className="text-red-600 dark:text-red-400 mt-1 break-words">
-                            {easBuild.error}
-                        </p>
+                        <div className="mt-1">
+                            <p className="text-red-600 dark:text-red-400 break-words">
+                                {isIosCredentialError
+                                    ? 'iOS build failed due to Apple code signing issues.'
+                                    : easBuild.error}
+                            </p>
+                            {isIosCredentialError && (
+                                <p className="text-text-tertiary mt-1">
+                                    Add or verify EXPO_APPLE_ID, EXPO_APPLE_TEAM_ID, and EXPO_APPLE_APP_SPECIFIC_PASSWORD in the Vault. Ensure your Apple Developer membership is active.
+                                </p>
+                            )}
+                        </div>
                     )}
                 </div>
             )}
