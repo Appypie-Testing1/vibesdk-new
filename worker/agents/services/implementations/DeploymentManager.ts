@@ -1362,6 +1362,92 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
 
     /**
      * Ensure the EAS project is configured in app.json.
+     * Clear existing iOS credentials from EAS servers for a project.
+     * This removes stale/invalid Distribution Certificates and Build Credentials
+     * that block non-interactive builds. EAS CLI will re-create them using the
+     * ASC API Key env vars on the next build.
+     */
+    private async clearIosCredentials(
+        projectId: string,
+        expoToken: string,
+        logger: ReturnType<typeof this.getLog>
+    ): Promise<void> {
+        const gqlEndpoint = 'https://api.expo.dev/graphql';
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${expoToken}`,
+        };
+
+        try {
+            // Step 1: Query existing iOS App Credentials for this project
+            const queryBody = JSON.stringify({
+                query: `query($appId: String!) {
+                    app { byId(appId: $appId) {
+                        iosAppCredentials {
+                            id
+                            iosDistributionCertificate { id serialNumber }
+                            iosAppBuildCredentialsList { id }
+                        }
+                    }}
+                }`,
+                variables: { appId: projectId },
+            });
+
+            const queryRes = await fetch(gqlEndpoint, { method: 'POST', headers, body: queryBody });
+            if (!queryRes.ok) {
+                logger.warn('Failed to query iOS credentials', { status: queryRes.status });
+                return;
+            }
+
+            const queryData = await queryRes.json() as {
+                data?: { app?: { byId?: { iosAppCredentials?: Array<{
+                    id: string;
+                    iosDistributionCertificate?: { id: string; serialNumber?: string };
+                    iosAppBuildCredentialsList?: Array<{ id: string }>;
+                }> } } };
+                errors?: Array<{ message: string }>;
+            };
+
+            const creds = queryData.data?.app?.byId?.iosAppCredentials;
+            if (!creds || creds.length === 0) {
+                logger.info('No existing iOS credentials to clear');
+                return;
+            }
+
+            logger.info('Found iOS credentials to clear', {
+                count: creds.length,
+                hasCert: !!creds[0]?.iosDistributionCertificate,
+                buildCredsCount: creds[0]?.iosAppBuildCredentialsList?.length || 0,
+            });
+
+            // Step 2: Delete iOS App Build Credentials (links between cert/profile and app)
+            for (const cred of creds) {
+                for (const buildCred of (cred.iosAppBuildCredentialsList || [])) {
+                    const deleteBody = JSON.stringify({
+                        query: `mutation($id: ID!) {
+                            iosAppBuildCredentials { deleteIosAppBuildCredentials(iosAppBuildCredentialsId: $id) { id } }
+                        }`,
+                        variables: { id: buildCred.id },
+                    });
+                    const delRes = await fetch(gqlEndpoint, { method: 'POST', headers, body: deleteBody });
+                    if (delRes.ok) {
+                        logger.info('Deleted iOS App Build Credentials', { id: buildCred.id });
+                    } else {
+                        logger.warn('Failed to delete build credentials', { id: buildCred.id, status: delRes.status });
+                    }
+                }
+            }
+
+            logger.info('iOS credential cleanup complete');
+        } catch (error) {
+            // Non-fatal — the build may still succeed if credentials are valid
+            logger.warn('Error clearing iOS credentials (non-fatal)', {
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+    }
+
+    /**
      * Strategy 1: Run `yes | eas init` in the sandbox to auto-accept prompts.
      * Strategy 2: Use Expo REST + GraphQL API to create project and inject projectId.
      * Returns the projectId or a truthy string on success, null on failure.
@@ -1639,21 +1725,24 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             extra.apiUrl = deployedApiUrl;
             appJson.expo.extra = extra;
 
-            // Patch eas.json: for iOS, use "store" distribution (internal/ad-hoc requires
-            // registered devices which can't be set up in non-interactive mode)
+            // Patch eas.json: set explicit environment and distribution per platform
             let easJson: Record<string, unknown>;
             try {
                 easJson = JSON.parse(easJsonFile?.fileContents || '{}');
             } catch {
                 easJson = {};
             }
+            const build = (easJson.build || {}) as Record<string, Record<string, unknown>>;
+            const preview = build.preview || {};
+            // Explicit environment prevents EAS from inferring wrong environment
+            preview.environment = 'preview';
             if (platform === 'ios') {
-                const build = (easJson.build || {}) as Record<string, Record<string, unknown>>;
-                const preview = build.preview || {};
+                // Use "store" distribution for iOS (internal/ad-hoc requires pre-registered
+                // devices which can't be set up in non-interactive mode)
                 preview.distribution = 'store';
-                build.preview = preview;
-                easJson.build = build;
             }
+            build.preview = preview;
+            easJson.build = build;
 
             // Patch package.json: remove eas-cli from devDependencies if present
             let pkgJson: Record<string, Record<string, unknown>>;
@@ -1738,6 +1827,14 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 logger.error(error);
                 callbacks?.onError?.(error);
                 return null;
+            }
+
+            // For iOS builds, clear any stale/invalid credentials from EAS servers.
+            // Previous failed attempts may leave Distribution Certificates in an unvalidated
+            // state that blocks non-interactive builds.
+            if (platform === 'ios') {
+                callbacks?.onProgress?.('Clearing stale iOS credentials...');
+                await this.clearIosCredentials(easProjectResult.projectId, expoToken, logger);
             }
 
             // Commit the updated app.json with projectId
