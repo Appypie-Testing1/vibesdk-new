@@ -4,7 +4,7 @@ import { Loader, Download, Smartphone, AlertCircle, Info } from 'lucide-react';
 import clsx from 'clsx';
 import type { EasBuildPlatform, EasBuildStatus } from '@/api-types';
 
-const IOS_CREDENTIAL_ERROR_PATTERN = /Apple Developer|signing|provisioning|code\s*sign|certificate|EXPO_APPLE/i;
+const IOS_CREDENTIAL_ERROR_PATTERN = /Apple Developer|signing|provisioning|code\s*sign|certificate|EXPO_APPLE|EXPO_ASC|ASC API/i;
 
 export interface EasBuildInfo {
     buildId: string;
@@ -112,7 +112,7 @@ export function EasBuildPanel({
             {selectedPlatform === 'ios' && !isBuilding && (
                 <div className="flex items-start gap-1.5 mb-2 text-[11px] text-text-tertiary">
                     <Info className="w-3 h-3 mt-0.5 shrink-0" />
-                    <span>Requires Apple Developer credentials (EXPO_APPLE_ID, EXPO_APPLE_TEAM_ID) in Vault</span>
+                    <span>Requires App Store Connect API Key credentials in Vault (EXPO_APPLE_TEAM_ID, EXPO_ASC_KEY_ID, EXPO_ASC_ISSUER_ID, EXPO_ASC_API_KEY_CONTENT)</span>
                 </div>
             )}
 
@@ -164,7 +164,7 @@ export function EasBuildPanel({
                             </p>
                             {isIosCredentialError && (
                                 <p className="text-text-tertiary mt-1">
-                                    Add or verify EXPO_APPLE_ID, EXPO_APPLE_TEAM_ID, and EXPO_APPLE_APP_SPECIFIC_PASSWORD in the Vault. Ensure your Apple Developer membership is active.
+                                    Add or verify EXPO_APPLE_TEAM_ID, EXPO_ASC_KEY_ID, EXPO_ASC_ISSUER_ID, and EXPO_ASC_API_KEY_CONTENT in the Vault. Create an API Key at appstoreconnect.apple.com if you haven't already.
                                 </p>
                             )}
                         </div>

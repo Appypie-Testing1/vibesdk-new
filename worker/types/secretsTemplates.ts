@@ -204,21 +204,6 @@ export function getTemplatesData(): SecretTemplate[] {
 			category: 'deployment',
 		},
 		{
-			id: 'EXPO_APPLE_ID',
-			displayName: 'Apple ID (for iOS builds)',
-			envVarName: 'EXPO_APPLE_ID',
-			provider: 'apple',
-			icon: '',
-			description:
-				'Apple ID email used for iOS code signing via EAS Build',
-			instructions:
-				'Use the Apple ID email associated with your Apple Developer account',
-			placeholder: 'you@example.com',
-			validation: '^[^@]+@[^@]+\\.[^@]+$',
-			required: false,
-			category: 'deployment',
-		},
-		{
 			id: 'EXPO_APPLE_TEAM_ID',
 			displayName: 'Apple Developer Team ID',
 			envVarName: 'EXPO_APPLE_TEAM_ID',
@@ -234,17 +219,48 @@ export function getTemplatesData(): SecretTemplate[] {
 			category: 'deployment',
 		},
 		{
-			id: 'EXPO_APPLE_APP_SPECIFIC_PASSWORD',
-			displayName: 'Apple App-Specific Password',
-			envVarName: 'EXPO_APPLE_APP_SPECIFIC_PASSWORD',
+			id: 'EXPO_ASC_KEY_ID',
+			displayName: 'App Store Connect Key ID',
+			envVarName: 'EXPO_ASC_KEY_ID',
 			provider: 'apple',
 			icon: '',
 			description:
-				'App-specific password for Apple accounts with 2FA (required for most accounts)',
+				'Key ID of your App Store Connect API Key (for iOS EAS builds)',
 			instructions:
-				'Go to https://appleid.apple.com → Sign-In and Security → App-Specific Passwords → Generate',
-			placeholder: 'xxxx-xxxx-xxxx-xxxx',
-			validation: '^[a-z]{4}-[a-z]{4}-[a-z]{4}-[a-z]{4}$',
+				'Go to https://appstoreconnect.apple.com/access/integrations/api → Keys → Copy Key ID',
+			placeholder: 'ABC1234DEF',
+			validation: '^[A-Z0-9]{10}$',
+			required: false,
+			category: 'deployment',
+		},
+		{
+			id: 'EXPO_ASC_ISSUER_ID',
+			displayName: 'App Store Connect Issuer ID',
+			envVarName: 'EXPO_ASC_ISSUER_ID',
+			provider: 'apple',
+			icon: '',
+			description:
+				'Issuer ID from App Store Connect API Keys page',
+			instructions:
+				'Go to https://appstoreconnect.apple.com/access/integrations/api → Copy Issuer ID (shown at the top)',
+			placeholder: 'f9675cff-f45d-4116-bd2c-2372142cee09',
+			validation:
+				'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+			required: false,
+			category: 'deployment',
+		},
+		{
+			id: 'EXPO_ASC_API_KEY_CONTENT',
+			displayName: 'App Store Connect API Key (.p8)',
+			envVarName: 'EXPO_ASC_API_KEY_CONTENT',
+			provider: 'apple',
+			icon: '',
+			description:
+				'Contents of your App Store Connect .p8 API key file (for iOS EAS builds)',
+			instructions:
+				'Go to https://appstoreconnect.apple.com/access/integrations/api → Keys → Download .p8 file → Paste the full contents here',
+			placeholder: '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----',
+			validation: '^-----BEGIN PRIVATE KEY-----',
 			required: false,
 			category: 'deployment',
 		},

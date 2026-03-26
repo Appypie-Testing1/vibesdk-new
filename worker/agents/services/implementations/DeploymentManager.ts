@@ -1506,7 +1506,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
     async triggerEasBuild(
         platform: EasBuildPlatform,
         expoToken: string,
-        appleCredentials?: { appleId: string; teamId: string; appSpecificPassword?: string },
+        ascCredentials?: { teamId: string; ascKeyId: string; ascIssuerId: string; ascApiKeyContent: string },
         callbacks?: {
             onStatus?: (build: EasBuildState) => void;
             onProgress?: (message: string) => void;
@@ -1736,12 +1736,16 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             ], 5_000);
 
             let envVars = `EXPO_TOKEN='${expoToken}'`;
-            if (platform === 'ios' && appleCredentials) {
-                envVars += ` EXPO_APPLE_ID='${appleCredentials.appleId}'`;
-                envVars += ` EXPO_APPLE_TEAM_ID='${appleCredentials.teamId}'`;
-                if (appleCredentials.appSpecificPassword) {
-                    envVars += ` EXPO_APPLE_APP_SPECIFIC_PASSWORD='${appleCredentials.appSpecificPassword}'`;
-                }
+            if (platform === 'ios' && ascCredentials) {
+                // Write the .p8 key file to sandbox so EXPO_ASC_API_KEY_PATH can reference it
+                const ascKeyPath = '/tmp/eas-asc-key.p8';
+                await client.writeFiles(state.sandboxInstanceId, [
+                    { filePath: ascKeyPath, fileContents: ascCredentials.ascApiKeyContent }
+                ]);
+                envVars += ` EXPO_APPLE_TEAM_ID='${ascCredentials.teamId}'`;
+                envVars += ` EXPO_ASC_KEY_ID='${ascCredentials.ascKeyId}'`;
+                envVars += ` EXPO_ASC_ISSUER_ID='${ascCredentials.ascIssuerId}'`;
+                envVars += ` EXPO_ASC_API_KEY_PATH='${ascKeyPath}'`;
             }
             const command = `${envVars} bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 120_000);
@@ -1767,9 +1771,9 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
 
             if (!result.success || !result.results[0]?.success) {
                 const rawError = result.results[0]?.error || result.results[0]?.output || result.error || 'EAS build command failed';
-                const isIosCredentialError = platform === 'ios' && /Apple Developer|signing|provisioning|code\s*sign|certificate|credentials/i.test(rawError);
+                const isIosCredentialError = platform === 'ios' && /Apple Developer|signing|provisioning|code\s*sign|certificate|credentials|ASC API/i.test(rawError);
                 const error = isIosCredentialError
-                    ? 'iOS build failed due to Apple code signing. Verify your EXPO_APPLE_ID, EXPO_APPLE_TEAM_ID, and EXPO_APPLE_APP_SPECIFIC_PASSWORD in the Vault. Ensure your Apple Developer account has an active membership.'
+                    ? 'iOS build failed due to Apple code signing. Verify your EXPO_APPLE_TEAM_ID, EXPO_ASC_KEY_ID, EXPO_ASC_ISSUER_ID, and EXPO_ASC_API_KEY_CONTENT in the Vault. Ensure your Apple Developer account has an active membership.'
                     : rawError;
                 logger.error('EAS build trigger failed', { error, isIosCredentialError });
                 callbacks?.onError?.(error);
@@ -1933,9 +1937,9 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
 
             if (buildStatus === 'errored' || buildStatus === 'canceled') {
                 const rawError = buildData.error?.message || `Build ${buildStatus}`;
-                const isIosCredentialError = easBuild.platform === 'ios' && /Apple Developer|signing|provisioning|code\s*sign|certificate|credentials/i.test(rawError);
+                const isIosCredentialError = easBuild.platform === 'ios' && /Apple Developer|signing|provisioning|code\s*sign|certificate|credentials|ASC API/i.test(rawError);
                 const error = isIosCredentialError
-                    ? 'iOS build failed due to Apple code signing. Verify your EXPO_APPLE_ID, EXPO_APPLE_TEAM_ID, and EXPO_APPLE_APP_SPECIFIC_PASSWORD in the Vault. Ensure your Apple Developer account has an active membership.'
+                    ? 'iOS build failed due to Apple code signing. Verify your EXPO_APPLE_TEAM_ID, EXPO_ASC_KEY_ID, EXPO_ASC_ISSUER_ID, and EXPO_ASC_API_KEY_CONTENT in the Vault. Ensure your Apple Developer account has an active membership.'
                     : rawError;
                 const failedBuild: EasBuildState = { ...easBuild, status: 'errored', error };
                 this.setState({ ...this.getState(), easBuild: failedBuild });

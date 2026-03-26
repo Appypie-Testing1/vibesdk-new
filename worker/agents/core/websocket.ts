@@ -267,37 +267,40 @@ export function handleWebSocketMessage(
                         return;
                     }
 
-                    // For iOS builds, fetch Apple Developer credentials from vault
-                    let appleCredentials: { appleId: string; teamId: string; appSpecificPassword?: string } | undefined;
+                    // For iOS builds, fetch ASC API Key credentials from vault
+                    let ascCredentials: { teamId: string; ascKeyId: string; ascIssuerId: string; ascApiKeyContent: string } | undefined;
                     if (platform === 'ios') {
-                        const [appleId, teamId, appSpecificPassword] = await Promise.all([
-                            agent.getDecryptedSecret({ envVarName: 'EXPO_APPLE_ID' }),
+                        const [teamId, ascKeyId, ascIssuerId, ascApiKeyContent] = await Promise.all([
                             agent.getDecryptedSecret({ envVarName: 'EXPO_APPLE_TEAM_ID' }),
-                            agent.getDecryptedSecret({ envVarName: 'EXPO_APPLE_APP_SPECIFIC_PASSWORD' }),
+                            agent.getDecryptedSecret({ envVarName: 'EXPO_ASC_KEY_ID' }),
+                            agent.getDecryptedSecret({ envVarName: 'EXPO_ASC_ISSUER_ID' }),
+                            agent.getDecryptedSecret({ envVarName: 'EXPO_ASC_API_KEY_CONTENT' }),
                         ]);
 
-                        if (!appleId || !teamId) {
+                        if (!teamId || !ascKeyId || !ascIssuerId || !ascApiKeyContent) {
+                            const missing: string[] = [];
+                            if (!teamId) missing.push('EXPO_APPLE_TEAM_ID');
+                            if (!ascKeyId) missing.push('EXPO_ASC_KEY_ID');
+                            if (!ascIssuerId) missing.push('EXPO_ASC_ISSUER_ID');
+                            if (!ascApiKeyContent) missing.push('EXPO_ASC_API_KEY_CONTENT');
+
                             sendToConnection(connection, WebSocketMessageResponses.VAULT_REQUIRED, {
-                                reason: 'iOS builds require Apple Developer credentials. Add EXPO_APPLE_ID (your Apple ID email) and EXPO_APPLE_TEAM_ID (10-char Team ID from https://developer.apple.com/account) in the Vault.',
+                                reason: `iOS builds require App Store Connect API Key credentials. Missing: ${missing.join(', ')}. Create an API Key at https://appstoreconnect.apple.com/access/integrations/api and add the credentials in the Vault.`,
                                 provider: 'apple',
-                                envVarName: 'EXPO_APPLE_ID',
+                                envVarName: missing[0],
                             });
                             sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_ERROR, {
                                 buildId: '',
                                 platform: 'ios',
-                                error: 'iOS builds require Apple Developer credentials. Please add EXPO_APPLE_ID and EXPO_APPLE_TEAM_ID in the Vault.',
+                                error: `iOS builds require App Store Connect credentials. Please add ${missing.join(', ')} in the Vault.`,
                             });
                             return;
                         }
 
-                        appleCredentials = {
-                            appleId,
-                            teamId,
-                            appSpecificPassword: appSpecificPassword || undefined,
-                        };
+                        ascCredentials = { teamId, ascKeyId, ascIssuerId, ascApiKeyContent };
                     }
 
-                    return agent.deploymentManager.triggerEasBuild(platform as 'ios' | 'android', expoToken, appleCredentials, {
+                    return agent.deploymentManager.triggerEasBuild(platform as 'ios' | 'android', expoToken, ascCredentials, {
                         onStatus: (build) => {
                             broadcastToConnections(agent, WebSocketMessageResponses.EAS_BUILD_STATUS, {
                                 buildId: build.buildId,
