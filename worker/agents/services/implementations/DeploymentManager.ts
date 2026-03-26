@@ -1594,6 +1594,11 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             appJson.expo.android = android;
             const ios = (appJson.expo.ios || {}) as Record<string, unknown>;
             if (!ios.bundleIdentifier) ios.bundleIdentifier = bundleId;
+            const infoPlist = (ios.infoPlist || {}) as Record<string, unknown>;
+            if (infoPlist.ITSAppUsesNonExemptEncryption === undefined) {
+                infoPlist.ITSAppUsesNonExemptEncryption = false;
+            }
+            ios.infoPlist = infoPlist;
             appJson.expo.ios = ios;
             const extra = (appJson.expo.extra || {}) as Record<string, unknown>;
             extra.apiUrl = deployedApiUrl;
@@ -1737,11 +1742,12 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
 
             let envVars = `EXPO_TOKEN='${expoToken}'`;
             if (platform === 'ios' && ascCredentials) {
-                // Write the .p8 key file to sandbox so EXPO_ASC_API_KEY_PATH can reference it
+                // Write the .p8 key file to /tmp via shell (writeFiles is project-relative)
                 const ascKeyPath = '/tmp/eas-asc-key.p8';
-                await client.writeFiles(state.sandboxInstanceId, [
-                    { filePath: ascKeyPath, fileContents: ascCredentials.ascApiKeyContent }
-                ]);
+                const escapedContent = ascCredentials.ascApiKeyContent.replace(/'/g, "'\\''");
+                await client.executeCommands(state.sandboxInstanceId, [
+                    `printf '%s' '${escapedContent}' > ${ascKeyPath} && chmod 600 ${ascKeyPath}`
+                ], 5_000);
                 envVars += ` EXPO_APPLE_TEAM_ID='${ascCredentials.teamId}'`;
                 envVars += ` EXPO_ASC_KEY_ID='${ascCredentials.ascKeyId}'`;
                 envVars += ` EXPO_ASC_ISSUER_ID='${ascCredentials.ascIssuerId}'`;
