@@ -1904,7 +1904,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                     `export EXPO_ASC_ISSUER_ID='${ascCredentials.ascIssuerId}'`,
                     'export EXPO_ASC_API_KEY_PATH="$(pwd)/.eas-asc-key.p8"',
                     '',
-                    `exec bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --clear-credentials --json 2>&1`,
+                    `exec bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json 2>&1`,
                 ].join('\n');
 
                 await client.writeFiles(state.sandboxInstanceId, [
