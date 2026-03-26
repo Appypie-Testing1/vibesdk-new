@@ -1754,7 +1754,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                     '# Debug: verify credentials are set',
                     'echo "DEBUG: EXPO_APPLE_TEAM_ID=$EXPO_APPLE_TEAM_ID"',
                     'echo "DEBUG: EXPO_ASC_KEY_ID=$EXPO_ASC_KEY_ID"',
-                    'echo "DEBUG: EXPO_ASC_ISSUER_ID=${EXPO_ASC_ISSUER_ID:0:8}..."',
+                    'echo "DEBUG: EXPO_ASC_ISSUER_ID=$EXPO_ASC_ISSUER_ID"',
                     'echo "DEBUG: EXPO_ASC_API_KEY_PATH=$EXPO_ASC_API_KEY_PATH"',
                     'echo "DEBUG: Key file exists: $(test -f "$EXPO_ASC_API_KEY_PATH" && echo yes || echo no)"',
                     'echo "DEBUG: Key file size: $(wc -c < "$EXPO_ASC_API_KEY_PATH" 2>/dev/null || echo 0) bytes"',
