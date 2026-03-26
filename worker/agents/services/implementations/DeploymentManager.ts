@@ -1740,36 +1740,57 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 'grep -qxF ".expo-token" .gitignore || echo ".expo-token" >> .gitignore'
             ], 5_000);
 
-            let exportBlock = `export EXPO_TOKEN='${expoToken}'`;
             if (platform === 'ios' && ascCredentials) {
-                // Write the .p8 key file via writeFiles (reliable, project-relative)
+                // Write .p8 key file and a build script to avoid env var propagation issues
+                const scriptLines = [
+                    '#!/bin/sh',
+                    'set -e',
+                    `export EXPO_TOKEN='${expoToken}'`,
+                    `export EXPO_APPLE_TEAM_ID='${ascCredentials.teamId}'`,
+                    `export EXPO_ASC_KEY_ID='${ascCredentials.ascKeyId}'`,
+                    `export EXPO_ASC_ISSUER_ID='${ascCredentials.ascIssuerId}'`,
+                    'export EXPO_ASC_API_KEY_PATH="$(pwd)/.eas-asc-key.p8"',
+                    '',
+                    '# Debug: verify credentials are set',
+                    'echo "DEBUG: EXPO_APPLE_TEAM_ID=$EXPO_APPLE_TEAM_ID"',
+                    'echo "DEBUG: EXPO_ASC_KEY_ID=$EXPO_ASC_KEY_ID"',
+                    'echo "DEBUG: EXPO_ASC_ISSUER_ID=${EXPO_ASC_ISSUER_ID:0:8}..."',
+                    'echo "DEBUG: EXPO_ASC_API_KEY_PATH=$EXPO_ASC_API_KEY_PATH"',
+                    'echo "DEBUG: Key file exists: $(test -f "$EXPO_ASC_API_KEY_PATH" && echo yes || echo no)"',
+                    'echo "DEBUG: Key file size: $(wc -c < "$EXPO_ASC_API_KEY_PATH" 2>/dev/null || echo 0) bytes"',
+                    'echo "DEBUG: Key file starts with: $(head -c 30 "$EXPO_ASC_API_KEY_PATH" 2>/dev/null || echo MISSING)"',
+                    'echo "DEBUG: eas-cli version: $(bunx eas-cli --version 2>/dev/null || echo unknown)"',
+                    '',
+                    `exec bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`,
+                ].join('\n');
+
                 await client.writeFiles(state.sandboxInstanceId, [
-                    { filePath: '.eas-asc-key.p8', fileContents: ascCredentials.ascApiKeyContent }
+                    { filePath: '.eas-asc-key.p8', fileContents: ascCredentials.ascApiKeyContent },
+                    { filePath: '.eas-build.sh', fileContents: scriptLines },
                 ]);
-                // Add to .gitignore so EAS CLI doesn't complain about dirty tree
                 await client.executeCommands(state.sandboxInstanceId, [
-                    'grep -qxF ".eas-asc-key.p8" .gitignore || echo ".eas-asc-key.p8" >> .gitignore'
+                    'chmod +x .eas-build.sh && grep -qxF ".eas-asc-key.p8" .gitignore || echo ".eas-asc-key.p8" >> .gitignore && grep -qxF ".eas-build.sh" .gitignore || echo ".eas-build.sh" >> .gitignore'
                 ], 5_000);
 
-                exportBlock += ` && export EXPO_APPLE_TEAM_ID='${ascCredentials.teamId}'`;
-                exportBlock += ` && export EXPO_ASC_KEY_ID='${ascCredentials.ascKeyId}'`;
-                exportBlock += ` && export EXPO_ASC_ISSUER_ID='${ascCredentials.ascIssuerId}'`;
-                exportBlock += ` && export EXPO_ASC_API_KEY_PATH="$(pwd)/.eas-asc-key.p8"`;
-
-                logger.info('iOS ASC credentials configured', {
+                logger.info('iOS ASC credentials configured via build script', {
                     teamId: ascCredentials.teamId,
                     ascKeyId: ascCredentials.ascKeyId,
                     ascIssuerId: ascCredentials.ascIssuerId.slice(0, 8) + '...',
                     keyFileLength: ascCredentials.ascApiKeyContent.length,
+                    keyFileStart: ascCredentials.ascApiKeyContent.slice(0, 30),
                 });
             }
-            const command = `${exportBlock} && bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
-            logger.info('EAS build command (redacted)', { platform, hasAscCreds: !!(platform === 'ios' && ascCredentials) });
+
+            const command = platform === 'ios' && ascCredentials
+                ? 'sh .eas-build.sh'
+                : `EXPO_TOKEN='${expoToken}' bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 120_000);
 
-            // Clean up the ASC key file immediately after EAS CLI finishes
+            logger.info('EAS build command output', { output: result.results[0]?.output?.slice(0, 2000), error: result.results[0]?.error?.slice(0, 1000) });
+
+            // Clean up ASC key file and build script immediately after EAS CLI finishes
             if (platform === 'ios' && ascCredentials) {
-                await client.executeCommands(state.sandboxInstanceId, ['rm -f .eas-asc-key.p8'], 5_000).catch(() => {});
+                await client.executeCommands(state.sandboxInstanceId, ['rm -f .eas-asc-key.p8 .eas-build.sh'], 5_000).catch(() => {});
             }
 
             // Restore original project files so the Metro dev server (web preview) isn't
