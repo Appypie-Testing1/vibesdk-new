@@ -1771,12 +1771,8 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
 
             if (!result.success || !result.results[0]?.success) {
                 const rawError = result.results[0]?.error || result.results[0]?.output || result.error || 'EAS build command failed';
-                const isIosCredentialError = platform === 'ios' && /Apple Developer|signing|provisioning|code\s*sign|certificate|credentials|ASC API/i.test(rawError);
-                const error = isIosCredentialError
-                    ? 'iOS build failed due to Apple code signing. Verify your EXPO_APPLE_TEAM_ID, EXPO_ASC_KEY_ID, EXPO_ASC_ISSUER_ID, and EXPO_ASC_API_KEY_CONTENT in the Vault. Ensure your Apple Developer account has an active membership.'
-                    : rawError;
-                logger.error('EAS build trigger failed', { error, isIosCredentialError });
-                callbacks?.onError?.(error);
+                logger.error('EAS build trigger failed', { rawError, platform });
+                callbacks?.onError?.(rawError);
                 return null;
             }
 
@@ -1937,13 +1933,10 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
 
             if (buildStatus === 'errored' || buildStatus === 'canceled') {
                 const rawError = buildData.error?.message || `Build ${buildStatus}`;
-                const isIosCredentialError = easBuild.platform === 'ios' && /Apple Developer|signing|provisioning|code\s*sign|certificate|credentials|ASC API/i.test(rawError);
-                const error = isIosCredentialError
-                    ? 'iOS build failed due to Apple code signing. Verify your EXPO_APPLE_TEAM_ID, EXPO_ASC_KEY_ID, EXPO_ASC_ISSUER_ID, and EXPO_ASC_API_KEY_CONTENT in the Vault. Ensure your Apple Developer account has an active membership.'
-                    : rawError;
-                const failedBuild: EasBuildState = { ...easBuild, status: 'errored', error };
+                logger.error('EAS build poll error', { rawError, platform: easBuild.platform, buildId: easBuild.buildId });
+                const failedBuild: EasBuildState = { ...easBuild, status: 'errored', error: rawError };
                 this.setState({ ...this.getState(), easBuild: failedBuild });
-                callbacks?.onError?.(easBuild.buildId, easBuild.platform, error);
+                callbacks?.onError?.(easBuild.buildId, easBuild.platform, rawError);
                 return false;
             }
 
