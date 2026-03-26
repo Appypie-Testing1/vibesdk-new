@@ -1740,21 +1740,37 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                 'grep -qxF ".expo-token" .gitignore || echo ".expo-token" >> .gitignore'
             ], 5_000);
 
-            let envVars = `EXPO_TOKEN='${expoToken}'`;
+            let exportBlock = `export EXPO_TOKEN='${expoToken}'`;
             if (platform === 'ios' && ascCredentials) {
-                // Write the .p8 key file to /tmp via shell (writeFiles is project-relative)
-                const ascKeyPath = '/tmp/eas-asc-key.p8';
-                const escapedContent = ascCredentials.ascApiKeyContent.replace(/'/g, "'\\''");
+                // Write the .p8 key file via writeFiles (reliable, project-relative)
+                await client.writeFiles(state.sandboxInstanceId, [
+                    { filePath: '.eas-asc-key.p8', fileContents: ascCredentials.ascApiKeyContent }
+                ]);
+                // Add to .gitignore so EAS CLI doesn't complain about dirty tree
                 await client.executeCommands(state.sandboxInstanceId, [
-                    `printf '%s' '${escapedContent}' > ${ascKeyPath} && chmod 600 ${ascKeyPath}`
+                    'grep -qxF ".eas-asc-key.p8" .gitignore || echo ".eas-asc-key.p8" >> .gitignore'
                 ], 5_000);
-                envVars += ` EXPO_APPLE_TEAM_ID='${ascCredentials.teamId}'`;
-                envVars += ` EXPO_ASC_KEY_ID='${ascCredentials.ascKeyId}'`;
-                envVars += ` EXPO_ASC_ISSUER_ID='${ascCredentials.ascIssuerId}'`;
-                envVars += ` EXPO_ASC_API_KEY_PATH='${ascKeyPath}'`;
+
+                exportBlock += ` && export EXPO_APPLE_TEAM_ID='${ascCredentials.teamId}'`;
+                exportBlock += ` && export EXPO_ASC_KEY_ID='${ascCredentials.ascKeyId}'`;
+                exportBlock += ` && export EXPO_ASC_ISSUER_ID='${ascCredentials.ascIssuerId}'`;
+                exportBlock += ` && export EXPO_ASC_API_KEY_PATH="$(pwd)/.eas-asc-key.p8"`;
+
+                logger.info('iOS ASC credentials configured', {
+                    teamId: ascCredentials.teamId,
+                    ascKeyId: ascCredentials.ascKeyId,
+                    ascIssuerId: ascCredentials.ascIssuerId.slice(0, 8) + '...',
+                    keyFileLength: ascCredentials.ascApiKeyContent.length,
+                });
             }
-            const command = `${envVars} bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
+            const command = `${exportBlock} && bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json`;
+            logger.info('EAS build command (redacted)', { platform, hasAscCreds: !!(platform === 'ios' && ascCredentials) });
             const result = await client.executeCommands(state.sandboxInstanceId, [command], 120_000);
+
+            // Clean up the ASC key file immediately after EAS CLI finishes
+            if (platform === 'ios' && ascCredentials) {
+                await client.executeCommands(state.sandboxInstanceId, ['rm -f .eas-asc-key.p8'], 5_000).catch(() => {});
+            }
 
             // Restore original project files so the Metro dev server (web preview) isn't
             // broken by EAS-specific changes (different package versions, patched app.json, etc.)
