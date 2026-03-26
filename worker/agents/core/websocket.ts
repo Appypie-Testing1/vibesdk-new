@@ -268,10 +268,11 @@ export function handleWebSocketMessage(
                     }
 
                     // For iOS builds, fetch ASC API Key credentials from vault
-                    let ascCredentials: { teamId: string; ascKeyId: string; ascIssuerId: string; ascApiKeyContent: string } | undefined;
+                    let ascCredentials: { teamId: string; teamType: string; ascKeyId: string; ascIssuerId: string; ascApiKeyContent: string } | undefined;
                     if (platform === 'ios') {
-                        const [teamId, ascKeyId, ascIssuerId, ascApiKeyContent] = await Promise.all([
+                        const [teamId, teamType, ascKeyId, ascIssuerId, ascApiKeyContent] = await Promise.all([
                             agent.getDecryptedSecret({ envVarName: 'EXPO_APPLE_TEAM_ID' }),
+                            agent.getDecryptedSecret({ envVarName: 'EXPO_APPLE_TEAM_TYPE' }),
                             agent.getDecryptedSecret({ envVarName: 'EXPO_ASC_KEY_ID' }),
                             agent.getDecryptedSecret({ envVarName: 'EXPO_ASC_ISSUER_ID' }),
                             agent.getDecryptedSecret({ envVarName: 'EXPO_ASC_API_KEY_CONTENT' }),
@@ -297,7 +298,7 @@ export function handleWebSocketMessage(
                             return;
                         }
 
-                        ascCredentials = { teamId, ascKeyId, ascIssuerId, ascApiKeyContent };
+                        ascCredentials = { teamId, teamType: teamType || 'INDIVIDUAL', ascKeyId, ascIssuerId, ascApiKeyContent };
                     }
 
                     return agent.deploymentManager.triggerEasBuild(platform as 'ios' | 'android', expoToken, ascCredentials, {

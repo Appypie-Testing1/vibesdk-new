@@ -1625,7 +1625,7 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
     async triggerEasBuild(
         platform: EasBuildPlatform,
         expoToken: string,
-        ascCredentials?: { teamId: string; ascKeyId: string; ascIssuerId: string; ascApiKeyContent: string },
+        ascCredentials?: { teamId: string; teamType: string; ascKeyId: string; ascIssuerId: string; ascApiKeyContent: string },
         callbacks?: {
             onStatus?: (build: EasBuildState) => void;
             onProgress?: (message: string) => void;
@@ -1899,11 +1899,12 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                     'set -e',
                     `export EXPO_TOKEN='${expoToken}'`,
                     `export EXPO_APPLE_TEAM_ID='${ascCredentials.teamId}'`,
+                    `export EXPO_APPLE_TEAM_TYPE='${ascCredentials.teamType}'`,
                     `export EXPO_ASC_KEY_ID='${ascCredentials.ascKeyId}'`,
                     `export EXPO_ASC_ISSUER_ID='${ascCredentials.ascIssuerId}'`,
                     'export EXPO_ASC_API_KEY_PATH="$(pwd)/.eas-asc-key.p8"',
                     '',
-                    `exec bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json 2>&1`,
+                    `exec bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --clear-credentials --json 2>&1`,
                 ].join('\n');
 
                 await client.writeFiles(state.sandboxInstanceId, [

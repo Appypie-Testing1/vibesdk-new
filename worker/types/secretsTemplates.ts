@@ -219,6 +219,21 @@ export function getTemplatesData(): SecretTemplate[] {
 			category: 'deployment',
 		},
 		{
+			id: 'EXPO_APPLE_TEAM_TYPE',
+			displayName: 'Apple Developer Team Type',
+			envVarName: 'EXPO_APPLE_TEAM_TYPE',
+			provider: 'apple',
+			icon: '',
+			description:
+				'Apple Developer account type (required for iOS EAS builds)',
+			instructions:
+				'INDIVIDUAL for personal accounts, COMPANY_OR_ORGANIZATION for company accounts, IN_HOUSE for Enterprise accounts',
+			placeholder: 'INDIVIDUAL',
+			validation: '^(INDIVIDUAL|COMPANY_OR_ORGANIZATION|IN_HOUSE)$',
+			required: false,
+			category: 'deployment',
+		},
+		{
 			id: 'EXPO_ASC_KEY_ID',
 			displayName: 'App Store Connect Key ID',
 			envVarName: 'EXPO_ASC_KEY_ID',
