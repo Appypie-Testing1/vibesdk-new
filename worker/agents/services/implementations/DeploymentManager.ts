@@ -88,6 +88,39 @@ export const apiClient = {
 `;
 
 /**
+ * Normalize PEM content that may have had newlines stripped (e.g. pasted into a single-line input).
+ * Ensures proper PEM format with header/footer on their own lines and 64-char base64 lines.
+ */
+function normalizePemContent(raw: string): string {
+    const trimmed = raw.trim();
+    // If it already has proper newlines after the header, return as-is
+    if (trimmed.startsWith('-----BEGIN') && trimmed.indexOf('\n') < trimmed.indexOf('-----', 10)) {
+        return trimmed + '\n';
+    }
+
+    // Extract header, body, footer from potentially single-line PEM
+    const headerMatch = trimmed.match(/^(-----BEGIN [A-Z ]+-----)\s*/);
+    const footerMatch = trimmed.match(/\s*(-----END [A-Z ]+-----)$/);
+    if (!headerMatch || !footerMatch) {
+        return trimmed + '\n';
+    }
+
+    const header = headerMatch[1];
+    const footer = footerMatch[1];
+    const body = trimmed
+        .slice(headerMatch[0].length, trimmed.length - footerMatch[0].length)
+        .replace(/\s+/g, '');
+
+    // Re-wrap base64 body at 64 characters per line (PEM standard)
+    const lines: string[] = [header];
+    for (let i = 0; i < body.length; i += 64) {
+        lines.push(body.slice(i, i + 64));
+    }
+    lines.push(footer);
+    return lines.join('\n') + '\n';
+}
+
+/**
  * Manages deployment operations for sandbox instances
  * Handles instance creation, file deployment, analysis, and GitHub/Cloudflare export
  * Also manages sessionId and health check intervals
@@ -1741,6 +1774,9 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
             ], 5_000);
 
             if (platform === 'ios' && ascCredentials) {
+                // Normalize .p8 PEM content -- vault UI may strip newlines
+                const normalizedP8 = normalizePemContent(ascCredentials.ascApiKeyContent);
+
                 // Write .p8 key file and a build script to avoid env var propagation issues
                 const scriptLines = [
                     '#!/bin/sh',
@@ -1751,19 +1787,11 @@ process.on('SIGINT', () => { expo.kill(); server.close(); });
                     `export EXPO_ASC_ISSUER_ID='${ascCredentials.ascIssuerId}'`,
                     'export EXPO_ASC_API_KEY_PATH="$(pwd)/.eas-asc-key.p8"',
                     '',
-                    '# Debug output to stderr so it appears in error capture',
-                    'echo "DEBUG_CREDS: TEAM_ID=$EXPO_APPLE_TEAM_ID KEY_ID=$EXPO_ASC_KEY_ID ISSUER=$EXPO_ASC_ISSUER_ID" >&2',
-                    'echo "DEBUG_FILE: PATH=$EXPO_ASC_API_KEY_PATH EXISTS=$(test -f $EXPO_ASC_API_KEY_PATH && echo YES || echo NO) SIZE=$(wc -c < $EXPO_ASC_API_KEY_PATH 2>/dev/null || echo 0)b" >&2',
-                    'echo "DEBUG_P8: $(head -1 $EXPO_ASC_API_KEY_PATH 2>/dev/null || echo FILE_NOT_FOUND)" >&2',
-                    'echo "DEBUG_VER: $(bunx eas-cli --version 2>/dev/null || echo unknown)" >&2',
-                    'echo "DEBUG_PWD: $(pwd)" >&2',
-                    'echo "DEBUG_LS: $(ls -la .eas-asc-key.p8 2>/dev/null || echo NOT_FOUND)" >&2',
-                    '',
                     `exec bunx eas-cli build --platform ${platform} --profile preview --non-interactive --no-wait --json 2>&1`,
                 ].join('\n');
 
                 await client.writeFiles(state.sandboxInstanceId, [
-                    { filePath: '.eas-asc-key.p8', fileContents: ascCredentials.ascApiKeyContent },
+                    { filePath: '.eas-asc-key.p8', fileContents: normalizedP8 },
                     { filePath: '.eas-build.sh', fileContents: scriptLines },
                 ]);
                 await client.executeCommands(state.sandboxInstanceId, [
