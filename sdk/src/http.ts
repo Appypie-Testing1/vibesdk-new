@@ -37,7 +37,7 @@ export class HttpClient {
 	}
 
 	private get fetchFn(): typeof fetch {
-		return this.opts.fetchFn ?? fetch;
+		return this.opts.fetchFn ?? fetch.bind(globalThis);
 	}
 
 	getToken(): string | undefined {

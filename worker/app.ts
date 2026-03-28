@@ -37,6 +37,12 @@ export function createApp(env: Env): Hono<AppEnv> {
         
         // Skip for WebSocket upgrades
         const upgradeHeader = c.req.header('upgrade');
+
+        // Skip CSRF for SDK API-key auth (cross-origin Bearer token requests)
+        const authHeader = c.req.header('authorization');
+        if (authHeader?.startsWith('Bearer ') && c.req.url.includes('/api/auth/exchange-api-key')) {
+            return next();
+        }
         if (upgradeHeader?.toLowerCase() === 'websocket') {
             return next();
         }

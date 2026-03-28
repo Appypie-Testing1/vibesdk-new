@@ -46,6 +46,14 @@ export function getAllowedOrigins(env: Env): string[] {
     if (env.CUSTOM_DOMAIN) {
         origins.push(`https://${env.CUSTOM_DOMAIN}`);
     }
+
+    // SDK consumer origins (external sites using the SDK)
+    if (env.SDK_ALLOWED_ORIGINS) {
+        for (const o of env.SDK_ALLOWED_ORIGINS.split(',')) {
+            const trimmed = o.trim();
+            if (trimmed) origins.push(trimmed);
+        }
+    }
     
     // Development origins (only in development)
     if (isDev(env)) {

@@ -180,6 +180,7 @@
             "version": "1.0.0"
         },
         "CUSTOM_DOMAIN": "vibesnappy.appypie.com",
+        "SDK_ALLOWED_ORIGINS": "https://appypieautomate.ai,https://www.appypieautomate.ai",
         "MAX_SANDBOX_INSTANCES": "10",
         "SANDBOX_INSTANCE_TYPE": "standard-3"
     },
