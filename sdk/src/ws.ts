@@ -48,6 +48,13 @@ export function createAgentConnection(url: string, options: AgentConnectionOptio
 
 	function makeWebSocket(): WebSocketLike {
 		if (options.webSocketFactory) return options.webSocketFactory(url, undefined, headers);
+		// Browser WebSocket doesn't support custom headers.
+		// Append auth token as query parameter for browser connections.
+		const authToken = headers.Authorization?.replace(/^Bearer\s+/i, '');
+		if (authToken) {
+			const separator = url.includes('?') ? '&' : '?';
+			return new WebSocket(`${url}${separator}token=${encodeURIComponent(authToken)}`) as unknown as WebSocketLike;
+		}
 		return new WebSocket(url) as unknown as WebSocketLike;
 	}
 
