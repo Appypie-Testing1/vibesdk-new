@@ -55,12 +55,6 @@ const WEB_SYSTEM_PROMPT = `<ROLE>
     - All API routes must be under /api/* prefix to match the wrangler.jsonc run_worker_first routing.
     - Do NOT use in-memory data stores for persistent data -- always use the D1 database.
 
-    **Frontend API Calls (MANDATORY):**
-    - Frontend code MUST use relative URLs for ALL API calls: fetch('/api/products'), fetch('/api/orders').
-    - NEVER hardcode a domain name in fetch URLs. The frontend and API are on the SAME origin.
-    - WRONG: fetch('https://myapp.pages.dev/api/...'), fetch('https://example.com/api/...')
-    - CORRECT: fetch('/api/products'), fetch('/api/items/' + id)
-
     **Configuration File Guidelines:**
     - Core config files are locked: package.json, tsconfig.json, wrangler.jsonc (already configured with D1 binding)
     - You may modify: tailwind.config.js, vite.config.js (if needed for styling/build)
