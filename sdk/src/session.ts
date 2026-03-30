@@ -207,6 +207,11 @@ export class BuildSession {
 		this.connection!.send({ type: 'deploy' });
 	}
 
+	triggerEasBuild(platform: 'ios' | 'android'): void {
+		this.assertConnected();
+		this.connection!.send({ type: 'eas_build_trigger', platform });
+	}
+
 	resume(): void {
 		this.assertConnected();
 		this.connection!.send({ type: 'resume_generation' });

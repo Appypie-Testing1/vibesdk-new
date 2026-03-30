@@ -194,6 +194,11 @@ export function createAgentConnection(url: string, options: AgentConnectionOptio
 				case 'cloudflare_deployment_error':
 					emitter.emit('cloudflare', parsed);
 					break;
+				case 'eas_build_status':
+				case 'eas_build_complete':
+				case 'eas_build_error':
+					emitter.emit('easBuild', parsed);
+					break;
 				case 'error':
 					emitter.emit('error', { error: String(parsed.error ?? 'Unknown error') });
 					break;

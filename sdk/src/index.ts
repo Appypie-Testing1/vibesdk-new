@@ -30,6 +30,7 @@ export type {
 	SessionDeployable,
 	SessionFiles,
 	VibeClientOptions,
+	EasBuildPlatform,
 	WaitForPhaseOptions,
 	WaitOptions,
 } from './types';

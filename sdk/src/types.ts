@@ -73,6 +73,8 @@ export type AppDetails = Record<string, unknown> & {
 
 export type AgentWsServerMessage = WebSocketMessage;
 
+export type EasBuildPlatform = 'ios' | 'android';
+
 export type AgentWsClientMessage =
 	| { type: 'session_init'; credentials: Credentials }
 	| { type: 'generate_all' }
@@ -82,7 +84,8 @@ export type AgentWsClientMessage =
 	| { type: 'deploy' }
 	| { type: 'get_conversation_state' }
 	| { type: 'clear_conversation' }
-	| { type: 'user_suggestion'; message: string; images?: unknown[] };
+	| { type: 'user_suggestion'; message: string; images?: unknown[] }
+	| { type: 'eas_build_trigger'; platform: EasBuildPlatform };
 
 export type AgentWebSocketMessage = AgentWsServerMessage | AgentWsClientMessage;
 
@@ -126,6 +129,7 @@ export type AgentEventMap = {
 		| 'cloudflare_deployment_completed'
 		| 'cloudflare_deployment_error'
 	>;
+	easBuild: WsMessageOf<'eas_build_status' | 'eas_build_complete' | 'eas_build_error'>;
 	/** User-friendly error derived from `{ type: 'error' }` message */
 	error: { error: string };
 };
