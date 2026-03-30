@@ -132,6 +132,7 @@ const MOBILE_SYSTEM_PROMPT = `<ROLE>
 
     **CRITICAL - This is a React Native / Expo project:**
     - All UI MUST use React Native components: View, Text, TouchableOpacity, ScrollView, FlatList, TextInput, Image, etc.
+    - EVERY component used in JSX MUST be explicitly imported: import { View, Text, ScrollView, ... } from 'react-native'. Missing imports crash the app.
     - All styling MUST use StyleSheet.create() -- NO Tailwind CSS, NO className, NO HTML elements, NO CSS files
     - Navigation uses expo-router (file-based routing in app/ directory)
     - You MAY add new dependencies via installCommands (e.g., "bun add zustand")
@@ -206,6 +207,7 @@ const FULLSTACK_MOBILE_SYSTEM_PROMPT = `<ROLE>
 
     **Frontend (app/ directory):**
     - All UI MUST use React Native components: View, Text, TouchableOpacity, ScrollView, FlatList, TextInput, Image, etc.
+    - EVERY component used in JSX MUST be explicitly imported: import { View, Text, ScrollView, ... } from 'react-native'. Missing imports crash the app.
     - All styling MUST use StyleSheet.create() -- NO Tailwind CSS, NO className, NO HTML elements
     - Navigation uses expo-router (file-based routing in app/ directory)
     - Do NOT modify: app.json, metro.config.js, tsconfig.json, lib/api-client.ts (pre-configured)

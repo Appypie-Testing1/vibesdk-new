@@ -72,6 +72,7 @@ export const MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a
 
 <CRITICAL_MOBILE_RULES>
 - Use ONLY React Native components: View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Switch, ActivityIndicator, SafeAreaView, etc.
+- EVERY React Native component you use in JSX MUST be imported: import { View, Text, ScrollView, ... } from 'react-native'. Missing imports cause "X is not defined" crashes.
 - NEVER use HTML elements: div, span, button, input, h1, p, a, ul, li, etc.
 - NEVER use Tailwind CSS or className prop. Use ONLY StyleSheet.create() for all styling.
 - NEVER import from 'react-dom' or use web-specific APIs (document, window.location, etc.)
@@ -110,6 +111,7 @@ export const FULLSTACK_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are impl
 
 <API_RUBRIC>
 - Routes: all under /api/* prefix using Hono with LinearRouter.
+- ALWAYS include a GET /api/health route that returns { status: 'ok' }. The frontend api-client probes this endpoint.
 - Database: D1 via c.env.DB.prepare() with parameterized queries.
 - Error handling: try-catch in every route handler, JSON error responses.
 - Schema initialization: ALWAYS define an initDB(db) function that creates ALL tables. Call it in a middleware before route handlers. Without this, tables will not exist and all queries will fail.
@@ -133,6 +135,7 @@ export const FULLSTACK_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are impl
 <CRITICAL_FULLSTACK_MOBILE_RULES>
 **Frontend (app/ directory):**
 - Use ONLY React Native components: View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Switch, ActivityIndicator, SafeAreaView, etc.
+- EVERY React Native component you use in JSX MUST be imported: import { View, Text, ScrollView, ... } from 'react-native'. Missing imports cause "X is not defined" crashes.
 - NEVER use HTML elements: div, span, button, input, h1, p, a, ul, li, etc.
 - NEVER use Tailwind CSS or className prop. Use ONLY StyleSheet.create() for all styling.
 - NEVER import from 'react-dom' or use web-specific APIs (document, window.location, etc.)
