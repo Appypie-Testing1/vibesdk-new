@@ -1468,7 +1468,11 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             return;
         }
 
-        commands = commands.map(cmd => normalizeInstallCommand(cmd.trim().replace(/^\s*-\s*/, '').replace(/^npm/, 'bun')));
+        commands = commands.map(cmd => normalizeInstallCommand(cmd.trim().replace(/^\s*-\s*/, '').replace(/^npm/, 'bun'))).filter(cmd => cmd.trim() !== '');
+        if (commands.length === 0) {
+            this.logger.warn("No valid commands to execute after normalization");
+            return;
+        }
         this.logger.info(`AI suggested ${commands.length} commands to run: ${commands.join(", ")}`);
 
         // Remove duplicate commands

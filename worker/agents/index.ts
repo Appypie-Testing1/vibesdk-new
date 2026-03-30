@@ -101,7 +101,7 @@ export async function getTemplateForQuery(
     const isMobileRequest = hasMobileWord || mobileKeywords.test(query);
     if (isMobileRequest) {
         // Detect if the mobile app needs a backend (database, API, auth, etc.)
-        const backendKeywords = /\b(database|api|backend|auth|users|crud|full[\s-]?stack|server|login|signup|register|persist|storage|d1|sqlite|sql)\b/i;
+        const backendKeywords = /\b(database|api|backend|auth|users|crud|full[\s-]?stack|server|login|signup|register|persist|storage|d1|sqlite|sql|admin|dashboard|manage|management|checkout|orders?|cart|e[\s-]?commerce|shop|store|inventory|tracking|profile|account|payment)\b/i;
         const needsBackend = backendKeywords.test(query);
 
         if (needsBackend) {

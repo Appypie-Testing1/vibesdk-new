@@ -96,8 +96,8 @@ export function extractCommands(rawOutput: string, onlyInstallCommands: boolean 
 		});
 	}
 
-	// Normalize package names: strip subpaths (e.g., "zustand/react/shallow" -> "zustand")
-	filteredCommands = filteredCommands.map(normalizeInstallCommand);
+	// Normalize package names: strip subpaths (e.g., "zustand/react/shallow" -> "zustand"), filter invalid names
+	filteredCommands = filteredCommands.map(normalizeInstallCommand).filter(cmd => cmd.trim() !== '');
 
 	return filteredCommands;
 }
@@ -208,6 +208,25 @@ export function validateAndCleanBootstrapCommands(
  * e.g., "bun add zustand/react/shallow" -> "bun add zustand"
  * e.g., "bun add @tanstack/react-query/devtools" -> "bun add @tanstack/react-query"
  */
+/**
+ * Validates an npm package name (without version specifier).
+ * npm package names must be lowercase, can contain hyphens, dots, underscores, and tildes.
+ * Scoped packages follow @scope/name pattern.
+ * Rejects LLM hallucinations like "react-nativeLayout" (camelCase concatenation).
+ */
+function isValidPackageName(name: string): boolean {
+	if (name.startsWith('@')) {
+		// Scoped: @scope/package — both parts must be valid
+		const parts = name.split('/');
+		if (parts.length < 2) return false;
+		const scope = parts[0].slice(1); // remove @
+		const pkg = parts[1];
+		return /^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/.test(scope) && /^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/.test(pkg);
+	}
+	// Unscoped: no uppercase letters allowed in npm package names
+	return /^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/.test(name);
+}
+
 export function normalizeInstallCommand(command: string): string {
 	const installMatch = command.match(/^((?:npm|yarn|pnpm|bun)\s+(?:install|add))\s+(.+)$/);
 	if (!installMatch) return command;
@@ -229,8 +248,13 @@ export function normalizeInstallCommand(command: string): string {
 			normalized = name.split('/')[0];
 		}
 		return normalized + version;
+	}).filter(pkg => {
+		// Remove version specifier for validation
+		const nameOnly = pkg.replace(/@[\d^~>=<].*$/, '');
+		return isValidPackageName(nameOnly);
 	});
 
+	if (packages.length === 0) return '';
 	return `${prefix} ${packages.join(' ')}`;
 }
 
