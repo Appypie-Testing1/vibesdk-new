@@ -84,13 +84,8 @@ export class VibeClient {
 			...(options.credentials ? { defaultCredentials: options.credentials } : {}),
 		});
 		if (options.autoConnect ?? true) {
-			const conn = session.connect();
+			session.connect();
 			if (options.autoGenerate ?? true) {
-				// Wait for agent initialization to complete before generating.
-				// The server sends `agent_connected` once async init (template setup,
-				// blueprint, renderMode, etc.) is finished. Sending `generate_all`
-				// before that causes the LLM to miss critical template context.
-				await conn.waitFor('connected', undefined, 60_000);
 				session.startGeneration();
 			}
 		}
