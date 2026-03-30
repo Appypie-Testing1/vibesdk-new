@@ -917,7 +917,8 @@ export const STRATEGIES_UTILS = {
     **MAKE SURE TO NOT BREAK THE APPLICATION in SUBSEQUENT PHASES. Always keep fallbacks and failsafes in place for any backend interactions. Look out for simple syntax errors and dependencies you use!**
     **The client needs to be provided with a good demoable application after each phase. The initial first phase is the most impressionable phase! Make sure it deploys and renders well.**
     **Make sure the primary (home) page is rendered correctly and as expected after each phase**
-    **Make sure to overwrite the home page file**`,
+    **Make sure to overwrite the home page file**
+    **CRITICAL: All frontend API calls MUST use relative URLs (e.g. fetch('/api/products')). NEVER hardcode any domain name in fetch/API calls. No .pages.dev, no .workers.dev, no localhost URLs. The frontend and backend API are always served from the same origin.**`,
     CONSTRAINTS: `<PHASE GENERATION CONSTRAINTS>
         **Focus on building the frontend and all the views/pages in the initial 1-2 phases with core functionality and mostly mock data, then fleshing out the application**    
         **Before writing any components of your own, make sure to check the existing components and files in the template, try to use them if possible (for example preinstalled shadcn components)**
@@ -1154,6 +1155,7 @@ export const STRATEGIES = {
 
     **No need to add accessibility features. Focus on delivering an actually working, feature-wise polished and complete application in as few phases as possible.**
     **Always stick to existing project/template patterns. Respect and work with existing worker bindings rather than making custom ones**
+    **Frontend API calls MUST use relative URLs: fetch('/api/products'), fetch('/api/orders/' + id). NEVER hardcode domain names (no .pages.dev, no .workers.dev, no localhost URLs). The frontend and API are on the same origin.**
     **Rely on open source tools and free tier services only apart from whats configured in the environment. Refer to template usage instructions to know if specific platform services are also available for use.**
     **Make sure to implement all the features and functionality requested by the user. Stick to the blueprint's implementation roadmap and end at the conclusion of the final phase. There should be no compromises**
     **This is an Appy Pie serverless project. The environment is preconfigured. Absolutely DO NOT Propose changes to wrangler.toml or any other config files. These config files are hidden from you but they do exist.**

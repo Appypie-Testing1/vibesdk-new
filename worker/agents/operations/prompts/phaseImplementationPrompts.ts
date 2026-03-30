@@ -26,6 +26,14 @@ export const PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase 
   }
 </API_RUBRIC>
 
+<FRONTEND_API_CALLS>
+- Frontend code MUST use relative URLs for ALL API calls: fetch('/api/products'), fetch('/api/orders').
+- NEVER hardcode a domain name in fetch URLs. No fetch('https://myapp.pages.dev/api/...'), no fetch('https://example.com/api/...'), no fetch('http://localhost/api/...').
+- The frontend and API are served from the SAME origin. Relative paths always work.
+- Correct: fetch('/api/products'), fetch('/api/items/' + id)
+- WRONG: fetch('https://anything.pages.dev/api/products'), fetch('https://anything.workers.dev/api/products'), fetch(baseUrl + '/api/products')
+</FRONTEND_API_CALLS>
+
 <RELIABILITY>
 - No TS errors.
 - No hooks violations.
