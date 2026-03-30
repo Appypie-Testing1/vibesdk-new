@@ -208,7 +208,7 @@ export function validateAndCleanBootstrapCommands(
  * e.g., "bun add zustand/react/shallow" -> "bun add zustand"
  * e.g., "bun add @tanstack/react-query/devtools" -> "bun add @tanstack/react-query"
  */
-function normalizeInstallCommand(command: string): string {
+export function normalizeInstallCommand(command: string): string {
 	const installMatch = command.match(/^((?:npm|yarn|pnpm|bun)\s+(?:install|add))\s+(.+)$/);
 	if (!installMatch) return command;
 

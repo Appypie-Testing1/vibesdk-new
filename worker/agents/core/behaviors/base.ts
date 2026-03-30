@@ -22,7 +22,7 @@ import { AgentActionKey, InferenceContext, InferenceRuntimeOverrides, ModelConfi
 import { ModelConfigService } from '../../../database/services/ModelConfigService';
 import { fixProjectIssues } from '../../../services/code-fixer';
 import { FastCodeFixerOperation } from '../../operations/PostPhaseCodeFixer';
-import { looksLikeCommand, validateAndCleanBootstrapCommands } from '../../utils/common';
+import { looksLikeCommand, normalizeInstallCommand, validateAndCleanBootstrapCommands } from '../../utils/common';
 import { customizeTemplateFiles, generateBootstrapScript } from '../../utils/templateCustomizer';
 import { AppService } from '../../../database';
 import { RateLimitExceededError } from 'shared/types/errors';
@@ -1468,7 +1468,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             return;
         }
 
-        commands = commands.map(cmd => cmd.trim().replace(/^\s*-\s*/, '').replace(/^npm/, 'bun'));
+        commands = commands.map(cmd => normalizeInstallCommand(cmd.trim().replace(/^\s*-\s*/, '').replace(/^npm/, 'bun')));
         this.logger.info(`AI suggested ${commands.length} commands to run: ${commands.join(", ")}`);
 
         // Remove duplicate commands
