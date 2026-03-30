@@ -1053,31 +1053,47 @@ export const FULLSTACK_MOBILE_STRATEGIES = {
     The core principle is to build the mobile UI and API backend together, delivering a working end-to-end app in each phase.
     **Each phase should be self-contained and result in a working, previewable app with data persistence.**
 
-    **First Phase: Complete Mobile UI + API Foundation**
-        * Build ALL screens/routes in the app/ directory using expo-router file-based routing.
+    **First Phase: Complete Mobile UI + Working API + Seed Data**
+        * **REPLACE ALL TEMPLATE DEFAULTS:** The template ships with a placeholder health-check homepage (app/index.tsx). You MUST completely rewrite it as the primary screen of the application. Do NOT leave any template placeholder content.
+        * Build ALL primary screens/routes in the app/ directory using expo-router file-based routing.
         * Build corresponding API endpoints in api/src/index.ts using Hono with D1 database.
         * Use React Native components exclusively: View, Text, TouchableOpacity, ScrollView, FlatList, TextInput, Image, etc.
         * Style with StyleSheet.create() -- do NOT use Tailwind CSS, HTML elements, or web-specific CSS.
         * Connect frontend screens to API ONLY via \`import { apiClient } from '../lib/api-client'\`. NEVER use raw fetch() or custom wrappers -- they break standalone APK builds.
-        * Include working CRUD operations with real database persistence.
-        * The initial phase should deliver an immediately usable app with real data.
+        * **WORKING CRUD OPERATIONS:** Every entity (products, users, orders, etc.) must have full Create, Read, Update, Delete API routes AND corresponding UI to exercise them. No stub routes that return empty arrays.
+        * **SEED DATA (CRITICAL):** The initDB() function MUST insert realistic sample data after creating tables. Use INSERT OR IGNORE to avoid duplicates on re-init. Without seed data, the app launches to empty screens showing "No items found" -- this is unacceptable for a demo.
+          Example:
+          \`\`\`
+          await db.prepare("INSERT OR IGNORE INTO products (id, name, price, image, description) VALUES ('1', 'Wireless Headphones', '79.99', 'https://images.unsplash.com/photo-xxx', 'Premium noise-cancelling headphones')").run();
+          \`\`\`
+          Insert at least 4-6 realistic sample rows per main entity table.
+        * **END-TO-END CONNECTIVITY AUDIT:** For every screen you create, verify it calls a real API endpoint, and that endpoint exists, queries the database, and returns data. No orphan screens (UI with no API call) and no orphan routes (API with no UI).
+        * The initial phase should deliver an immediately usable app with real data visible on every screen.
         * Phase 1 builds the foundation -- subsequent phases add features, polish, and refinement.
         * NEVER set lastPhase: true on the initial phase. There are always more phases for features and polish.
 
-    **Subsequent Phases: Features & Polish**
-        * Add remaining features, refine interactions, and improve visual polish.
-        * Extend API routes and database schema as needed.
-        * Each phase must keep the app functional -- no broken screens or API routes.
-        * Address any runtime errors from previous phases first.
+    **Subsequent Phases: Complete Feature Implementation**
+        * **Priority 1 -- Fix runtime errors:** If the previous phase has crashes or API failures, fix them first.
+        * **Priority 2 -- Complete remaining features from the blueprint:** Implement ALL features listed in the blueprint's roadmap. This includes:
+            - Admin/management screens if requested (dashboards, user management, content management)
+            - Cart, checkout, and order flows for e-commerce apps
+            - Authentication and user profile screens
+            - Search, filtering, and sorting functionality
+            - Detail views, edit forms, and delete confirmations
+        * **Priority 3 -- Visual polish and interactions:** Improve layout, add press feedback, refine typography and colors.
+        * Every subsequent phase MUST keep the entire app functional -- no broken screens, no broken API routes, no regressions.
+        * Extend API routes and database schema as needed. Always add seed data for new tables.
+        * **No placeholder screens:** Never output a screen that says "Coming soon" or shows only a title with no content. Every screen must be fully functional.
+        * **No disconnected features:** Every button must do something. Every form must submit to an API. Every list must fetch from an API.
 
     <PHASE GENERATION CONSTRAINTS>
-        * **Phase Count:** 1 phase for simple apps, 2-4 phases for complex apps. Do not exceed ${Math.floor(MAX_PHASES * 0.8)} phases.
+        * **Phase Count:** 2-3 phases for simple apps, 3-5 phases for complex apps (e.g. e-commerce with admin). Do not exceed ${Math.floor(MAX_PHASES * 0.8)} phases.
         * **File Count:** 3-12 files per phase. Frontend files go in app/ directory, API files in api/src/, shared types in lib/.
         * **React Native ONLY for UI:** Use View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Alert, Animated, etc.
         * **NO web elements:** Do NOT use div, span, button, input, h1, p, or any HTML elements.
         * **NO web styling:** Do NOT use Tailwind CSS, className, CSS files, or CSS-in-JS. Use only StyleSheet.create().
         * **API routes:** Use Hono framework. All routes under /api/* prefix. Use c.env.DB for D1 database access.
-        * **Database:** Use D1 SQL directly via c.env.DB.prepare(). Create tables with CREATE TABLE IF NOT EXISTS.
+        * **Database:** Use D1 SQL directly via c.env.DB.prepare(). Create tables with CREATE TABLE IF NOT EXISTS. Always include INSERT OR IGNORE seed data.
         * **Routing:** Use expo-router file-based routing (files in app/ directory). Stack.Screen, Tabs, etc.
         * **Icons:** Do NOT use any icon library. Use emoji or Unicode symbols in Text components instead.
         * **Images:** Use Image from react-native with external URLs (unsplash, placeholder services).
@@ -1122,6 +1138,8 @@ const styles = StyleSheet.create({
 - Wrap handlers in try-catch
 - Return JSON responses with proper status codes
 - Use CREATE TABLE IF NOT EXISTS for schema initialization
+- ALWAYS seed tables with realistic sample data using INSERT OR IGNORE in initDB(). Empty tables = empty screens = broken demo.
+- Every GET endpoint must return actual data from the database, never hardcoded empty arrays
 
 4) Component Usage
 - Use React Native components ONLY: View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, TextInput, Image, Modal, Switch

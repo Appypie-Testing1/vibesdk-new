@@ -17,12 +17,14 @@ export const PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase 
 - Routes: all under /api/* prefix using Hono.
 - Database: D1 via c.env.DB.prepare() with parameterized queries (c.env.DB.prepare('SELECT * FROM t WHERE id = ?').bind(id).all()).
 - Error handling: try-catch in every route handler, JSON error responses.
-- Schema initialization: ALWAYS define an initDB(db) function that creates ALL tables. Call it in a middleware before route handlers. This is CRITICAL -- without it, database tables will not exist and all queries will fail.
+- Schema initialization: ALWAYS define an initDB(db) function that creates ALL tables AND inserts seed data. Call it in a middleware before route handlers. This is CRITICAL -- without it, database tables will not exist and all queries will fail.
 - IMPORTANT: Use ONE db.prepare('CREATE TABLE IF NOT EXISTS ...').run() call per table. NEVER use db.exec() with template literals or multi-statement strings -- they cause truncation errors. Each CREATE TABLE must be a separate prepare().run() call on a single line.
+- SEED DATA: After CREATE TABLE statements, add INSERT OR IGNORE statements with 4-6 realistic sample rows per main entity table. Without seed data, the app launches to empty screens.
 - Example:
   async function initDB(db: D1Database) {
     await db.prepare('CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL)').run();
     await db.prepare('CREATE TABLE IF NOT EXISTS posts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, content TEXT, created_at TEXT NOT NULL DEFAULT (datetime(\'now\')))').run();
+    await db.prepare("INSERT OR IGNORE INTO users (id, name, email) VALUES ('1', 'Admin', 'admin@example.com')").run();
   }
 </API_RUBRIC>
 
@@ -114,12 +116,19 @@ export const FULLSTACK_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are impl
 - ALWAYS include a GET /api/health route that returns { status: 'ok' }. The frontend api-client probes this endpoint.
 - Database: D1 via c.env.DB.prepare() with parameterized queries.
 - Error handling: try-catch in every route handler, JSON error responses.
-- Schema initialization: ALWAYS define an initDB(db) function that creates ALL tables. Call it in a middleware before route handlers. Without this, tables will not exist and all queries will fail.
+- Schema initialization: ALWAYS define an initDB(db) function that creates ALL tables AND inserts seed data. Call it in a middleware before route handlers. Without this, tables will not exist and all queries will fail.
 - IMPORTANT: Use ONE db.prepare('CREATE TABLE IF NOT EXISTS ...').run() call per table. NEVER use db.exec() with template literals or multi-statement strings -- they cause truncation errors. Each CREATE TABLE must be a separate prepare().run() call on a single line.
+- SEED DATA (CRITICAL): After all CREATE TABLE statements, add INSERT OR IGNORE statements with 4-6 realistic sample rows per main entity table. Without seed data, the app launches to empty screens showing "No items found" which looks broken to users.
+- Implement COMPLETE CRUD for every entity: GET list, GET by id, POST create, PUT update, DELETE remove.
 - Example:
   async function initDB(db: D1Database) {
-    await db.prepare('CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL)').run();
-    await db.prepare('CREATE TABLE IF NOT EXISTS posts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL)').run();
+    await db.prepare('CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL)').run();
+    await db.prepare('CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, name TEXT NOT NULL, price REAL NOT NULL, image TEXT, description TEXT)').run();
+    // Seed data -- ensures app is never empty on first load
+    await db.prepare("INSERT OR IGNORE INTO products (id, name, price, image, description) VALUES ('1', 'Wireless Headphones', 79.99, 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400', 'Premium noise-cancelling headphones')").run();
+    await db.prepare("INSERT OR IGNORE INTO products (id, name, price, image, description) VALUES ('2', 'Smart Watch', 199.99, 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400', 'Fitness tracking smartwatch')").run();
+    await db.prepare("INSERT OR IGNORE INTO products (id, name, price, image, description) VALUES ('3', 'Running Shoes', 129.99, 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400', 'Lightweight performance running shoes')").run();
+    await db.prepare("INSERT OR IGNORE INTO products (id, name, price, image, description) VALUES ('4', 'Backpack', 59.99, 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400', 'Water-resistant travel backpack')").run();
   }
 </API_RUBRIC>
 
@@ -131,6 +140,16 @@ export const FULLSTACK_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are impl
 - API routes must return valid JSON.
 - Database queries must use parameterized bindings (never string interpolation).
 </RELIABILITY>
+
+<QUALITY_BAR>
+- REPLACE the template default homepage (app/index.tsx shows a health-check screen). Rewrite it as the app's primary screen with real content and data.
+- NO empty screens: every screen must display real data fetched from the API. The initDB function seeds sample data so there is always something to show.
+- NO placeholder content: never output "Coming soon", "TODO", or screens with only a title and no functionality.
+- Every button must perform an action (navigate, submit, delete, etc.). No dead buttons.
+- Every form must submit to a real API endpoint and persist data to the database.
+- Every list/grid must fetch from a real API endpoint and render the results.
+- All features in the phase description must be fully implemented, not stubbed.
+</QUALITY_BAR>
 
 <CRITICAL_FULLSTACK_MOBILE_RULES>
 **Frontend (app/ directory):**
