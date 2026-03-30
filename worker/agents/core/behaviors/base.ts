@@ -790,6 +790,15 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 message: 'Project name updated',
                 projectName: newName
             });
+
+            // Redeploy to Cloudflare Workers for Platforms so the worker is accessible
+            // under the new subdomain. Fire-and-forget — don't block the rename response.
+            if (ok && this.state.mvpGenerated) {
+                this.deployToCloudflare('platform').catch((error: unknown) => {
+                    this.logger.error('Error redeploying after rename:', error);
+                });
+            }
+
             return ok;
         } catch (error) {
             this.logger.error('Error updating project name:', error);
