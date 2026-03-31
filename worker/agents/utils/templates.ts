@@ -705,16 +705,32 @@ let restartCount = 0;
 let shuttingDown = false;
 const lastErrors = [];
 
+function killPort(port) {
+  const { execSync } = require('child_process');
+  // Try fuser (Linux), then lsof (macOS/Linux), silently skip if neither available
+  const cmds = ['fuser -k ' + port + '/tcp', 'lsof -ti:' + port + ' | xargs kill -9'];
+  for (const cmd of cmds) {
+    try {
+      execSync(cmd, { encoding: 'utf-8', timeout: 3000, stdio: 'pipe' });
+      console.log('[proxy] Killed process on port ' + port + ' via: ' + cmd.split(' ')[0]);
+      return;
+    } catch {}
+  }
+}
+
 function startMetro() {
   metroReady = false;
   metroDead = false;
   metroExitCode = null;
   lastErrors.length = 0;
 
+  // Kill any leftover process on the internal port to prevent "port in use" prompts
+  killPort(INTERNAL_PORT);
+
   console.log('[proxy] Starting Expo dev server' + (restartCount > 0 ? ' (restart #' + restartCount + ')' : '') + '...');
   expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
     stdio: ['inherit', 'pipe', 'pipe'],
-    env: { ...process.env, PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
+    env: { ...process.env, CI: '1', PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
   });
   expo.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); if (/Metro waiting|Bundler is ready|listening on/i.test(s)) { metroReady = true; console.log('[proxy] Metro is ready'); } });
   expo.stderr.on('data', (d) => { const s = d.toString(); process.stderr.write(d); lastErrors.push(s); if (lastErrors.length > 30) lastErrors.shift(); });
@@ -1341,16 +1357,32 @@ function getApiUrl() {
   return cachedApiUrl;
 }
 
+function killPort(port) {
+  const { execSync } = require('child_process');
+  // Try fuser (Linux), then lsof (macOS/Linux), silently skip if neither available
+  const cmds = ['fuser -k ' + port + '/tcp', 'lsof -ti:' + port + ' | xargs kill -9'];
+  for (const cmd of cmds) {
+    try {
+      execSync(cmd, { encoding: 'utf-8', timeout: 3000, stdio: 'pipe' });
+      console.log('[proxy] Killed process on port ' + port + ' via: ' + cmd.split(' ')[0]);
+      return;
+    } catch {}
+  }
+}
+
 function startMetro() {
   metroReady = false;
   metroDead = false;
   metroExitCode = null;
   lastErrors.length = 0;
 
+  // Kill any leftover process on the internal port to prevent "port in use" prompts
+  killPort(INTERNAL_PORT);
+
   console.log('[proxy] Starting Expo dev server' + (restartCount > 0 ? ' (restart #' + restartCount + ')' : '') + '...');
   expo = spawn('npx', ['expo', 'start', '--port', String(INTERNAL_PORT), '--host', 'lan'], {
     stdio: ['inherit', 'pipe', 'pipe'],
-    env: { ...process.env, PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
+    env: { ...process.env, CI: '1', PORT: String(INTERNAL_PORT), NODE_OPTIONS: '--max-old-space-size=1536' },
   });
   expo.stdout.on('data', (d) => { const s = d.toString(); process.stdout.write(s); if (/Metro waiting|Bundler is ready|listening on/i.test(s)) { metroReady = true; console.log('[proxy] Metro is ready'); } });
   expo.stderr.on('data', (d) => { const s = d.toString(); process.stderr.write(d); lastErrors.push(s); if (lastErrors.length > 30) lastErrors.shift(); });
