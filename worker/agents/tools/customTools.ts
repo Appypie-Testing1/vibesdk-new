@@ -50,6 +50,8 @@ export function buildTools(
         toolWebSearchDefinition,
         toolFeedbackDefinition,
         createQueueRequestTool(agent, logger, imageUrls),
+        createRegenerateFileTool(agent, logger),
+        createReadFilesTool(agent, logger),
         createGetLogsTool(agent, logger),
         createDeployPreviewTool(agent, logger),
         createWaitForGenerationTool(agent, logger),
