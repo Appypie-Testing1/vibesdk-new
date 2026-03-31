@@ -9,11 +9,12 @@ export type RegenerateFileResult =
 export function createRegenerateFileTool(
 	agent: ICodingAgent,
 	logger: StructuredLogger,
+	options?: { autoDeploy?: boolean },
 ) {
 	return tool({
 		name: 'regenerate_file',
 		description:
-			`Autonomous AI agent that applies surgical fixes to code files. Takes file path and array of specific issues to fix. Returns diff showing changes made.
+			`Autonomous AI agent that applies surgical fixes to code files. Takes file path and array of specific issues to fix. Returns diff showing changes made. Changes are automatically deployed to the preview after successful edit.
 
 CRITICAL: Provide detailed, specific issues - not vague descriptions. See system prompt for full usage guide. These would be implemented by an independent LLM AI agent`,
 		args: {
@@ -26,7 +27,14 @@ CRITICAL: Provide detailed, specific issues - not vague descriptions. See system
 					path,
 					issuesCount: issues.length,
 				});
-				return await agent.regenerateFileByPath(path, issues);
+				const result = await agent.regenerateFileByPath(path, issues);
+				// Auto-deploy to preview so changes reflect immediately
+				if (options?.autoDeploy && result && !('error' in result)) {
+					agent.deployPreview(true).catch((err) => {
+						logger.error('Auto-deploy after regenerate_file failed', { error: String(err) });
+					});
+				}
+				return result;
 			} catch (error) {
 				return {
 					error:

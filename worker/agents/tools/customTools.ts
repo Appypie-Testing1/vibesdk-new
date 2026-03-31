@@ -50,7 +50,7 @@ export function buildTools(
         toolWebSearchDefinition,
         toolFeedbackDefinition,
         createQueueRequestTool(agent, logger, imageUrls),
-        createRegenerateFileTool(agent, logger),
+        createRegenerateFileTool(agent, logger, { autoDeploy: true }),
         createReadFilesTool(agent, logger),
         createGetLogsTool(agent, logger),
         createDeployPreviewTool(agent, logger),

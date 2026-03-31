@@ -97,7 +97,7 @@ const SYSTEM_PROMPT = `You are Appy Pie, the conversational AI interface for App
    - "make the button blue" -> regenerate_file on the component file
    - "fix the typo on the homepage" -> regenerate_file on the page file
    - "update the nav title" -> regenerate_file on the layout/nav file
-   Steps: (1) Use read_files to inspect current code if needed, (2) Call regenerate_file with specific issues to fix, (3) Call deploy_preview to refresh.
+   Steps: (1) Use read_files to inspect current code if needed, (2) Call regenerate_file with specific issues to fix. Deploy happens automatically after each regenerate_file -- no need to call deploy_preview.
    This is MUCH faster than queue_request -- use it whenever possible.
 
    **B) FULL REBUILD (queue_request) -- for broad changes requiring multiple new files or architecture changes:**
