@@ -42,6 +42,8 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
     private behavior!: BaseCodingBehavior<AgentState>;
     private objective!: ProjectObjective<BaseProjectState>;
     private secretsClient: SecretsClient | null = null;
+    /** Ephemeral secrets passed via SDK credentials (not persisted). Checked before vault. */
+    private sdkSecrets: Record<string, string> = {};
     protected static readonly PROJECT_NAME_PREFIX_MAX_LENGTH = 20;
     // Services
     readonly fileManager: FileManager;
@@ -290,7 +292,16 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         return this.secretsClient;
     }
 
+    /** Set ephemeral secrets from SDK credentials (not persisted in vault). */
+    setSdkSecrets(secrets: Record<string, string>): void {
+        this.sdkSecrets = { ...this.sdkSecrets, ...secrets };
+    }
+
     async getDecryptedSecret(query: { provider?: string; envVarName?: string; secretId?: string }): Promise<string | null> {
+        // Check SDK-provided ephemeral secrets first (for SDK users without vault access)
+        if (query.envVarName && this.sdkSecrets[query.envVarName]) {
+            return this.sdkSecrets[query.envVarName];
+        }
         try {
             return await this.getSecretsClient().get(query);
         } catch (error) {

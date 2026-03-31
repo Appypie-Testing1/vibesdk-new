@@ -449,6 +449,8 @@ export interface InferenceContext {
 export type CredentialsPayload = {
 	providers?: Record<string, { apiKey: string }>;
 	aiGateway?: { baseUrl: string; token: string };
+	/** Ephemeral secrets passed by SDK (e.g. expoToken for EAS builds). Not persisted in vault. */
+	secrets?: Record<string, string>;
 };
 
 export function credentialsToRuntimeOverrides(

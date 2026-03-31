@@ -21,6 +21,10 @@ export function handleWebSocketMessage(
             case WebSocketMessageRequests.SESSION_INIT: {
                 const credentials = parsedMessage.credentials as CredentialsPayload | undefined;
                 agent.getBehavior().setRuntimeOverrides(credentialsToRuntimeOverrides(credentials));
+                // Store SDK-provided secrets (e.g. EXPO_TOKEN) for use by EAS builds and other features
+                if (credentials?.secrets && typeof credentials.secrets === 'object') {
+                    agent.setSdkSecrets(credentials.secrets);
+                }
                 break;
             }
             case WebSocketMessageRequests.GENERATE_ALL:
