@@ -9,7 +9,6 @@ export type RegenerateFileResult =
 export function createRegenerateFileTool(
 	agent: ICodingAgent,
 	logger: StructuredLogger,
-	options?: { autoDeploy?: boolean },
 ) {
 	return tool({
 		name: 'regenerate_file',
@@ -27,14 +26,7 @@ CRITICAL: Provide detailed, specific issues - not vague descriptions. See system
 					path,
 					issuesCount: issues.length,
 				});
-				const result = await agent.regenerateFileByPath(path, issues);
-				// Auto-deploy to preview so changes reflect immediately
-				if (options?.autoDeploy && result && !('error' in result)) {
-					agent.deployPreview(true).catch((err) => {
-						logger.error('Auto-deploy after regenerate_file failed', { error: String(err) });
-					});
-				}
-				return result;
+				return await agent.regenerateFileByPath(path, issues);
 			} catch (error) {
 				return {
 					error:
