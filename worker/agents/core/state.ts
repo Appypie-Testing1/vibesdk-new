@@ -55,6 +55,7 @@ export interface BaseProjectState {
     
     // Common infrastructure
     sandboxInstanceId?: string;
+    sandboxPreviewUrl?: string;
     fileServingToken?: FileServingToken;
     commandsHistory?: string[];
     lastPackageJson?: string;

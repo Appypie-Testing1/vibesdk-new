@@ -1212,6 +1212,9 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                     this.broadcast(WebSocketMessageResponses.DEPLOYMENT_STARTED, data);
                 },
                 onCompleted: (data) => {
+                    if (data.previewURL) {
+                        this.state.sandboxPreviewUrl = data.previewURL;
+                    }
                     const broadcastData = {
                         ...data,
                         ...(computeExpoDeepLink && data.previewURL ? { expoDeepLink: computeExpoDeepLink(data.previewURL) } : {}),

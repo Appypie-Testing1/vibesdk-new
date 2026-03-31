@@ -211,6 +211,8 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         try {
             if (this.behavior.getTemplateDetails().renderMode === 'browser') {
                 previewUrl = this.behavior.getBrowserPreviewURL();
+            } else if (this.state.sandboxPreviewUrl) {
+                previewUrl = this.state.sandboxPreviewUrl;
             }
         } catch (error) {
             this.logger().error('Error getting preview URL:', error);
