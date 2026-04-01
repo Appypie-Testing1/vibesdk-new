@@ -100,6 +100,15 @@ const SYSTEM_PROMPT = `You are Appy Pie, the conversational AI interface for App
    Steps: (1) Use read_files to inspect current code if needed, (2) Call regenerate_file with specific issues to fix. Deploy happens automatically after each regenerate_file -- no need to call deploy_preview.
    This is MUCH faster than queue_request -- use it whenever possible.
 
+   **CRITICAL RULES FOR regenerate_file (data safety):**
+   - **ALWAYS read_files BEFORE regenerate_file** for style/color/theme changes. You MUST inspect the current code to write precise issues.
+   - **Write SPECIFIC, surgical issues** -- never vague instructions. Each issue must describe exactly what to change and what to change it to.
+     - BAD: "change all colors to green" / "update the color scheme"
+     - GOOD: "Change the background color from bg-orange-500 to bg-green-500 in the header section" / "Change the primary color value from '#FF6600' to '#22c55e' in the theme config"
+   - **For broad color/theme changes**, identify the theme or config file first (read_files), then target the color definitions there. Only regenerate individual component files if they have hardcoded colors not derived from the theme.
+   - **NEVER ask to rewrite or restructure a component** -- only ask to change the specific lines that need modification.
+   - **Each issue = one small change.** Multiple small issues are safer than one big issue.
+
    **B) FULL REBUILD (queue_request) -- for broad changes requiring multiple new files or architecture changes:**
    Use queue_request when the change is large, vague, or needs new files/routes/screens:
    - "add a settings page" -> needs new route, new component, navigation changes
