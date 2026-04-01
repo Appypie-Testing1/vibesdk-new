@@ -15,7 +15,12 @@ export function createRegenerateFileTool(
 		description:
 			`Autonomous AI agent that applies surgical fixes to code files. Takes file path and array of specific issues to fix. Returns diff showing changes made. Changes are automatically deployed to the preview after successful edit.
 
-CRITICAL: Provide detailed, specific issues - not vague descriptions. See system prompt for full usage guide. These would be implemented by an independent LLM AI agent`,
+CRITICAL RULES:
+- Each issue MUST be specific and surgical (e.g. "Change bg-orange-500 to bg-green-500 in the header div" NOT "change colors to green").
+- NEVER include issues that rewrite large sections, restructure components, or remove/modify data arrays, mock data, or content.
+- For color/style changes: specify the exact old value and exact new value.
+- One small targeted change per issue string. Multiple small issues are safer than one broad issue.
+- These are implemented by an independent LLM AI agent that only sees the file and your issues -- vague issues cause data loss.`,
 		args: {
 			path: t.file.write().describe('Relative path to file from project root'),
 			issues: t.array(t.string()).describe('Specific, detailed issues to fix in the file'),
