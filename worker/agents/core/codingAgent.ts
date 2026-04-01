@@ -230,34 +230,9 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
             this.scheduleEasBuildPoll(5_000);
         }
 
-        // Ensure sandbox is alive on reconnect — the container may have been recycled
-        // while the Durable Object was hibernated. If unhealthy, re-deploys from
-        // generatedFilesMap and broadcasts DEPLOYMENT_COMPLETED with a fresh URL.
-        this.ensureSandboxOnReconnect();
-    }
-
-    private ensureSandboxOnReconnect(): void {
-        const renderMode = this.behavior.getTemplateDetails()?.renderMode;
-        // Only non-browser templates need a sandbox container
-        if (renderMode === 'browser') return;
-        // Only if we previously had a sandbox and have files to deploy
-        if (!this.state.sandboxInstanceId) return;
-        if (!this.state.generatedFilesMap || Object.keys(this.state.generatedFilesMap).length === 0) return;
-        // Don't interfere with active code generation
-        if (this.behavior.isCodeGenerating()) return;
-
-        const logger = this.logger();
-        logger.info('Checking sandbox health on reconnect', { instanceId: this.state.sandboxInstanceId });
-
-        // Fire-and-forget: re-deploy if sandbox is dead. deployToSandbox's ensureInstance
-        // checks health first and skips if already healthy (no redundant work).
-        this.behavior.deployToSandbox([], false, undefined, false, true).then((result) => {
-            if (result?.previewURL) {
-                logger.info('Sandbox confirmed healthy on reconnect', { previewURL: result.previewURL });
-            }
-        }).catch((error) => {
-            logger.error('Failed to ensure sandbox on reconnect', { error: String(error) });
-        });
+        // Sandbox health is checked lazily — when the first chat edit (regenerateFileByPath)
+        // runs, ensureInstance verifies the container and recreates it if needed. This avoids
+        // background deploys that race with user interactions and cause blank simulators.
     }
 
     private initLogger(agentId: string, userId: string, sessionId?: string) {

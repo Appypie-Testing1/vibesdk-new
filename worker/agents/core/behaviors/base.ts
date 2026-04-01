@@ -1023,18 +1023,34 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         const regenerated = await this.regenerateFile({ filePath: path, fileContents, filePurpose }, issues, 0);
         // Invalidate cache
         this.staticAnalysisCache = null;
-        // Write the changed file directly to sandbox — Metro hot-reloads automatically.
-        // Avoids full deployToSandbox which triggers heavyweight DEPLOYMENT_COMPLETED per file.
-        const { sandboxInstanceId } = this.state;
-        if (sandboxInstanceId) {
-            try {
-                await this.getSandboxServiceClient().writeFiles(sandboxInstanceId, [
-                    { filePath: regenerated.filePath, fileContents: regenerated.fileContents }
-                ]);
-            } catch (e) {
-                this.logger.warn('Failed to write regenerated file to sandbox', { path, error: String(e) });
+
+        // Ensure sandbox is alive, then write the changed file.
+        // ensureInstance checks health — reuses the running container if healthy,
+        // or spins up a fresh one with all project files if the old one died.
+        try {
+            const instanceResult = await this.deploymentManager.ensureInstance(false);
+            const targetId = instanceResult.sandboxInstanceId;
+
+            await this.getSandboxServiceClient().writeFiles(targetId, [
+                { filePath: regenerated.filePath, fileContents: regenerated.fileContents }
+            ]);
+
+            // If the instance was recreated (old container died), update state and
+            // broadcast so the client can switch to the new preview URL.
+            if (instanceResult.redeployed && instanceResult.previewURL) {
+                this.state.sandboxPreviewUrl = instanceResult.previewURL;
+                this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, {
+                    message: 'Preview ready',
+                    instanceId: targetId,
+                    previewURL: instanceResult.previewURL,
+                    tunnelURL: instanceResult.tunnelURL ?? '',
+                    skipScreenshot: true,
+                });
             }
+        } catch (e) {
+            this.logger.warn('Failed to write regenerated file to sandbox', { path, error: String(e) });
         }
+
         return { path, diff: regenerated.lastDiff };
     }
 
