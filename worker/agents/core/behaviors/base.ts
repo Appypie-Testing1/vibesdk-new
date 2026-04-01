@@ -1023,9 +1023,8 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         const regenerated = await this.regenerateFile({ filePath: path, fileContents, filePurpose }, issues, 0);
         // Invalidate cache
         this.staticAnalysisCache = null;
-        // Persist to sandbox instance
-        // await this.getSandboxServiceClient().writeFiles(sandboxInstanceId, [{ filePath: regenerated.filePath, fileContents: regenerated.fileContents }], `Deep debugger fix: ${path}`);
-        await this.deploymentManager.deployToSandbox([regenerated])
+        // Deploy to sandbox and broadcast DEPLOYMENT_COMPLETED so the client reloads the preview
+        await this.deployToSandbox([regenerated], false, undefined, false, true);
         return { path, diff: regenerated.lastDiff };
     }
 
