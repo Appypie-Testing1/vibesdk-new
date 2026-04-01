@@ -579,20 +579,25 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
 
             logger.info('Files written to sandbox instance', { instanceId: sandboxInstanceId, files: filesToWrite.map(f => f.filePath) });
 
+            // Quick edit: small targeted file change (1-3 files, no package.json) — skip heavy dep install
+            const state = this.getState();
+            const isQuickEdit = files.length > 0 && files.length <= 3
+                && !files.some(f => f.filePath === 'package.json');
+
             // For Expo/mobile projects:
             // 1. Ensure metro.config.js exists (sanitizes proxy headers to prevent Metro crashes)
-            // 2. Auto-install any missing third-party dependencies
-            const state = this.getState();
+            // 2. Auto-install any missing third-party dependencies (skip for quick edits —
+            //    Metro hot-reloads without reinstalling deps)
             if (state.templateRenderMode === 'mobile' || state.templateRenderMode === 'mobile-fullstack') {
                 await this.ensureMetroConfig(sandboxInstanceId);
-                await this.autoInstallMissingDependencies(sandboxInstanceId);
+                if (!isQuickEdit) {
+                    await this.autoInstallMissingDependencies(sandboxInstanceId);
+                }
             }
 
             // Ensure .api-url exists for fullstack mobile projects so the proxy
-            // can route /api/* requests. Uses writeFiles (reliable) instead of
-            // executeCommands (fire-and-forget). Covers existing projects that
-            // were created before .api-url was included in initial files.
-            if (state.templateRenderMode === 'mobile-fullstack' || state.templateName === 'expo-fullstack') {
+            // can route /api/* requests. Skip for quick edits — already set from initial deploy.
+            if (!isQuickEdit && (state.templateRenderMode === 'mobile-fullstack' || state.templateName === 'expo-fullstack')) {
                 const previewDomain = getPreviewDomain(this.env);
                 const protocol = getProtocolForHost(previewDomain);
                 const apiUrl = `${protocol}://${state.projectName}.${previewDomain}`;

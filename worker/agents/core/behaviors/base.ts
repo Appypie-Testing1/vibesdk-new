@@ -1023,8 +1023,18 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         const regenerated = await this.regenerateFile({ filePath: path, fileContents, filePurpose }, issues, 0);
         // Invalidate cache
         this.staticAnalysisCache = null;
-        // Deploy to sandbox and broadcast DEPLOYMENT_COMPLETED so the client reloads the preview
-        await this.deployToSandbox([regenerated], false, undefined, false, true);
+        // Write the changed file directly to sandbox — Metro hot-reloads automatically.
+        // Avoids full deployToSandbox which triggers heavyweight DEPLOYMENT_COMPLETED per file.
+        const { sandboxInstanceId } = this.state;
+        if (sandboxInstanceId) {
+            try {
+                await this.getSandboxServiceClient().writeFiles(sandboxInstanceId, [
+                    { filePath: regenerated.filePath, fileContents: regenerated.fileContents }
+                ]);
+            } catch (e) {
+                this.logger.warn('Failed to write regenerated file to sandbox', { path, error: String(e) });
+            }
+        }
         return { path, diff: regenerated.lastDiff };
     }
 
