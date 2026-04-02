@@ -11,7 +11,6 @@
  */
 
 import { DurableObject } from 'cloudflare:workers';
-import type { DurableObjectState, SqlStorageValue } from '@cloudflare/workers-types';
 import {
 	type VaultConfig,
 	type VaultStatusResponse,
@@ -957,8 +956,8 @@ export class UserSecretsStore extends DurableObject<Env> {
 	}
 
 	private async decryptVMK(encryptedVMK: Uint8Array, nonce: Uint8Array, sessionKey: Uint8Array): Promise<CryptoKey> {
-		const sk = await crypto.subtle.importKey('raw', sessionKey, { name: 'AES-GCM' }, false, ['decrypt']);
-		const vmkRaw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce }, sk, encryptedVMK);
+		const sk = await crypto.subtle.importKey('raw', sessionKey.buffer as ArrayBuffer, { name: 'AES-GCM' }, false, ['decrypt']);
+		const vmkRaw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce.buffer as ArrayBuffer }, sk, encryptedVMK.buffer as ArrayBuffer);
 		const vmkArray = new Uint8Array(vmkRaw);
 		const vmk = await crypto.subtle.importKey('raw', vmkArray, { name: 'AES-GCM' }, false, ['decrypt']);
 		vmkArray.fill(0);
@@ -966,7 +965,7 @@ export class UserSecretsStore extends DurableObject<Env> {
 	}
 
 	private async decryptSecretValue(encryptedValue: Uint8Array, nonce: Uint8Array, vmk: CryptoKey): Promise<string> {
-		const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce }, vmk, encryptedValue);
+		const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce.buffer as ArrayBuffer }, vmk, encryptedValue.buffer as ArrayBuffer);
 		const arr = new Uint8Array(plaintext);
 		const result = new TextDecoder().decode(arr);
 		arr.fill(0);

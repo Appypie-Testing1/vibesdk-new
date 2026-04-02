@@ -189,12 +189,12 @@ class DatabaseClient {
 		const id = this.getAppId(appId);
 		const response = await this.fetchWithAuth(`${this.baseUrl}/apps/${id}/data?type=user_input`);
 		if (!response.ok) throw new Error('Failed to get user inputs');
-		const data = await response.json();
-		return data.map((item: Record<string, unknown>) => ({
-			id: item.id,
-			app_id: item.app_id,
+		const data = await response.json() as Record<string, unknown>[];
+		return data.map((item) => ({
+			id: item.id as string,
+			app_id: item.app_id as string,
 			input_data: JSON.parse(item.content as string),
-			timestamp: item.created_at,
+			timestamp: item.created_at as string,
 		}));
 	}
 
@@ -223,14 +223,14 @@ class DatabaseClient {
 		const id = this.getAppId(appId);
 		const response = await this.fetchWithAuth(`${this.baseUrl}/apps/${id}/executions?limit=${limit}`);
 		if (!response.ok) throw new Error('Failed to get executions');
-		const data = await response.json();
-		return data.map((item: Record<string, unknown>) => ({
-			id: item.id,
-			app_id: item.app_id,
-			execution_result: item.execution_result,
-			execution_time: item.execution_time,
-			status: item.status,
-			timestamp: item.created_at,
+		const data = await response.json() as Record<string, unknown>[];
+		return data.map((item) => ({
+			id: item.id as string,
+			app_id: item.app_id as string,
+			execution_result: item.execution_result as string,
+			execution_time: item.execution_time as number,
+			status: item.status as 'success' | 'error' | 'pending',
+			timestamp: item.created_at as string,
 		}));
 	}
 
@@ -256,15 +256,15 @@ class DatabaseClient {
 		const id = this.getAppId(appId);
 		const response = await this.fetchWithAuth(`${this.baseUrl}/apps/${id}/data?type=performance_metric`);
 		if (!response.ok) throw new Error('Failed to get performance metrics');
-		const data = await response.json();
-		return data.map((item: Record<string, unknown>) => {
+		const data = await response.json() as Record<string, unknown>[];
+		return data.map((item) => {
 			const content = JSON.parse(item.content as string);
 			return {
-				id: item.id,
-				app_id: item.app_id,
-				metric_name: content.metric_name,
-				metric_value: content.metric_value,
-				timestamp: item.created_at,
+				id: item.id as string,
+				app_id: item.app_id as string,
+				metric_name: content.metric_name as string,
+				metric_value: content.metric_value as number,
+				timestamp: item.created_at as string,
 			};
 		});
 	}

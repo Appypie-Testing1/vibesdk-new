@@ -53,15 +53,15 @@ export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
         return false;
     }
     
-    return crypto.subtle.timingSafeEqual(aBuffer, bBuffer);
+    return (crypto.subtle as unknown as { timingSafeEqual(a: ArrayBuffer, b: ArrayBuffer): boolean }).timingSafeEqual(aBuffer.buffer as ArrayBuffer, bBuffer.buffer as ArrayBuffer);
 }
 
 export function timingSafeEqualBytes(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) {
         return false;
     }
-    
-    return crypto.subtle.timingSafeEqual(a, b);
+
+    return (crypto.subtle as unknown as { timingSafeEqual(a: ArrayBuffer, b: ArrayBuffer): boolean }).timingSafeEqual(a.buffer as ArrayBuffer, b.buffer as ArrayBuffer);
 }
 
 export function generateSecureToken(length: number = 32): string {
@@ -111,7 +111,7 @@ export async function pbkdf2(
     const derivedBits = await crypto.subtle.deriveBits(
         {
             name: 'PBKDF2',
-            salt,
+            salt: salt.buffer as ArrayBuffer,
             iterations,
             hash: 'SHA-256'
         },

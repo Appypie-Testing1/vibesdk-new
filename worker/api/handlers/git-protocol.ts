@@ -280,7 +280,7 @@ async function handleUploadPack(
         if (repo) {
             logger.info(`Cache HIT (${source}): upload-pack`, { appId, agentHeadOid });
             const packfile = await GitCloneService.handleUploadPack(repo);
-            return new Response(packfile, {
+            return new Response(packfile as unknown as BodyInit, {
                 status: 200,
                 headers: {
                     'Content-Type': 'application/x-git-upload-pack-result',
@@ -305,7 +305,7 @@ async function handleUploadPack(
         
         // Generate packfile with full commit history
         const packfile = await GitCloneService.handleUploadPack(repoFS);
-        return new Response(packfile, {
+        return new Response(packfile as unknown as BodyInit, {
             status: 200,
             headers: {
                 'Content-Type': 'application/x-git-upload-pack-result',
