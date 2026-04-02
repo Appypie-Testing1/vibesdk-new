@@ -43,6 +43,7 @@ declare namespace Cloudflare {
 		CUSTOM_DOMAIN: string;
 		CUSTOM_PREVIEW_DOMAIN: string;
 		SDK_ALLOWED_ORIGINS: string;
+		EMBED_ALLOWED_ORIGINS: string;
 		ALLOCATION_STRATEGY: string;
 		GITHUB_EXPORTER_CLIENT_ID: string;
 		GITHUB_EXPORTER_CLIENT_SECRET: string;

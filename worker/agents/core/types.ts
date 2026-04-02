@@ -149,3 +149,20 @@ export interface EasBuildState {
     error?: string;
     pollFailures?: number;
 }
+
+// EmDash deployment types
+export type EmdashDeployStep = 'building' | 'validating' | 'capability_review' | 'installing' | 'complete';
+export type EmdashDeployStatus = 'idle' | 'in-progress' | 'awaiting-approval' | 'completed' | 'failed';
+
+export interface EmdashDeploymentState {
+    targetSiteId: string;
+    status: EmdashDeployStatus;
+    step: EmdashDeployStep;
+    startedAt: number;
+    capabilities?: string[];
+    pluginId?: string;
+    error?: string;
+}
+
+// Dashboard creation modes
+export type CreationMode = 'plugin-builder' | 'design-studio' | 'app-builder';

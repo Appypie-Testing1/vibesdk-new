@@ -1,4 +1,7 @@
 import type { TemplateDetails } from '../../services/sandbox/sandboxTypes';
+export { createEmdashPluginTemplateDetails } from './emdash-plugin-template';
+export { createEmdashAstroThemeTemplateDetails } from './emdash-astro-template';
+export { createEmdashMobileTemplateDetails } from './emdash-mobile-template';
 
 const VITE_CONFIG_MINIMAL = `
 // Making changes to this file is **STRICTLY** forbidden. All the code in here is 100% correct and audited.

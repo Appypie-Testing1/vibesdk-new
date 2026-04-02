@@ -57,6 +57,15 @@ import type{
 	CapabilitiesData,
 	VaultConfigResponse,
 	VaultStatusResponse,
+	MarketplaceListResponseData,
+	MarketplacePluginResponseData,
+	MarketplacePublishResponseData,
+	MarketplaceInstallResponseData,
+	MarketplaceReviewResponseData,
+	MarketplaceRatingsResponseData,
+	MarketplaceRevenueResponseData,
+	UserBillingResponseData,
+	CustomerBillingResponseData,
 } from '@/api-types';
 import {
 	RateLimitExceededError,
@@ -1211,6 +1220,95 @@ class ApiClient {
 
 		// Redirect to OAuth provider
 		window.location.href = oauthUrl.toString();
+	}
+
+	// ===============================
+	// Billing API Methods
+	// ===============================
+
+	async getUserBilling(start?: string, end?: string): Promise<ApiResponse<UserBillingResponseData>> {
+		const params = new URLSearchParams();
+		if (start) params.set('start', start);
+		if (end) params.set('end', end);
+		const qs = params.toString();
+		return this.request<UserBillingResponseData>(`/api/billing/usage${qs ? `?${qs}` : ''}`);
+	}
+
+	async getCustomerBilling(customerId: string, start?: string, end?: string): Promise<ApiResponse<CustomerBillingResponseData>> {
+		const params = new URLSearchParams();
+		if (start) params.set('start', start);
+		if (end) params.set('end', end);
+		const qs = params.toString();
+		return this.request<CustomerBillingResponseData>(`/api/billing/customer/${customerId}${qs ? `?${qs}` : ''}`);
+	}
+
+	// ===============================
+	// Marketplace API Methods
+	// ===============================
+
+	async listMarketplacePlugins(options?: {
+		search?: string;
+		category?: string;
+		page?: number;
+		perPage?: number;
+	}): Promise<ApiResponse<MarketplaceListResponseData>> {
+		const params = new URLSearchParams();
+		if (options?.search) params.set('search', options.search);
+		if (options?.category) params.set('category', options.category);
+		if (options?.page) params.set('page', String(options.page));
+		if (options?.perPage) params.set('per_page', String(options.perPage));
+		const qs = params.toString();
+		return this.request<MarketplaceListResponseData>(`/api/marketplace/plugins${qs ? `?${qs}` : ''}`);
+	}
+
+	async getMarketplacePlugin(pluginId: string): Promise<ApiResponse<MarketplacePluginResponseData>> {
+		return this.request<MarketplacePluginResponseData>(`/api/marketplace/plugins/${pluginId}`);
+	}
+
+	async submitMarketplacePlugin(data: {
+		appId: string;
+		name: string;
+		slug: string;
+		description: string;
+		category: string;
+		tags?: string[];
+		capabilities?: string[];
+		pricing?: 'free' | 'paid' | 'freemium';
+		priceUsd?: number;
+	}): Promise<ApiResponse<MarketplacePublishResponseData>> {
+		return this.request<MarketplacePublishResponseData>('/api/marketplace/plugins', {
+			method: 'POST',
+			body: JSON.stringify(data),
+		});
+	}
+
+	async installMarketplacePlugin(pluginId: string, siteId: string): Promise<ApiResponse<MarketplaceInstallResponseData>> {
+		return this.request<MarketplaceInstallResponseData>(`/api/marketplace/plugins/${pluginId}/install`, {
+			method: 'POST',
+			body: JSON.stringify({ siteId }),
+		});
+	}
+
+	async reviewMarketplacePlugin(pluginId: string, status: 'approved' | 'rejected', notes?: string): Promise<ApiResponse<MarketplaceReviewResponseData>> {
+		return this.request<MarketplaceReviewResponseData>(`/api/marketplace/plugins/${pluginId}/review`, {
+			method: 'POST',
+			body: JSON.stringify({ status, notes }),
+		});
+	}
+
+	async getPluginRatings(pluginId: string): Promise<ApiResponse<MarketplaceRatingsResponseData>> {
+		return this.request<MarketplaceRatingsResponseData>(`/api/marketplace/plugins/${pluginId}/ratings`);
+	}
+
+	async submitPluginRating(pluginId: string, rating: number, reviewText?: string): Promise<ApiResponse<MarketplaceRatingsResponseData>> {
+		return this.request<MarketplaceRatingsResponseData>(`/api/marketplace/plugins/${pluginId}/ratings`, {
+			method: 'POST',
+			body: JSON.stringify({ rating, reviewText }),
+		});
+	}
+
+	async getPublisherRevenue(publisherId: string): Promise<ApiResponse<MarketplaceRevenueResponseData>> {
+		return this.request<MarketplaceRevenueResponseData>(`/api/marketplace/revenue/${publisherId}`);
 	}
 }
 

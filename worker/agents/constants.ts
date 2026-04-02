@@ -87,6 +87,16 @@ export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
     EAS_BUILD_STATUS: 'eas_build_status',
     EAS_BUILD_COMPLETE: 'eas_build_complete',
     EAS_BUILD_ERROR: 'eas_build_error',
+
+    // EmDash Deploy messages
+    EMDASH_DEPLOY_STATUS: 'emdash_deploy_status',
+    EMDASH_DEPLOY_COMPLETE: 'emdash_deploy_complete',
+    EMDASH_DEPLOY_ERROR: 'emdash_deploy_error',
+
+    // Marketplace messages
+    MARKETPLACE_PUBLISH_STARTED: 'marketplace_publish_started',
+    MARKETPLACE_PUBLISH_COMPLETED: 'marketplace_publish_completed',
+    MARKETPLACE_REVIEW_STATUS: 'marketplace_review_status',
 } as const satisfies Record<string, WebSocketMessageType>;
 
 // WebSocket message types
@@ -124,6 +134,10 @@ export const WebSocketMessageRequests = {
 
     // EAS Build requests
     EAS_BUILD_TRIGGER: 'eas_build_trigger',
+
+    // EmDash Deploy requests
+    EMDASH_DEPLOY_TRIGGER: 'emdash_deploy_trigger',
+    EMDASH_CAPABILITY_APPROVAL: 'emdash_capability_approval',
 };
 
 export const PREVIEW_EXPIRED_ERROR = 'Preview expired, attempting redeploy. Please try again after a minute or refresh the page';

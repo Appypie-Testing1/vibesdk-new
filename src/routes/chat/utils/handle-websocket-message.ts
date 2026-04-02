@@ -110,6 +110,14 @@ export interface HandleMessageDeps {
         downloadUrl?: string;
         error?: string;
     }) => void;
+    onEmdashDeployUpdate?: (update: {
+        type: 'status' | 'complete' | 'error';
+        step?: string;
+        capabilities?: string[];
+        pluginId?: string;
+        siteId?: string;
+        error?: string;
+    }) => void;
 }
 
 export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
@@ -1086,6 +1094,73 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                     description: message.error,
                     duration: 8000,
                 });
+                break;
+            }
+
+            // EmDash Deploy messages
+            case 'emdash_deploy_status': {
+                logger.info('EmDash deploy status', { step: message.step });
+                deps.onEmdashDeployUpdate?.({
+                    type: 'status',
+                    step: message.step,
+                    capabilities: message.capabilities,
+                });
+                break;
+            }
+            case 'emdash_deploy_complete': {
+                logger.info('EmDash deploy complete', { pluginId: message.pluginId, siteId: message.siteId });
+                deps.onEmdashDeployUpdate?.({
+                    type: 'complete',
+                    pluginId: message.pluginId,
+                    siteId: message.siteId,
+                });
+                toast.success('Plugin deployed to EmDash', {
+                    description: `Plugin ${message.pluginId} installed on site ${message.siteId}`,
+                    duration: 8000,
+                });
+                break;
+            }
+            case 'emdash_deploy_error': {
+                logger.error('EmDash deploy error', { step: message.step, error: message.error });
+                deps.onEmdashDeployUpdate?.({
+                    type: 'error',
+                    step: message.step,
+                    error: message.error,
+                });
+                toast.error('EmDash deployment failed', {
+                    description: message.error,
+                    duration: 8000,
+                });
+                break;
+            }
+
+            // Marketplace messages
+            case 'marketplace_publish_started': {
+                logger.info('Marketplace publish started', { pluginId: message.pluginId });
+                toast.info('Submitting plugin to marketplace...', {
+                    description: message.pluginName,
+                    duration: 5000,
+                });
+                break;
+            }
+            case 'marketplace_publish_completed': {
+                logger.info('Marketplace publish completed', { pluginId: message.pluginId });
+                toast.success('Plugin submitted to marketplace', {
+                    description: `${message.pluginName} is now pending review`,
+                    duration: 8000,
+                });
+                break;
+            }
+            case 'marketplace_review_status': {
+                logger.info('Marketplace review status', { pluginId: message.pluginId, status: message.status });
+                if (message.status === 'approved') {
+                    toast.success('Plugin approved and published', { duration: 8000 });
+                } else {
+                    toast.error('Plugin rejected', {
+                        description: message.notes || 'Contact support for details',
+                        duration: 8000,
+                    });
+                }
                 break;
             }
 

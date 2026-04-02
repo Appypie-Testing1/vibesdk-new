@@ -204,6 +204,20 @@ export function getTemplatesData(): SecretTemplate[] {
 			category: 'deployment',
 		},
 		{
+			id: 'EMDASH_API_TOKEN',
+			displayName: 'EmDash API Token',
+			envVarName: 'EMDASH_API_TOKEN',
+			provider: 'emdash',
+			icon: '',
+			description: 'EmDash CMS API token for deploying plugins and themes to your EmDash instance',
+			instructions:
+				'Go to your EmDash admin panel → Settings → API Tokens → Create new token with plugin management permissions',
+			placeholder: 'Your EmDash API token',
+			validation: '.+',
+			required: false,
+			category: 'deployment',
+		},
+		{
 			id: 'EXPO_APPLE_TEAM_ID',
 			displayName: 'Apple Developer Team ID',
 			envVarName: 'EXPO_APPLE_TEAM_ID',

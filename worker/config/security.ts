@@ -54,6 +54,14 @@ export function getAllowedOrigins(env: Env): string[] {
             if (trimmed) origins.push(trimmed);
         }
     }
+
+    // Embed allowed origins (dashboard sites that embed VibeSDK via iframe)
+    if (env.EMBED_ALLOWED_ORIGINS) {
+        for (const o of env.EMBED_ALLOWED_ORIGINS.split(',')) {
+            const trimmed = o.trim();
+            if (trimmed) origins.push(trimmed);
+        }
+    }
     
     // Development origins (only in development)
     if (isDev(env)) {
@@ -211,7 +219,13 @@ export function getSecureHeadersConfig(env: Env): SecureHeadersConfig {
             mediaSrc: ["'self'"],
             workerSrc: ["'self'", "blob:"],
             formAction: ["'self'"],
-            frameAncestors: ["'self'"],
+            frameAncestors: [
+                "'self'",
+                // Allow embedding in dashboard sites
+                ...(env.EMBED_ALLOWED_ORIGINS
+                    ? env.EMBED_ALLOWED_ORIGINS.split(',').map((o: string) => o.trim()).filter(Boolean)
+                    : []),
+            ],
             baseUri: ["'self'"],
             manifestSrc: ["'self'"],
             upgradeInsecureRequests: !isDevelopment ? [] : undefined
@@ -222,8 +236,9 @@ export function getSecureHeadersConfig(env: Env): SecureHeadersConfig {
             ? undefined // Don't set in development
             : 'max-age=31536000; includeSubDomains; preload',
         
-        // X-Frame-Options - Allow same-origin framing (for preview iframes)
-        xFrameOptions: 'SAMEORIGIN',
+        // X-Frame-Options - Allow framing from embed origins or same-origin
+        // When EMBED_ALLOWED_ORIGINS is set, disable X-Frame-Options in favor of CSP frame-ancestors
+        xFrameOptions: env.EMBED_ALLOWED_ORIGINS ? false : 'SAMEORIGIN',
         
         // X-Content-Type-Options - Prevent MIME sniffing
         xContentTypeOptions: 'nosniff',

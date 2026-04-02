@@ -266,7 +266,7 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
     }
     
     getWebSockets(): WebSocket[] {
-        return this.ctx.getWebSockets();
+        return (this as unknown as { ctx: AgentContext }).ctx.getWebSockets();
     }
 
     handleVaultUnlocked(): void {
@@ -878,5 +878,131 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
      */
     clearGitHubToken(): void {
         this.objective.clearGitHubToken();
+    }
+
+    /**
+     * Pending capability approval resolver for EmDash deploy
+     */
+    private emdashCapabilityResolver?: (approved: boolean) => void;
+
+    /**
+     * Handle EmDash plugin deployment
+     */
+    async handleEmdashDeploy(
+        targetSiteId: string,
+        emdashToken: string,
+        callbacks: {
+            onStatus: (step: string, capabilities?: string[]) => void;
+            onComplete: (pluginId: string, siteId: string) => void;
+            onError: (step: string, error: string) => void;
+        }
+    ): Promise<void> {
+        const { onStatus, onComplete, onError } = callbacks;
+
+        try {
+            const sandboxClient = this.behavior!.getSandboxServiceClient();
+            const sandboxId = this.state.sandboxInstanceId;
+            if (!sandboxId) {
+                onError('building', 'No sandbox instance available.');
+                return;
+            }
+
+            // Step 1: Build
+            onStatus('building');
+            const buildResult = await sandboxClient.executeCommands(sandboxId, ['emdash plugin build'], 60_000);
+            if (!buildResult) {
+                onError('building', 'Plugin build failed. Check plugin source for errors.');
+                return;
+            }
+
+            // Step 2: Validate
+            onStatus('validating');
+            const validateResult = await sandboxClient.executeCommands(sandboxId, ['emdash plugin validate'], 30_000);
+            if (!validateResult) {
+                onError('validating', 'Plugin validation failed. Ensure manifest matches code.');
+                return;
+            }
+
+            // Step 3: Read manifest and extract capabilities
+            const manifestResp = await sandboxClient.getFiles(sandboxId, ['dist/manifest.json']);
+            const manifestFile = manifestResp?.success ? manifestResp.files?.find((f: { filePath: string }) => f.filePath === 'dist/manifest.json') : null;
+            const manifestJson = manifestFile?.fileContents ?? null;
+            if (!manifestJson) {
+                onError('validating', 'Could not read built manifest. Ensure build completed successfully.');
+                return;
+            }
+
+            let manifest: { capabilities?: string[] };
+            try {
+                manifest = JSON.parse(manifestJson);
+            } catch {
+                onError('validating', 'Invalid manifest JSON in build output.');
+                return;
+            }
+
+            const capabilities = manifest.capabilities ?? [];
+
+            // Step 4: Capability review -- wait for user approval
+            onStatus('capability_review', capabilities);
+
+            const approved = await new Promise<boolean>((resolve) => {
+                this.emdashCapabilityResolver = resolve;
+                // Timeout after 5 minutes
+                setTimeout(() => {
+                    if (this.emdashCapabilityResolver) {
+                        this.emdashCapabilityResolver = undefined;
+                        resolve(false);
+                    }
+                }, 5 * 60 * 1000);
+            });
+
+            if (!approved) {
+                onError('capability_review', 'Deployment cancelled. Capabilities were not approved.');
+                return;
+            }
+
+            // Step 5: Install plugin to EmDash instance
+            onStatus('installing');
+            const installResult = await sandboxClient.executeCommands(sandboxId, [
+                `EMDASH_API_TOKEN=${emdashToken} emdash plugin deploy --site ${targetSiteId} --non-interactive`
+            ], 60_000);
+            if (!installResult) {
+                onError('installing', 'Plugin installation failed. Check EmDash API token and site ID.');
+                return;
+            }
+
+            // Extract plugin ID from install output (best-effort)
+            const installOutput = installResult.results?.map(r => r.output).join('\n') ?? '';
+            const pluginIdMatch = installOutput.match(/plugin[:\s]+([a-zA-Z0-9-]+)/i);
+            const pluginId = pluginIdMatch?.[1] ?? 'unknown';
+
+            // Update state
+            this.setState({
+                ...this.state,
+                emdashDeployment: {
+                    targetSiteId,
+                    status: 'completed',
+                    step: 'complete',
+                    startedAt: Date.now(),
+                    pluginId,
+                    capabilities,
+                },
+            });
+
+            onComplete(pluginId, targetSiteId);
+        } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            onError('building', `Unexpected error during deployment: ${errorMsg}`);
+        }
+    }
+
+    /**
+     * Handle capability approval response from user
+     */
+    handleEmdashCapabilityApproval(approved: boolean): void {
+        if (this.emdashCapabilityResolver) {
+            this.emdashCapabilityResolver(approved);
+            this.emdashCapabilityResolver = undefined;
+        }
     }
 }

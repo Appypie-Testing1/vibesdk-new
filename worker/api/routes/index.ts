@@ -12,6 +12,8 @@ import { setupScreenshotRoutes } from './imagesRoutes';
 import { setupSentryRoutes } from './sentryRoutes';
 import { setupCapabilitiesRoutes } from './capabilitiesRoutes';
 import { setupDatabaseRoutes } from './database';
+import { setupBillingRoutes } from './billingRoutes';
+import { setupMarketplaceRoutes } from './marketplaceRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
 import { setupStatusRoutes } from './statusRoutes';
@@ -66,6 +68,12 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Screenshot serving routes (public)
     setupScreenshotRoutes(app);
+
+    // Billing and usage metering routes
+    setupBillingRoutes(app);
+
+    // Plugin marketplace routes
+    setupMarketplaceRoutes(app);
 
     // Database routes for GlobalDurableObject persistence
     setupDatabaseRoutes(app);

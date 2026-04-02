@@ -16,7 +16,7 @@ import { FileRegenerationOperation } from '../../operations/FileRegeneration';
 // Database schema imports removed - using zero-storage OAuth flow
 import { BaseSandboxService } from '../../../services/sandbox/BaseSandboxService';
 import { getTemplateImportantFiles } from '../../../services/sandbox/utils';
-import { createScratchTemplateDetails, createExpoScratchTemplateDetails, createExpoFullstackTemplateDetails } from '../../utils/templates';
+import { createScratchTemplateDetails, createExpoScratchTemplateDetails, createExpoFullstackTemplateDetails, createEmdashPluginTemplateDetails, createEmdashAstroThemeTemplateDetails, createEmdashMobileTemplateDetails } from '../../utils/templates';
 import { WebSocketMessageData, WebSocketMessageType } from '../../../api/websocketTypes';
 import { AgentActionKey, InferenceContext, InferenceRuntimeOverrides, ModelConfig } from '../../inferutils/config.types';
 import { ModelConfigService } from '../../../database/services/ModelConfigService';
@@ -149,7 +149,9 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     onStateUpdate(_state: TState, _source: "server" | Connection) {}
 
     private isScratchTemplate(): boolean {
-        return this.state.templateName === 'scratch' || this.state.templateName === 'expo-scratch';
+        return this.state.templateName === 'scratch' || this.state.templateName === 'expo-scratch'
+            || this.state.templateName === 'emdash-plugin' || this.state.templateName === 'emdash-astro'
+            || this.state.templateName === 'emdash-mobile';
     }
 
     async ensureTemplateDetails() {
@@ -227,6 +229,39 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                     this.setState({
                         ...this.state,
                         templateRenderMode: 'mobile-fullstack',
+                        templateInitCommand: this.templateDetailsCache.initCommand,
+                    });
+                }
+                return this.templateDetailsCache;
+            }
+            if (this.state.templateName === 'emdash-plugin') {
+                this.templateDetailsCache = createEmdashPluginTemplateDetails();
+                if (!this.state.templateRenderMode) {
+                    this.setState({
+                        ...this.state,
+                        templateRenderMode: 'emdash-plugin',
+                        templateInitCommand: this.templateDetailsCache.initCommand,
+                    });
+                }
+                return this.templateDetailsCache;
+            }
+            if (this.state.templateName === 'emdash-astro') {
+                this.templateDetailsCache = createEmdashAstroThemeTemplateDetails();
+                if (!this.state.templateRenderMode) {
+                    this.setState({
+                        ...this.state,
+                        templateRenderMode: 'emdash-astro',
+                        templateInitCommand: this.templateDetailsCache.initCommand,
+                    });
+                }
+                return this.templateDetailsCache;
+            }
+            if (this.state.templateName === 'emdash-mobile') {
+                this.templateDetailsCache = createEmdashMobileTemplateDetails();
+                if (!this.state.templateRenderMode) {
+                    this.setState({
+                        ...this.state,
+                        templateRenderMode: 'mobile',
                         templateInitCommand: this.templateDetailsCache.initCommand,
                     });
                 }

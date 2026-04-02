@@ -98,7 +98,7 @@ export const TemplateInfoSchema = z.object({
         selection: z.string(),
         usage: z.string(),
     }),
-    renderMode: z.enum(['sandbox', 'browser', 'mobile', 'mobile-fullstack']).optional(),
+    renderMode: z.enum(['sandbox', 'browser', 'mobile', 'mobile-fullstack', 'emdash-plugin', 'emdash-astro']).optional(),
     initCommand: z.string().optional(),
     slideDirectory: z.string().optional(),
     disabled: z.boolean(),

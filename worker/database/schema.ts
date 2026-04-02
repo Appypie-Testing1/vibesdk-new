@@ -320,6 +320,37 @@ export const appViews = sqliteTable('app_views', {
     appViewedAtIdx: index('app_views_app_viewed_at_idx').on(table.appId, table.viewedAt),
 }));
 
+/**
+ * UsageRecords table - Track per-inference token usage for billing and cost attribution
+ */
+export const usageRecords = sqliteTable('usage_records', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    customerId: text('customer_id'), // External customer ID for Appy Pie billing
+    agentId: text('agent_id'),
+
+    // Model and operation details
+    model: text('model').notNull(),
+    operationType: text('operation_type').notNull(), // 'phase_generation', 'phase_implementation', 'conversation', 'deep_debugger', 'blueprint', 'user_app_proxy'
+
+    // Token counts
+    tokensIn: integer('tokens_in').notNull().default(0),
+    tokensOut: integer('tokens_out').notNull().default(0),
+
+    // Cost tracking
+    cost: real('cost').notNull().default(0),
+    cached: integer('cached', { mode: 'boolean' }).notNull().default(false),
+
+    // Timing
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    userIdx: index('usage_records_user_idx').on(table.userId),
+    customerIdx: index('usage_records_customer_idx').on(table.customerId),
+    agentIdx: index('usage_records_agent_idx').on(table.agentId),
+    createdAtIdx: index('usage_records_created_at_idx').on(table.createdAt),
+    customerCreatedAtIdx: index('usage_records_customer_created_at_idx').on(table.customerId, table.createdAt),
+}));
+
 // ========================================
 // OAUTH AND EXTERNAL INTEGRATIONS
 // ========================================
@@ -515,6 +546,126 @@ export const systemSettings = sqliteTable('system_settings', {
 }));
 
 // ========================================
+// PLUGIN MARKETPLACE
+// ========================================
+
+/**
+ * MarketplacePlugins table - Published plugins available for installation
+ */
+export const marketplacePlugins = sqliteTable('marketplace_plugins', {
+    id: text('id').primaryKey(),
+    appId: text('app_id').notNull().references(() => apps.id, { onDelete: 'cascade' }),
+    publisherId: text('publisher_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+    // Plugin identity
+    name: text('name').notNull(),
+    slug: text('slug').notNull().unique(),
+    description: text('description').notNull(),
+    version: text('version').notNull().default('1.0.0'),
+    iconUrl: text('icon_url'),
+
+    // Classification
+    category: text('category').notNull(), // 'content', 'commerce', 'analytics', 'communication', 'media', 'security', 'integration', 'other'
+    tags: text('tags', { mode: 'json' }).$type<string[]>().default([]),
+
+    // Review pipeline
+    status: text('status', { enum: ['draft', 'pending_review', 'approved', 'rejected', 'published'] }).notNull().default('draft'),
+    capabilities: text('capabilities', { mode: 'json' }).$type<string[]>().default([]),
+
+    // Storage
+    archiveR2Key: text('archive_r2_key'), // R2 key for the bundled plugin zip
+
+    // Metrics
+    downloadCount: integer('download_count').notNull().default(0),
+    installCount: integer('install_count').notNull().default(0),
+
+    // Pricing
+    pricing: text('pricing', { enum: ['free', 'paid', 'freemium'] }).notNull().default('free'),
+    priceUsd: real('price_usd'),
+    revenueSharePercent: real('revenue_share_percent').default(70), // Publisher's share
+
+    // Timestamps
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    publishedAt: integer('published_at', { mode: 'timestamp' }),
+}, (table) => ({
+    publisherIdx: index('marketplace_plugins_publisher_idx').on(table.publisherId),
+    statusIdx: index('marketplace_plugins_status_idx').on(table.status),
+    categoryIdx: index('marketplace_plugins_category_idx').on(table.category),
+    slugIdx: index('marketplace_plugins_slug_idx').on(table.slug),
+    publishedAtIdx: index('marketplace_plugins_published_at_idx').on(table.publishedAt),
+}));
+
+/**
+ * PluginReviews table - Admin security review records
+ */
+export const pluginReviews = sqliteTable('plugin_reviews', {
+    id: text('id').primaryKey(),
+    pluginId: text('plugin_id').notNull().references(() => marketplacePlugins.id, { onDelete: 'cascade' }),
+    reviewerId: text('reviewer_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+    status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
+    notes: text('notes'),
+    securityScore: integer('security_score'), // 0-100 from automated checks
+
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    pluginIdx: index('plugin_reviews_plugin_idx').on(table.pluginId),
+    reviewerIdx: index('plugin_reviews_reviewer_idx').on(table.reviewerId),
+}));
+
+/**
+ * PluginInstalls table - Track plugin installations per site
+ */
+export const pluginInstalls = sqliteTable('plugin_installs', {
+    id: text('id').primaryKey(),
+    pluginId: text('plugin_id').notNull().references(() => marketplacePlugins.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    siteId: text('site_id').notNull(), // EmDash site ID
+
+    installedAt: integer('installed_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    pluginIdx: index('plugin_installs_plugin_idx').on(table.pluginId),
+    userIdx: index('plugin_installs_user_idx').on(table.userId),
+    pluginSiteIdx: uniqueIndex('plugin_installs_plugin_site_idx').on(table.pluginId, table.siteId),
+}));
+
+/**
+ * PluginRatings table - User ratings and reviews for plugins
+ */
+export const pluginRatings = sqliteTable('plugin_ratings', {
+    id: text('id').primaryKey(),
+    pluginId: text('plugin_id').notNull().references(() => marketplacePlugins.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+    rating: integer('rating').notNull(), // 1-5
+    reviewText: text('review_text'),
+
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    pluginIdx: index('plugin_ratings_plugin_idx').on(table.pluginId),
+    userPluginIdx: uniqueIndex('plugin_ratings_user_plugin_idx').on(table.pluginId, table.userId),
+}));
+
+/**
+ * RevenueEvents table - Track marketplace revenue for publishers
+ */
+export const revenueEvents = sqliteTable('revenue_events', {
+    id: text('id').primaryKey(),
+    pluginId: text('plugin_id').notNull().references(() => marketplacePlugins.id, { onDelete: 'cascade' }),
+    publisherId: text('publisher_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+    amount: real('amount').notNull(),
+    type: text('type', { enum: ['purchase', 'subscription', 'refund'] }).notNull(),
+
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    pluginIdx: index('revenue_events_plugin_idx').on(table.pluginId),
+    publisherIdx: index('revenue_events_publisher_idx').on(table.publisherId),
+    createdAtIdx: index('revenue_events_created_at_idx').on(table.createdAt),
+}));
+
+// ========================================
 // TYPE EXPORTS FOR APPLICATION USE
 // ========================================
 
@@ -570,3 +721,21 @@ export type NewUserModelProvider = typeof userModelProviders.$inferInsert;
 
 export type Star = typeof stars.$inferSelect;
 export type NewStar = typeof stars.$inferInsert;
+
+export type MarketplacePlugin = typeof marketplacePlugins.$inferSelect;
+export type NewMarketplacePlugin = typeof marketplacePlugins.$inferInsert;
+
+export type PluginReview = typeof pluginReviews.$inferSelect;
+export type NewPluginReview = typeof pluginReviews.$inferInsert;
+
+export type PluginInstall = typeof pluginInstalls.$inferSelect;
+export type NewPluginInstall = typeof pluginInstalls.$inferInsert;
+
+export type PluginRating = typeof pluginRatings.$inferSelect;
+export type NewPluginRating = typeof pluginRatings.$inferInsert;
+
+export type RevenueEvent = typeof revenueEvents.$inferSelect;
+export type NewRevenueEvent = typeof revenueEvents.$inferInsert;
+
+export type UsageRecord = typeof usageRecords.$inferSelect;
+export type NewUsageRecord = typeof usageRecords.$inferInsert;

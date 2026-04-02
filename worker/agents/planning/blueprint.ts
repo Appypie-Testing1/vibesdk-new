@@ -344,7 +344,95 @@ ${templateDetails?.renderMode === 'mobile-fullstack' ? `- Backend API: api/src/i
 Do NOT suggest: tailwindcss, framer-motion, lucide-react, lucide-react-native, @expo/vector-icons, react-native-vector-icons, react-router-dom, shadcn, or any web-only library.`;
             systemPrompt = `${systemPrompt}\n\n${mobileOverride}`;
         }
-        
+
+        // Override for EmDash plugin projects
+        if (templateDetails?.renderMode === 'emdash-plugin') {
+            const emdashPluginOverride = `
+## CRITICAL: EMDASH PLUGIN PROJECT
+This is an EmDash CMS plugin project using the definePlugin() API in a sandboxed environment.
+
+**Architecture:**
+- Entry point: src/index.ts must export default definePlugin({ manifest, hooks, routes })
+- Manifest: manifest.ts declares all capabilities, hooks, routes, storage, admin pages
+- Admin UI: src/admin/*.tsx for plugin settings pages (React/JSX)
+
+**Capability Mapping -- extract the correct capabilities from the user's request:**
+- "send emails" / "notifications" -> email:send capability
+- "external API" / "webhook" / "Stripe" / "Slack" / "payment" -> network:fetch + allowedHosts
+- "modify content" / "auto-tag" / "content moderation" -> read:content + write:content
+- "resize images" / "watermark" / "image processing" -> read:media + write:media
+- "SEO" / "analytics script" / "tracking" / "inject" -> page:inject + page:metadata
+- "scheduled" / "daily digest" / "cron" / "periodic" -> cron
+- "comments" / "moderation" -> comment:read + comment:write + comment:moderate
+- "user data" / "member info" -> user:read
+- "content fragments" / "sidebar widgets" / "theme slots" -> page:fragments
+
+**Allowed Hosts -- extract external domains from the request:**
+- "Stripe payments" -> allowedHosts: ["api.stripe.com"]
+- "Slack notifications" -> allowedHosts: ["hooks.slack.com"]
+- "SendGrid emails" -> allowedHosts: ["api.sendgrid.com"]
+- "OpenAI / AI" -> allowedHosts: ["api.openai.com"]
+- Any external service -> add its API domain to allowedHosts
+
+**Sandbox Constraints:**
+- 50ms CPU, 10 subrequests, 30s wall-time
+- Use ctx.network.fetch() not global fetch()
+- Use ctx.storage.collection() for persistence
+- Route handlers use Zod validation
+
+**DO NOT suggest:** Tailwind CSS, React Router, shadcn, web-specific libraries, database ORMs.
+**DO suggest:** zod (validation), @emdash/plugin-sdk (already included).`;
+            systemPrompt = `${systemPrompt}\n\n${emdashPluginOverride}`;
+        }
+
+        // Override for EmDash Astro theme projects
+        if (templateDetails?.renderMode === 'emdash-astro') {
+            const emdashAstroOverride = `
+## CRITICAL: EMDASH ASTRO THEME PROJECT
+This is an Astro website integrated with EmDash CMS for content management.
+
+**Architecture:**
+- Pages: src/pages/*.astro (file-based routing)
+- Layouts: src/layouts/*.astro
+- Components: src/components/*.astro or *.tsx (for interactive islands)
+- Content: fetched from EmDash via @emdash/astro, with mock data fallback
+
+**Content API:**
+- getLiveCollection('posts') -> fetch all documents from a collection
+- getLiveDocument('posts', slug) -> fetch single document
+- PortableText from @portabletext/astro -> render rich content
+
+**Styling:** Tailwind CSS utility classes. Mobile-first responsive design.
+**Routing:** File-based. Dynamic routes with [slug].astro.
+**Mock Data:** Always provide fallback in src/content/mock.ts for dev preview.
+
+**DO NOT modify:** astro.config.mjs, live.config.ts
+**DO suggest:** @tailwindcss/typography (for prose classes), additional Astro integrations if needed.`;
+            systemPrompt = `${systemPrompt}\n\n${emdashAstroOverride}`;
+        }
+
+        // Override for EmDash mobile app projects
+        if (templateDetails?.name === 'emdash-mobile') {
+            const emdashMobileOverride = `
+## CRITICAL: EMDASH MOBILE APP PROJECT
+This is a React Native / Expo mobile app consuming EmDash CMS Content API.
+
+**Architecture:**
+- Screens: app/ directory (expo-router file-based routing)
+- Data: ALL content via emdashClient from lib/emdash-client.ts
+- Rich content: PortableTextRenderer from lib/portable-text-renderer.tsx
+- Media: emdashClient.getMediaUrl() for all images
+
+**Content Types from EmDash define the app's screens:**
+- Each content collection becomes a list screen
+- Each document becomes a detail screen
+- Use emdashClient.getCollection() for lists, getDocument() for details
+
+**DO NOT USE:** Tailwind, className, HTML elements, raw fetch(), icon libraries.
+**MUST USE:** React Native components, StyleSheet.create(), expo-router, emdashClient.`;
+            systemPrompt = `${systemPrompt}\n\n${emdashMobileOverride}`;
+        }
+
         const systemPromptMessage = createSystemMessage(generalSystemPromptBuilder(systemPrompt, {
             query,
             templateDetails,

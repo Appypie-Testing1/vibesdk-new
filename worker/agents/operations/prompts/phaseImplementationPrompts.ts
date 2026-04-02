@@ -2,7 +2,7 @@ import { TemplateRegistry } from '../../inferutils/schemaFormatters';
 import { PhaseConceptSchema, type PhaseConceptType } from '../../schemas';
 import type { IssueReport } from '../../domain/values/IssueReport';
 import type { UserContext } from '../../core/types';
-import { issuesPromptFormatter, PROMPT_UTILS, MOBILE_STRATEGIES, FULLSTACK_MOBILE_STRATEGIES } from '../../prompts';
+import { issuesPromptFormatter, PROMPT_UTILS, MOBILE_STRATEGIES, FULLSTACK_MOBILE_STRATEGIES, EMDASH_PLUGIN_STRATEGIES, EMDASH_ASTRO_STRATEGIES, EMDASH_MOBILE_STRATEGIES } from '../../prompts';
 
 export const PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase in a React + TypeScript codebase with a Cloudflare Workers backend (Hono + D1 database).
 
@@ -208,6 +208,150 @@ Violations of this rule cause the production APK to show blank screens with no d
 ${FULLSTACK_MOBILE_STRATEGIES.UI_NON_NEGOTIABLES}
 
 ${PROMPT_UTILS.COMMON_PITFALLS}
+
+${PROMPT_UTILS.COMMON_DEP_DOCUMENTATION}
+
+<DEPENDENCIES>
+{{dependencies}}
+
+{{blueprintDependencies}}
+</DEPENDENCIES>
+
+{{template}}
+
+<BLUEPRINT>
+{{blueprint}}
+</BLUEPRINT>`;
+
+export const EMDASH_PLUGIN_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase in an EmDash CMS plugin project using the definePlugin() API.
+
+<PLUGIN_STRUCTURE>
+- Entry point: src/index.ts exports definePlugin({ manifest, hooks, routes })
+- Manifest: manifest.ts declares capabilities, hooks, routes, storage, admin
+- Admin pages: src/admin/*.tsx rendered in EmDash admin panel
+</PLUGIN_STRUCTURE>
+
+<RELIABILITY>
+- No TS errors.
+- Manifest must match code: every hook/route/storage/capability used in code appears in manifest.
+- All network requests use ctx.network.fetch(), never global fetch().
+- All storage access via ctx.storage.collection().
+- Route handlers use Zod validation where applicable.
+</RELIABILITY>
+
+<SANDBOX_CONSTRAINTS>
+- 50ms CPU time per invocation
+- 10 subrequests per invocation
+- 30s wall-time timeout
+- ~128MB memory limit
+- No filesystem access, no child processes, no eval()
+- ctx.network.fetch() enforces allowedHosts from manifest
+</SANDBOX_CONSTRAINTS>
+
+${EMDASH_PLUGIN_STRATEGIES.UI_NON_NEGOTIABLES}
+
+${PROMPT_UTILS.COMMON_DEP_DOCUMENTATION}
+
+<DEPENDENCIES>
+{{dependencies}}
+
+{{blueprintDependencies}}
+</DEPENDENCIES>
+
+{{template}}
+
+<BLUEPRINT>
+{{blueprint}}
+</BLUEPRINT>`;
+
+export const EMDASH_ASTRO_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase in an Astro website integrated with EmDash CMS.
+
+<ASTRO_RULES>
+- Files use .astro extension with frontmatter (---) and template sections.
+- Pages in src/pages/ (file-based routing). Dynamic routes use [param].astro.
+- Layouts in src/layouts/. Components in src/components/.
+- Content fetched via getLiveCollection()/getLiveDocument() from @emdash/astro.
+- Rich content rendered via PortableText from @portabletext/astro.
+- Always provide mock data fallback for dev preview.
+</ASTRO_RULES>
+
+<RELIABILITY>
+- No syntax errors in .astro files.
+- Correct Astro frontmatter format.
+- All imports resolve to installed packages.
+- getLiveCollection/getLiveDocument always wrapped in try-catch with mock fallback.
+</RELIABILITY>
+
+${EMDASH_ASTRO_STRATEGIES.UI_NON_NEGOTIABLES}
+
+${PROMPT_UTILS.COMMON_DEP_DOCUMENTATION}
+
+<DEPENDENCIES>
+{{dependencies}}
+
+{{blueprintDependencies}}
+</DEPENDENCIES>
+
+{{template}}
+
+<BLUEPRINT>
+{{blueprint}}
+</BLUEPRINT>`;
+
+export const EMDASH_MOBILE_PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase in a React Native / Expo mobile app that consumes EmDash CMS Content API.
+
+<MOBILE_UX_RUBRIC>
+- Layout: proper use of flexbox, consistent padding/margins, clear visual hierarchy.
+- Interaction: proper touch targets (min 44pt), press feedback via TouchableOpacity/Pressable.
+- States: loading/empty/error handled with appropriate React Native components.
+- Navigation: expo-router file-based routing, proper Stack/Tabs configuration.
+</MOBILE_UX_RUBRIC>
+
+<RELIABILITY>
+- No TS errors.
+- No hooks violations.
+- No render loops.
+- All imports must resolve to installed packages.
+</RELIABILITY>
+
+<EMDASH_CLIENT_MANDATORY>
+EVERY file that fetches content MUST use emdashClient from lib/emdash-client.ts.
+This is non-negotiable -- the emdashClient handles authentication, base URL resolution, and retry logic for web, Expo Go, and standalone APK/IPA.
+
+CORRECT (the ONLY allowed pattern):
+\`\`\`typescript
+import { emdashClient } from '../lib/emdash-client';
+
+// Fetch collection
+const posts = await emdashClient.getCollection<Post>('posts');
+// Fetch single document
+const post = await emdashClient.getDocument<Post>('posts', postId);
+// Search
+const results = await emdashClient.search<Post>('posts', { query: 'term' });
+// Media URL
+const imageUrl = emdashClient.getMediaUrl(post.coverImage);
+\`\`\`
+
+FORBIDDEN (will break the app):
+- fetch('/api/content/...') -- no origin on native device
+- axios.get('...') -- does not use emdashClient
+- Creating your own API wrapper -- use emdashClient
+
+Do NOT modify or replace lib/emdash-client.ts or lib/portable-text-renderer.tsx.
+</EMDASH_CLIENT_MANDATORY>
+
+<CRITICAL_MOBILE_RULES>
+- Use ONLY React Native components: View, Text, TouchableOpacity, ScrollView, FlatList, Image, etc.
+- EVERY React Native component MUST be imported from 'react-native'.
+- NEVER use HTML elements: div, span, button, input, etc.
+- NEVER use Tailwind CSS or className. Use ONLY StyleSheet.create().
+- Navigation: use expo-router (Link, useRouter, Stack, Tabs).
+- Icons: emoji or Unicode symbols only. No icon libraries.
+- Rich content: use PortableTextRenderer from lib/portable-text-renderer.tsx.
+- Media: use emdashClient.getMediaUrl() for all image URLs.
+</CRITICAL_MOBILE_RULES>
+
+${EMDASH_MOBILE_STRATEGIES.UI_NON_NEGOTIABLES}
 
 ${PROMPT_UTILS.COMMON_DEP_DOCUMENTATION}
 

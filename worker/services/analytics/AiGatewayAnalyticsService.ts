@@ -378,6 +378,25 @@ export class AiGatewayAnalyticsService {
   }
 
   /**
+   * Get analytics data for a specific customer (filtered by customerId in metadata)
+   * @param customerId - Customer ID to filter by
+   * @param days - Number of days to query (optional, defaults to 30 days due to API limits)
+   */
+  async getCustomerAnalytics(customerId: string, days?: number): Promise<UserAnalyticsData> {
+    this.logger.info('Getting customer analytics', { customerId, days: days || '30 days (default)' });
+
+    const timeRange = this.getTimeRange(days);
+    const query = this.buildQuery('specific', timeRange, customerId);
+    const result = await this.executeQuery(query);
+    const analyticsData = this.processAnalyticsResponse(result, timeRange);
+
+    return {
+      ...analyticsData,
+      userId: customerId
+    };
+  }
+
+  /**
    * Get total gateway analytics (for debugging/admin purposes)
    * @param days - Number of days to query (optional, defaults to 30 days due to API limits)
    */

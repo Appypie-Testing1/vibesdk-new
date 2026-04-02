@@ -23,6 +23,8 @@ import { RateLimitType } from 'worker/services/rate-limit/config';
 import { getMaxToolCallingDepth, MAX_LLM_MESSAGES } from '../constants';
 import { executeToolCallsWithDependencies } from './toolExecution';
 import { CompletionDetector } from './completionDetection';
+import { BillingMeter } from '../../services/analytics/BillingMeter';
+import { buildCacheHeaders } from '../../services/analytics/CacheConfig';
 
 function optimizeInputs(messages: Message[]): Message[] {
     return messages.map((message) => ({
@@ -701,9 +703,12 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                     "cf-aig-metadata": JSON.stringify({
                         chatId: metadata.agentId,
                         userId: metadata.userId,
+                        customerId: metadata.customerId,
                         schemaName,
                         actionKey,
-                    })
+                        operationType: actionKey,
+                    }),
+                    ...buildCacheHeaders(actionKey),
                 }
             });
             console.log(`Inference response received`);
@@ -821,6 +826,27 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
         }
 
         const assistantMessage = { role: "assistant" as MessageRole, content, tool_calls: toolCalls };
+
+        // Record usage for billing (fire-and-forget, non-blocking)
+        {
+            const usage = !stream && response
+                ? (response as OpenAI.ChatCompletion).usage
+                : undefined;
+            if (usage) {
+                const meter = new BillingMeter(env);
+                meter.recordUsage({
+                    userId: metadata.userId,
+                    customerId: metadata.customerId,
+                    agentId: metadata.agentId,
+                    model: modelName,
+                    operationType: actionKey,
+                    tokensIn: usage.prompt_tokens ?? 0,
+                    tokensOut: usage.completion_tokens ?? 0,
+                    cost: 0, // Cost calculated from AI Gateway analytics
+                    cached: false,
+                }).catch(() => { /* billing failure must not block inference */ });
+            }
+        }
 
         if (onAssistantMessage) {
             await onAssistantMessage(assistantMessage);

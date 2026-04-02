@@ -166,12 +166,13 @@ export async function proxyToAiGateway(request: Request, env: Env, _ctx: Executi
                 proxyHeaders.set(key, value);
             });
         }
-        // Add metadata for tracking
+        // Add metadata for tracking (includes customerId for billing attribution)
         proxyHeaders.set('cf-aig-metadata', JSON.stringify({
             appId: app.id,
             userId: app.userId,
             source: 'user-app-proxy',
-            model: modelName
+            model: modelName,
+            operationType: 'user_app_proxy',
         }));
 
         const targetPath = url.pathname.replace('/api/proxy/openai', '');

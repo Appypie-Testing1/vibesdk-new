@@ -137,6 +137,46 @@ export const ScreenshotAnalysisSchema = z.object({
     })
 });
 
+// --- EmDash Capability Extraction Schemas ---
+
+export const EmdashCapabilitySchema = z.enum([
+    'network:fetch', 'read:content', 'write:content',
+    'read:media', 'write:media', 'email:send', 'email:deliver',
+    'page:inject', 'page:metadata', 'page:fragments',
+    'comment:read', 'comment:write', 'comment:moderate',
+    'user:read', 'cron',
+]);
+
+export const EmdashManifestExtractionSchema = z.object({
+    capabilities: z.array(EmdashCapabilitySchema).describe('Plugin capabilities required based on the user description'),
+    allowedHosts: z.array(z.string()).describe('External host domains the plugin needs to access (e.g., api.stripe.com)'),
+    hooks: z.array(z.object({
+        name: z.string().describe('Lifecycle hook name (e.g., content:afterSave, cron, plugin:activate)'),
+        reason: z.string().describe('Why this hook is needed'),
+    })).describe('Lifecycle hooks the plugin will implement'),
+    routes: z.array(z.object({
+        name: z.string().describe('Route path (e.g., /webhook, /status)'),
+        public: z.boolean().describe('Whether the route requires authentication'),
+        reason: z.string().describe('Purpose of this route'),
+    })).describe('HTTP routes the plugin will expose'),
+    storage: z.array(z.object({
+        name: z.string().describe('Storage collection name'),
+        description: z.string().describe('What data this collection stores'),
+    })).describe('Persistent storage collections the plugin needs'),
+    adminPages: z.array(z.object({
+        type: z.enum(['settings', 'dashboard', 'custom']).describe('Type of admin page'),
+        reason: z.string().describe('Purpose of this admin page'),
+    })).describe('Admin panel pages the plugin provides'),
+});
+
+export const EmdashPluginBlueprintSchema = PhasicBlueprintSchema.extend({
+    emdashManifest: EmdashManifestExtractionSchema.optional().describe('Extracted EmDash plugin manifest from the user description. Only present for emdash-plugin projects.'),
+});
+
+export type EmdashCapability = z.infer<typeof EmdashCapabilitySchema>;
+export type EmdashManifestExtraction = z.infer<typeof EmdashManifestExtractionSchema>;
+export type EmdashPluginBlueprint = z.infer<typeof EmdashPluginBlueprintSchema>;
+
 export type TemplateSelection = z.infer<typeof TemplateSelectionSchema>;
 export type PhasicBlueprint = z.infer<typeof PhasicBlueprintSchema>;
 export type AgenticBlueprint = z.infer<typeof AgenticBlueprintSchema>;

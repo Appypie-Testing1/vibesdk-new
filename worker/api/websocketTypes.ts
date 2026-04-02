@@ -461,6 +461,61 @@ type EasBuildErrorMessage = {
 	error: string;
 };
 
+// ========== EMDASH DEPLOY MESSAGES ==========
+
+type EmdashDeployTriggerMessage = {
+	type: 'emdash_deploy_trigger';
+	targetSiteId: string;
+};
+
+type EmdashDeployStep = 'building' | 'validating' | 'capability_review' | 'installing' | 'complete';
+
+type EmdashDeployStatusMessage = {
+	type: 'emdash_deploy_status';
+	step: EmdashDeployStep;
+	capabilities?: string[];
+	progress?: string;
+};
+
+type EmdashCapabilityApprovalMessage = {
+	type: 'emdash_capability_approval';
+	approved: boolean;
+};
+
+type EmdashDeployCompleteMessage = {
+	type: 'emdash_deploy_complete';
+	pluginId: string;
+	siteId: string;
+};
+
+type EmdashDeployErrorMessage = {
+	type: 'emdash_deploy_error';
+	step: EmdashDeployStep;
+	error: string;
+};
+
+// ========== MARKETPLACE MESSAGES ==========
+
+type MarketplacePublishStartedMessage = {
+	type: 'marketplace_publish_started';
+	pluginId: string;
+	pluginName: string;
+};
+
+type MarketplacePublishCompletedMessage = {
+	type: 'marketplace_publish_completed';
+	pluginId: string;
+	pluginName: string;
+	slug: string;
+};
+
+type MarketplaceReviewStatusMessage = {
+	type: 'marketplace_review_status';
+	pluginId: string;
+	status: 'approved' | 'rejected';
+	notes?: string;
+};
+
 // ========== VAULT MESSAGES ==========
 
 /** Sent by client when vault is unlocked via dedicated vault WebSocket */
@@ -652,7 +707,15 @@ export type WebSocketMessage =
 	| VaultRequiredMessage
 	| EasBuildStatusMessage
 	| EasBuildCompleteMessage
-	| EasBuildErrorMessage;
+	| EasBuildErrorMessage
+	| EmdashDeployTriggerMessage
+	| EmdashDeployStatusMessage
+	| EmdashCapabilityApprovalMessage
+	| EmdashDeployCompleteMessage
+	| EmdashDeployErrorMessage
+	| MarketplacePublishStartedMessage
+	| MarketplacePublishCompletedMessage
+	| MarketplaceReviewStatusMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)
 export type WebSocketMessageType = WebSocketMessage['type'];

@@ -365,6 +365,58 @@ export function handleWebSocketMessage(
             //             });
             //         });
             //     break;
+            case WebSocketMessageRequests.EMDASH_DEPLOY_TRIGGER: {
+                const targetSiteId = parsedMessage.targetSiteId as string;
+                if (!targetSiteId) {
+                    sendError(connection, 'targetSiteId is required for EmDash deployment.');
+                    break;
+                }
+
+                logger.info('EmDash deploy trigger received', { targetSiteId });
+
+                agent.getDecryptedSecret({ envVarName: 'EMDASH_API_TOKEN' }).then(async (emdashToken) => {
+                    if (!emdashToken) {
+                        sendToConnection(connection, WebSocketMessageResponses.VAULT_REQUIRED, {
+                            reason: 'EMDASH_API_TOKEN is required to deploy plugins to EmDash. Create one from your EmDash admin panel.',
+                            provider: 'emdash',
+                            envVarName: 'EMDASH_API_TOKEN',
+                        });
+                        sendToConnection(connection, WebSocketMessageResponses.EMDASH_DEPLOY_ERROR, {
+                            step: 'building',
+                            error: 'EMDASH_API_TOKEN is required. Please add your EmDash API token first.',
+                        });
+                        return;
+                    }
+
+                    agent.handleEmdashDeploy(targetSiteId, emdashToken, {
+                        onStatus: (step: string, capabilities?: string[]) => {
+                            broadcastToConnections(agent, WebSocketMessageResponses.EMDASH_DEPLOY_STATUS, {
+                                step: step as 'building' | 'validating' | 'capability_review' | 'installing' | 'complete',
+                                capabilities,
+                            });
+                        },
+                        onComplete: (pluginId: string, siteId: string) => {
+                            broadcastToConnections(agent, WebSocketMessageResponses.EMDASH_DEPLOY_COMPLETE, {
+                                pluginId,
+                                siteId,
+                            });
+                        },
+                        onError: (step: string, error: string) => {
+                            broadcastToConnections(agent, WebSocketMessageResponses.EMDASH_DEPLOY_ERROR, {
+                                step: step as 'building' | 'validating' | 'capability_review' | 'installing' | 'complete',
+                                error,
+                            });
+                        },
+                    });
+                });
+                break;
+            }
+            case WebSocketMessageRequests.EMDASH_CAPABILITY_APPROVAL: {
+                const approved = parsedMessage.approved as boolean;
+                logger.info('EmDash capability approval received', { approved });
+                agent.handleEmdashCapabilityApproval(approved);
+                break;
+            }
             default:
                 sendError(connection, `Unknown message type: ${parsedMessage.type}`);
         }

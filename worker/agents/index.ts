@@ -5,7 +5,7 @@ import { InferenceContext } from './inferutils/config.types';
 import { SandboxSdkClient } from '../services/sandbox/sandboxSdkClient';
 import { selectTemplate } from './planning/templateSelector';
 import { TemplateDetails } from '../services/sandbox/sandboxTypes';
-import { createScratchTemplateDetails, createExpoScratchTemplateDetails, createExpoFullstackTemplateDetails } from './utils/templates';
+import { createScratchTemplateDetails, createExpoScratchTemplateDetails, createExpoFullstackTemplateDetails, createEmdashPluginTemplateDetails, createEmdashAstroThemeTemplateDetails, createEmdashMobileTemplateDetails } from './utils/templates';
 import { TemplateSelection } from './schemas';
 import type { ImageAttachment } from '../types/image-attachment';
 import { BaseSandboxService } from 'worker/services/sandbox/BaseSandboxService';
@@ -92,6 +92,53 @@ export async function getTemplateForQuery(
         } as TemplateSelection; // satisfies schema shape
         return { templateDetails: scratch, selection, projectType: 'general' };
     }
+    // Check for EmDash CMS requests FIRST -- before mobile and web template selection
+    const emdashPluginKeywords = /\b(emdash\s*plugin|cms\s*plugin|content\s*plugin|emdash\s*extension|emdash\s*addon)\b/i;
+    const emdashAstroKeywords = /\b(emdash\s*theme|astro\s*theme|cms\s*theme|emdash\s*astro|emdash\s*website|content\s*website)\b/i;
+    const emdashMobileKeywords = /\b(emdash\s*mobile|emdash\s*app|cms\s*mobile\s*app|content\s*mobile\s*app)\b/i;
+
+    if (emdashPluginKeywords.test(query)) {
+        logger.info('EmDash plugin detected from query keywords; using emdash-plugin template');
+        const pluginTemplate: TemplateDetails = createEmdashPluginTemplateDetails();
+        const selection: TemplateSelection = {
+            selectedTemplateName: 'emdash-plugin',
+            reasoning: 'EmDash CMS plugin request detected - using EmDash plugin template',
+            useCase: 'Other',
+            complexity: 'moderate',
+            styleSelection: 'Custom',
+            projectType: 'app',
+        } as TemplateSelection;
+        return { templateDetails: pluginTemplate, selection, projectType: 'app' };
+    }
+
+    if (emdashAstroKeywords.test(query)) {
+        logger.info('EmDash Astro theme detected from query keywords; using emdash-astro template');
+        const astroTemplate: TemplateDetails = createEmdashAstroThemeTemplateDetails();
+        const selection: TemplateSelection = {
+            selectedTemplateName: 'emdash-astro',
+            reasoning: 'EmDash Astro theme request detected - using EmDash Astro theme template',
+            useCase: 'Other',
+            complexity: 'moderate',
+            styleSelection: 'Custom',
+            projectType: 'app',
+        } as TemplateSelection;
+        return { templateDetails: astroTemplate, selection, projectType: 'app' };
+    }
+
+    if (emdashMobileKeywords.test(query)) {
+        logger.info('EmDash mobile app detected from query keywords; using emdash-mobile template');
+        const mobileTemplate: TemplateDetails = createEmdashMobileTemplateDetails();
+        const selection: TemplateSelection = {
+            selectedTemplateName: 'emdash-mobile',
+            reasoning: 'EmDash CMS mobile app request detected - using EmDash mobile template',
+            useCase: 'Other',
+            complexity: 'moderate',
+            styleSelection: 'Custom',
+            projectType: 'app',
+        } as TemplateSelection;
+        return { templateDetails: mobileTemplate, selection, projectType: 'app' };
+    }
+
     // Check for mobile/native app requests FIRST -- before LLM template selection
     // This ensures mobile queries always get the Expo template, not a web template
     // Match "mobile app", "mobile todo app", "mobile fitness tracker app", etc.

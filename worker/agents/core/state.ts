@@ -3,7 +3,8 @@ import type { PhasicBlueprint, AgenticBlueprint, PhaseConceptType ,
     Blueprint,
 } from '../schemas';
 import type { InferenceMetadata } from '../inferutils/config.types';
-import { BehaviorType, Plan, ProjectType, EasBuildState } from './types';
+import { BehaviorType, Plan, ProjectType, EasBuildState, EmdashDeploymentState, CreationMode } from './types';
+import type { EmDashSiteContext } from '../../../shared/types/emdash-context';
 
 export interface FileState extends FileOutputType {
     lastDiff: string;
@@ -64,7 +65,7 @@ export interface BaseProjectState {
     
     // Template metadata
     templateInitCommand?: string;
-    templateRenderMode?: 'sandbox' | 'browser' | 'mobile' | 'mobile-fullstack';
+    templateRenderMode?: 'sandbox' | 'browser' | 'mobile' | 'mobile-fullstack' | 'emdash-plugin' | 'emdash-astro';
 
     // D1 database (for mobile-fullstack projects)
     d1DatabaseId?: string;
@@ -74,6 +75,13 @@ export interface BaseProjectState {
 
     // EAS Build
     easBuild?: EasBuildState;
+
+    // EmDash deployment
+    emdashDeployment?: EmdashDeploymentState;
+
+    // EmDash context (injected from dashboard)
+    emdashContext?: EmDashSiteContext;
+    creationMode?: CreationMode;
 
     mvpGenerated: boolean;
     reviewingInitiated: boolean;

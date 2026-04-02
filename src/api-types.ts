@@ -59,6 +59,23 @@ export type {
   AgentAnalyticsResponseData,
 } from 'worker/api/controllers/analytics/types';
 
+// Billing API Types
+export type {
+  CustomerBillingResponseData,
+  UserBillingResponseData,
+} from 'worker/api/controllers/billing/types';
+
+// Marketplace API Types
+export type {
+  MarketplaceListResponseData,
+  MarketplacePluginResponseData,
+  MarketplacePublishResponseData,
+  MarketplaceInstallResponseData,
+  MarketplaceReviewResponseData,
+  MarketplaceRatingsResponseData,
+  MarketplaceRevenueResponseData,
+} from 'worker/api/controllers/marketplace/types';
+
 export type { PlatformStatusData } from 'worker/api/controllers/status/types';
 
 export type { CapabilitiesData } from 'worker/api/controllers/capabilities/types';

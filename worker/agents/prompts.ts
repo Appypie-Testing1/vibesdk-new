@@ -1155,6 +1155,269 @@ const styles = StyleSheet.create({
 `,
 }
 
+/**
+ * EmDash plugin strategy prompts.
+ * Used when templateDetails.renderMode === 'emdash-plugin'.
+ */
+export const EMDASH_PLUGIN_STRATEGIES = {
+    FRONTEND_FIRST_PLANNING: `<PHASES GENERATION STRATEGY>
+    **STRATEGY: Build a valid, installable EmDash CMS plugin iteratively**
+    The plugin is developed live: the user is provided a preview in the EmDash dev environment after each phase.
+    The core principle is to produce a valid plugin bundle with correct manifest-code alignment in every phase.
+    **Each phase must produce a buildable, validateable plugin.**
+
+    **First Phase: Plugin Foundation**
+        * Set up the definePlugin() entry point in src/index.ts with manifest import.
+        * Define manifest.ts with all required capabilities, hooks, routes, and storage declarations.
+        * Implement core lifecycle hooks (plugin:activate at minimum).
+        * Add at least one functional route or hook handler.
+        * Set up admin settings page if plugin requires configuration.
+        * Phase 1 builds the foundation -- subsequent phases add features and handlers.
+        * NEVER set lastPhase: true on the initial phase.
+
+    **Subsequent Phases: Feature Implementation**
+        * Add remaining hooks, routes, and storage operations.
+        * Ensure manifest stays in sync with code (every hook/route/storage in code is declared in manifest).
+        * Address any validation errors from previous phases.
+        * Implement admin UI for plugin management.
+
+    <PHASE GENERATION CONSTRAINTS>
+        * **Phase Count:** 1-3 phases for most plugins. Do not exceed 4 phases.
+        * **File Count:** 2-6 files per phase.
+        * **Manifest-Code Consistency:** Every ctx.network.fetch() call must have corresponding allowedHosts entry. Every hook handler must be declared in manifest.hooks. Every storage collection reference must be in manifest.storage.
+        * **Sandbox Constraints:** Use ctx.network.fetch() not global fetch(). Stay within 50ms CPU, 10 subrequests, 30s wall-time.
+        * **Route Validation:** All routes must use Zod for request validation where applicable.
+        * **DO NOT modify:** emdash.config.ts, tsconfig.json -- these are pre-configured.
+    </PHASE GENERATION CONSTRAINTS>
+</PHASES GENERATION STRATEGY>`,
+
+    UI_NON_NEGOTIABLES: `## EMDASH PLUGIN NON-NEGOTIABLES
+
+1) Plugin Structure
+- Default export from src/index.ts must be definePlugin({ ... })
+- manifest.ts must export a PluginManifest object
+- Every capability used in code must be declared in manifest.capabilities
+- Every host accessed via ctx.network.fetch() must be in manifest.allowedHosts
+
+2) Hook Handlers
+- All hook names must match EmDash lifecycle events exactly
+- Hooks receive (payload, ctx) where ctx is PluginContext
+- Keep hook handlers efficient (50ms CPU limit)
+
+3) Route Handlers
+- Routes receive (req, ctx) parameters
+- Use Zod validation for request body/params where applicable
+- Return Response objects (Response.json(), new Response(), etc.)
+- Mark webhook routes as public: true
+
+4) Storage API
+- Always use ctx.storage.collection('name') to access storage
+- Declare every collection in manifest.storage
+- Use structured data with consistent schemas
+- query() supports prefix, limit, and cursor options
+
+5) Network Access
+- ALWAYS use ctx.network.fetch() for HTTP requests
+- NEVER use global fetch() -- it will be blocked by the sandbox
+- Declare all external hosts in manifest.allowedHosts
+`,
+};
+
+/**
+ * EmDash Astro theme strategy prompts.
+ * Used when templateDetails.renderMode === 'emdash-astro'.
+ */
+export const EMDASH_ASTRO_STRATEGIES = {
+    FRONTEND_FIRST_PLANNING: `<PHASES GENERATION STRATEGY>
+    **STRATEGY: Build a content-driven Astro website integrated with EmDash CMS**
+    The theme is developed live: the user sees a preview via the Astro dev server after each phase.
+    The core principle is to establish a beautiful, content-driven site with proper EmDash integration.
+    **Each phase must produce a working, previewable Astro site.**
+
+    **First Phase: Complete Site Foundation**
+        * Build all main pages in src/pages/ using Astro file-based routing.
+        * Use getLiveCollection() and getLiveDocument() from @emdash/astro for content.
+        * Fall back to mock data from src/content/mock.ts when EmDash is unavailable.
+        * Create the base Layout.astro with navigation, header, and footer.
+        * Style with Tailwind CSS utility classes.
+        * Render rich content with @portabletext/astro PortableText component.
+        * Phase 1 builds the foundation -- subsequent phases add pages and polish.
+        * NEVER set lastPhase: true on the initial phase.
+
+    **Subsequent Phases: Pages & Polish**
+        * Add remaining pages (blog index, post detail, about, contact, etc.).
+        * Add dynamic routes with [slug].astro for content detail pages.
+        * Improve typography, spacing, responsiveness.
+        * Add SEO metadata from EmDash content.
+
+    <PHASE GENERATION CONSTRAINTS>
+        * **Phase Count:** 1-3 phases for most themes. Do not exceed 4 phases.
+        * **File Count:** 3-8 files per phase. Pages in src/pages/, layouts in src/layouts/, components in src/components/.
+        * **Astro Syntax:** Use .astro files with frontmatter (---) and template sections. Components can also be .tsx for interactive islands.
+        * **Content API:** Use getLiveCollection() and getLiveDocument() from @emdash/astro. Always provide mock data fallback.
+        * **Rich Content:** Use PortableText from @portabletext/astro for body content rendering.
+        * **Styling:** Tailwind CSS utility classes only. No custom CSS files unless absolutely necessary.
+        * **Images:** Use external URLs (unsplash, placehold.co). No binary assets.
+        * **DO NOT modify:** astro.config.mjs, live.config.ts -- these are pre-configured.
+    </PHASE GENERATION CONSTRAINTS>
+</PHASES GENERATION STRATEGY>`,
+
+    UI_NON_NEGOTIABLES: `## EMDASH ASTRO THEME NON-NEGOTIABLES
+
+1) Page Structure
+---
+import Layout from '../layouts/Layout.astro';
+import { getLiveCollection } from '@emdash/astro';
+import { mockPosts } from '../content/mock';
+const posts = (await getLiveCollection('posts').catch(() => null)) ?? mockPosts;
+---
+<Layout title="Page Title">
+  <!-- page content with Tailwind classes -->
+</Layout>
+
+2) Content Fetching
+- Use getLiveCollection(collectionName) for lists
+- Use getLiveDocument(collectionName, slug) for single items
+- Always catch and fall back to mock data for dev preview
+- Dynamic routes use Astro.params for slug/id
+
+3) Rich Content Rendering
+- Import { PortableText } from '@portabletext/astro'
+- Wrap in prose class for typography: <div class="prose prose-gray max-w-none">
+- Handle images, headings, lists, blockquotes within Portable Text
+
+4) Layout & Styling
+- Use Tailwind utility classes for all styling
+- Responsive: mobile-first with sm:, md:, lg: breakpoints
+- Consistent max-width containers: max-w-4xl mx-auto px-4
+- Proper semantic HTML: nav, main, footer, article, section
+
+5) SEO
+- Set <title> and <meta name="description"> from content
+- Use content.title, content.excerpt for metadata
+- Add Open Graph tags where possible
+`,
+};
+
+/**
+ * EmDash mobile app strategy prompts.
+ * Used when building mobile apps consuming EmDash Content API.
+ */
+export const EMDASH_MOBILE_STRATEGIES = {
+    FRONTEND_FIRST_PLANNING: `<PHASES GENERATION STRATEGY>
+    **STRATEGY: Build a React Native mobile app consuming EmDash CMS Content API**
+    The app is developed live: the user previews via Expo Go and web preview after each phase.
+    The core principle is to build a beautiful content-driven mobile experience using EmDash as the backend.
+    **Each phase must produce a working, previewable app with content displayed.**
+
+    **First Phase: Complete Mobile UI + Content Integration**
+        * Build ALL primary screens in the app/ directory using expo-router.
+        * Fetch content exclusively via emdashClient from lib/emdash-client.ts.
+        * Display content using React Native components and StyleSheet.create().
+        * Render rich text body content with PortableTextRenderer from lib/portable-text-renderer.tsx.
+        * Show images via emdashClient.getMediaUrl().
+        * The initial phase should display real content on every screen.
+        * NEVER set lastPhase: true on the initial phase.
+
+    **Subsequent Phases: Features & Polish**
+        * Add content search, filtering, favorites, bookmarks.
+        * Add detail screens for all content types.
+        * Improve navigation (tabs, drawers).
+        * Polish typography, spacing, transitions.
+
+    <PHASE GENERATION CONSTRAINTS>
+        * **Phase Count:** 1-3 phases for most apps. Do not exceed 4 phases.
+        * **File Count:** 2-8 files per phase.
+        * **Data Fetching:** ALL content MUST come from emdashClient. NEVER use raw fetch() or custom HTTP wrappers.
+        * **Rich Content:** Use PortableTextRenderer for body fields.
+        * **Media:** Use emdashClient.getMediaUrl() for all images.
+        * **React Native ONLY:** View, Text, TouchableOpacity, ScrollView, FlatList, Image, etc.
+        * **NO web elements:** No div, span, button, input, or HTML elements.
+        * **NO web styling:** No Tailwind, className, or CSS. Use only StyleSheet.create().
+        * **Icons:** Use emoji or Unicode symbols. No icon libraries.
+        * **DO NOT modify:** app.json, metro.config.js, lib/emdash-client.ts, lib/portable-text-renderer.tsx.
+    </PHASE GENERATION CONSTRAINTS>
+</PHASES GENERATION STRATEGY>`,
+
+    UI_NON_NEGOTIABLES: `## EMDASH MOBILE UI NON-NEGOTIABLES
+
+1) Screen Structure
+export default function Screen() {
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* screen content */}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  content: { padding: 16 },
+});
+
+2) Content Fetching (MANDATORY -- violations break the app)
+- ALWAYS use emdashClient from lib/emdash-client.ts
+- NEVER use raw fetch(), axios, or custom wrappers
+- Handle loading, error, and empty states
+- Example:
+  const [posts, setPosts] = useState<Post[]>([]);
+  useEffect(() => {
+    emdashClient.getCollection<Post>('posts').then(setPosts).catch(console.error);
+  }, []);
+
+3) Rich Content Rendering
+- Use PortableTextRenderer from lib/portable-text-renderer.tsx for body content
+- Handles headings, paragraphs, lists, blockquotes, images
+
+4) Media URLs
+- ALWAYS use emdashClient.getMediaUrl(mediaRef) for images
+- Pass to Image: <Image source={{ uri: emdashClient.getMediaUrl(ref) }} />
+
+5) Component & Styling Rules
+- React Native components only (View, Text, Image, etc.)
+- StyleSheet.create() for all styles
+- No Tailwind, className, or CSS
+- Consistent spacing and typography
+`,
+};
+
+/**
+ * EmDash site context prompt builder.
+ * Injects EmDash site context (content types, plugins, theme) into generation prompts.
+ */
+export const EMDASH_CONTEXT_STRATEGIES = {
+    plugin: (context: string) => `<EMDASH_SITE_CONTEXT>
+The target EmDash CMS instance has the following configuration:
+${context}
+
+Use this context to:
+- Generate a plugin that integrates with existing content types
+- Avoid conflicting with installed plugins
+- Reference correct collection names and field types
+</EMDASH_SITE_CONTEXT>`,
+
+    astro: (context: string) => `<EMDASH_SITE_CONTEXT>
+The target EmDash CMS instance has the following configuration:
+${context}
+
+Use this context to:
+- Build pages that display the available content types
+- Use correct collection names in getLiveCollection() calls
+- Style consistently with the existing theme if one is present
+</EMDASH_SITE_CONTEXT>`,
+
+    mobile: (context: string) => `<EMDASH_SITE_CONTEXT>
+The target EmDash CMS instance has the following configuration:
+${context}
+
+Use this context to:
+- Create screens for each available content type
+- Use correct collection names in emdashClient calls
+- Map content fields to appropriate UI components
+</EMDASH_SITE_CONTEXT>`,
+};
+
 export const STRATEGIES = {
     FRONTEND_FIRST_PLANNING: `<PHASES GENERATION STRATEGY>
     **STRATEGY: Scalable, Demoable Frontend and core application First / Iterative Feature Addition later**
