@@ -8,6 +8,9 @@
 	"main": "worker/index.ts",
 	"compatibility_date": "2025-01-15",
 	"compatibility_flags": ["nodejs_compat"],
+	"dev": {
+		"enable_containers": false
+	},
     "version_metadata": {
         "binding": "CF_VERSION_METADATA"
     },
@@ -70,14 +73,14 @@
 		}
 	],
 	"d1_databases": [
-		{
-			"binding": "DB",
-			"database_name": "vibesdk-db",
-			"database_id": "60fccd3b-21b1-44ea-bb30-a596b10d1bdc",
-			"migrations_dir": "migrations",
-			"remote": true
-		}
-	],
+        {
+            "binding": "DB",
+            "database_name": "vibesdk-db",
+            "database_id": "local",
+            "migrations_dir": "migrations",
+            "remote": false
+        }
+    ],
 	"durable_objects": {
 		"bindings": [
 			{
@@ -103,22 +106,22 @@
 		]
 	},
     "r2_buckets": [
-      {
-        "binding": "TEMPLATES_BUCKET",
-        "bucket_name": "vibesdk-templates",
-        "remote": true
-      },
-      {
-	"binding": "R2_BUCKET",
- 	"bucket_name": "appypievibe",
- 	"remote": true
-  	}
+        {
+            "binding": "TEMPLATES_BUCKET",
+            "bucket_name": "vibesdk-templates",
+            "remote": false
+        },
+        {
+            "binding": "R2_BUCKET",
+            "bucket_name": "appypievibe",
+            "remote": false
+        }
     ],
     "kv_namespaces": [
         {
             "binding": "VibecoderStore",
-            "id": "a72896494bdd4991b3ab1cfec53903e2",
-            "remote": true
+            "id": "local",
+            "remote": false
         }
     ],
 	"migrations": [
@@ -147,17 +150,6 @@
             ],
             "tag": "v4"
         }
-	],
-	"routes": [
-        {
-            "pattern": "vibesnappy.appypie.com",
-            "custom_domain": true
-        },
-        {
-            "pattern": "*vibesnappy.appypie.com/*",
-            "custom_domain": false,
-            "zone_id": "7662520cb743a30c63d76c24bcb0e9c6"
-        }
     ],
 	"vars": {
         "TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
@@ -179,10 +171,11 @@
             },
             "version": "1.0.0"
         },
-        "CUSTOM_DOMAIN": "vibesnappy.appypie.com",
+        "CUSTOM_DOMAIN": "localhost:5173",
+        "ENVIRONMENT": "dev",
         "MAX_SANDBOX_INSTANCES": "10",
         "SANDBOX_INSTANCE_TYPE": "standard-3"
     },
-	"workers_dev": false,
-	"preview_urls": false
+	"workers_dev": true,
+	"preview_urls": true
 }
