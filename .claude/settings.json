@@ -64,6 +64,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "if": "Edit(worker/**/*.ts)|Write(worker/**/*.ts)",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Check the edited file for these two violations ONLY. Report ONLY if you find a violation, otherwise say nothing:\n1. Usage of 'any' type (except in type guards or explicit casts with a comment explaining why)\n2. Usage of 'import.meta.env' (Worker code must use 'env' from bindings, not Vite env vars)\nIf you find a violation, report: VIOLATION: [file] [line] [description]. Be terse."
+          }
+        ]
       }
     ]
   }
