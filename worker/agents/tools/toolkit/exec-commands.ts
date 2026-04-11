@@ -31,15 +31,15 @@ export function createExecCommandsTool(
 				});
 				const output = await agent.execCommands(commands, shouldSave, timeout);
 				
-				// Truncate output to max 1000 characters per result
-				const MAX_OUTPUT_LENGTH = 1000;
+				// Truncate output to max 2500 characters per result
+				const MAX_OUTPUT_LENGTH = 2500;
 				const truncatedOutput = {
 					...output,
 					results: output.results.map((result) => ({
 						...result,
 						output:
 							result.output.length > MAX_OUTPUT_LENGTH
-								? result.output.substring(0, MAX_OUTPUT_LENGTH) + '\n[truncated to max 1000 characters]'
+								? result.output.substring(0, MAX_OUTPUT_LENGTH) + `\n[truncated to max ${MAX_OUTPUT_LENGTH} characters]`
 								: result.output,
 					})),
 				};

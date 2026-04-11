@@ -1,0 +1,169 @@
+/**
+ * Staging environment configuration for vibesdk
+ * Deploy with: wrangler deploy --config wrangler.staging.jsonc
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "vibesdk-staging",
+	"main": "worker/index.ts",
+	"compatibility_date": "2025-01-15",
+	"compatibility_flags": ["nodejs_compat"],
+	"version_metadata": {
+		"binding": "CF_VERSION_METADATA"
+	},
+	"assets": {
+		"directory": "dist",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": true,
+		"binding": "ASSETS"
+	},
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1
+	},
+	"unsafe": {
+		"bindings": [
+			{
+				"name": "API_RATE_LIMITER",
+				"type": "ratelimit",
+				"namespace_id": "2101",
+				"simple": { "limit": 10000, "period": 60 }
+			},
+			{
+				"name": "AUTH_RATE_LIMITER",
+				"type": "ratelimit",
+				"namespace_id": "2102",
+				"simple": { "limit": 1000, "period": 60 }
+			}
+		]
+	},
+	"ai": {
+		"binding": "AI",
+		"remote": true
+	},
+	"dispatch_namespaces": [
+		{
+			"binding": "DISPATCHER",
+			"namespace": "orange-build-default-namespace",
+			"remote": true
+		}
+	],
+	"containers": [
+		{
+			"class_name": "UserAppSandboxService",
+			"image": "registry.cloudflare.com/vibesdk-production-userappsandboxservice:727be683",
+			"instance_type": "standard-3",
+			"rollout_step_percentage": 100,
+			"max_instances": 20
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "vibesdk-db-staging",
+			// TODO: Replace with your D1 database ID after running:
+			// wrangler d1 create vibesdk-db-staging
+			"database_id": "49f69793-2185-4c3e-9f64-47b74dd89316",
+			"migrations_dir": "migrations",
+			"remote": true
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"class_name": "CodeGeneratorAgent",
+				"name": "CodeGenObject"
+			},
+			{
+				"class_name": "UserAppSandboxService",
+				"name": "Sandbox"
+			},
+			{
+				"class_name": "DORateLimitStore",
+				"name": "DORateLimitStore"
+			},
+			{
+				"class_name": "UserSecretsStore",
+				"name": "UserSecretsStore"
+			},
+			{
+				"class_name": "GlobalDurableObject",
+				"name": "GlobalDurableObject"
+			}
+		]
+	},
+	"r2_buckets": [
+		{
+			"binding": "TEMPLATES_BUCKET",
+			"bucket_name": "vibesdk-templates",
+			"remote": true
+		},
+		{
+			"binding": "R2_BUCKET",
+			"bucket_name": "appypievibe",
+			"remote": true
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "VibecoderStore",
+			// TODO: Replace with your KV namespace ID after running:
+			// wrangler kv namespace create VibecoderStore-staging
+			"id": "d7de28ced65f4559b988fa2507a560cb",
+			"remote": true
+		}
+	],
+	"migrations": [
+		{
+			"new_sqlite_classes": [
+				"CodeGeneratorAgent",
+				"UserAppSandboxService"
+			],
+			"tag": "v1"
+		},
+		{
+			"new_sqlite_classes": [
+				"DORateLimitStore"
+			],
+			"tag": "v2"
+		},
+		{
+			"new_sqlite_classes": [
+				"UserSecretsStore"
+			],
+			"tag": "v3"
+		},
+		{
+			"new_sqlite_classes": [
+				"GlobalDurableObject"
+			],
+			"tag": "v4"
+		}
+	],
+	"vars": {
+		"TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
+		"DISPATCH_NAMESPACE": "orange-build-default-namespace",
+		"ENABLE_READ_REPLICAS": "true",
+		"CLOUDFLARE_AI_GATEWAY": "vibesdk-gateway",
+		"PLATFORM_CAPABILITIES": {
+			"features": {
+				"app": {
+					"enabled": true
+				},
+				"presentation": {
+					"enabled": false
+				},
+				"general": {
+					"enabled": false
+				}
+			},
+			"version": "1.0.0"
+		},
+		"CUSTOM_DOMAIN": "vibesdk-staging.appypie.workers.dev",
+		"MAX_SANDBOX_INSTANCES": "10",
+		"SANDBOX_INSTANCE_TYPE": "standard-3"
+	},
+	// Staging uses workers.dev URL (no custom domain)
+	"workers_dev": true,
+	"preview_urls": true
+}

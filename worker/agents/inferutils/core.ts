@@ -728,6 +728,7 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
         */
 
         let content = '';
+        let responseFinishReason: string | null = null;
         if (stream) {
             // If streaming is enabled, handle the stream response
             if (response instanceof Stream) {
@@ -759,8 +760,9 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                     // Process content
                     content += delta?.content || '';
                     const slice = content.slice(streamIndex);
-                    const finishReason = (event as ChatCompletionChunk).choices[0]?.finish_reason;
-                    if (slice.length >= stream.chunk_size || finishReason != null) {
+                    const chunkFinishReason = (event as ChatCompletionChunk).choices[0]?.finish_reason;
+                    if (chunkFinishReason) responseFinishReason = chunkFinishReason;
+                    if (slice.length >= stream.chunk_size || chunkFinishReason != null) {
                         stream.onChunk(slice);
                         streamIndex += slice.length;
                     }
@@ -808,16 +810,29 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             }
         } else {
             // If not streaming, get the full response content (response is ChatCompletion)
-            content = (response as OpenAI.ChatCompletion).choices[0]?.message?.content || '';
-            const allToolCalls = ((response as OpenAI.ChatCompletion).choices[0]?.message?.tool_calls as ChatCompletionMessageFunctionToolCall[] || []);
+            const completion = response as OpenAI.ChatCompletion;
+            content = completion.choices[0]?.message?.content || '';
+            responseFinishReason = completion.choices[0]?.finish_reason || null;
+            const allToolCalls = (completion.choices[0]?.message?.tool_calls as ChatCompletionMessageFunctionToolCall[] || []);
             const droppedNonStream = allToolCalls.filter(tc => !tc.function.name || tc.function.name.trim() === '');
             if (droppedNonStream.length) {
                 console.warn(`[TOOL_CALL_WARNING] Dropping ${droppedNonStream.length} non-stream tool_call(s) without function name`, droppedNonStream);
             }
             toolCalls = allToolCalls.filter(tc => tc.function.name && tc.function.name.trim() !== '');
             // Also print the total number of tokens used in the prompt
-            const totalTokens = (response as OpenAI.ChatCompletion).usage?.total_tokens;
+            const totalTokens = completion.usage?.total_tokens;
             console.log(`Total tokens used in prompt: ${totalTokens}`);
+        }
+
+        // Detect truncation: if response was cut off due to max_completion_tokens
+        // and no tool calls were produced, throw InferError for retry
+        if (responseFinishReason === 'length' && toolCalls.length === 0) {
+            console.warn(`[TRUNCATION] Response truncated (finish_reason=length), content length: ${content.length}, actionKey: ${actionKey}`);
+            throw new InferError(
+                'Response truncated due to max_completion_tokens limit',
+                content,
+                toolCallContext
+            );
         }
 
         const assistantMessage = { role: "assistant" as MessageRole, content, tool_calls: toolCalls };

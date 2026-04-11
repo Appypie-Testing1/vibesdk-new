@@ -266,9 +266,15 @@ export class AgenticCodingBehavior extends BaseCodingBehavior<AgenticState> impl
         };
     }
     
+    private static readonly MAX_BUILD_ATTEMPTS = 5;
+
     async build(): Promise<void> {
         let attempt = 0;
         while (!this.isMVPGenerated() || this.state.pendingUserInputs.length > 0) {
+            if (attempt >= AgenticCodingBehavior.MAX_BUILD_ATTEMPTS) {
+                this.logger.warn(`Build loop exceeded ${AgenticCodingBehavior.MAX_BUILD_ATTEMPTS} attempts, stopping to prevent runaway generation`);
+                break;
+            }
             await this.executeGeneration(attempt);
             attempt++;
         }

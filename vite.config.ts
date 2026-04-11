@@ -28,7 +28,7 @@ export default defineConfig({
 		react(),
 		svgr(),
 		cloudflare({
-			configPath: 'wrangler.jsonc',
+			configPath: process.env.WRANGLER_CONFIG ?? 'wrangler.jsonc',
 		}),
 		tailwindcss(),
 		// sentryVitePlugin({

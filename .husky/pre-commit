@@ -12,6 +12,12 @@ if [ "${SKIP_TESTS:-}" = "1" ]; then
   exit 0
 fi
 
+# 0) Code review graph change detection
+if command -v code-review-graph >/dev/null 2>&1; then
+  echo "[pre-commit] Running code-review-graph change detection"
+  code-review-graph detect-changes --brief || true
+fi
+
 if ! command -v bun >/dev/null 2>&1; then
   echo "[pre-commit] bun not found; skipping checks"
   exit 0

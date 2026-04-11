@@ -1,7 +1,6 @@
 import { FileTreeNode, RuntimeError, StaticAnalysisResponse, TemplateDetails } from "../services/sandbox/sandboxTypes";
 import { TemplateRegistry } from "./inferutils/schemaFormatters";
-import z from 'zod';
-import { PhasicBlueprint, AgenticBlueprint, BlueprintSchemaLite, AgenticBlueprintSchema, FileOutputType, PhaseConceptLiteSchema, PhaseConceptSchema, PhaseConceptType, TemplateSelection, Blueprint } from "./schemas";
+import { PhasicBlueprint, AgenticBlueprint, BlueprintSchemaLite, AgenticBlueprintSchema, FileOutputType, PhaseConceptSchema, PhaseConceptType, TemplateSelection, Blueprint } from "./schemas";
 import { IssueReport } from "./domain/values/IssueReport";
 import { FileState, MAX_PHASES } from "./core/state";
 import { CODE_SERIALIZERS, CodeSerializerType } from "./utils/codeSerializers";
@@ -1295,15 +1294,17 @@ export const USER_PROMPT_FORMATTER = {
                 // Split phases into older (redacted) and last
                 const olderPhases = phases.slice(0, -1);
                 
-                // Serialize older phases without files, recent phases with files
+                // Serialize older phases with file paths (not contents) for context
                 if (olderPhases.length > 0) {
-                    const olderPhasesLite = olderPhases.map(({ name, description }) => ({ name, description }));
-                    phasesText += TemplateRegistry.markdown.serialize({ phases: olderPhasesLite }, z.object({ phases: z.array(PhaseConceptLiteSchema) }));
+                    phasesText += olderPhases.map(phase => {
+                        const fileList = phase.files?.map(f => `  - ${f.path}`).join('\n') || '';
+                        return `### ${phase.name}\n${phase.description}${fileList ? '\nFiles:\n' + fileList : ''}`;
+                    }).join('\n\n');
                 }
                 phasesText += '\n\nLast Phase Implemented:\n' + TemplateRegistry.markdown.serialize(lastPhase, PhaseConceptSchema);
                 
-                const redactionNotice = olderPhases.length > 0 
-                    ? `**Note:** File details for the first ${olderPhases.length} phase(s) have been redacted to optimize context. Only the last phase includes complete file information.\n` 
+                const redactionNotice = olderPhases.length > 0
+                    ? `**Note:** Only file paths are shown for the first ${olderPhases.length} phase(s). The last phase includes complete file information.\n`
                     : '';
 
                 phasesText = COMPLETED_PHASES_CONTEXT.replaceAll('{{phases}}', phasesText).replaceAll('{{redactionNotice}}', redactionNotice);
