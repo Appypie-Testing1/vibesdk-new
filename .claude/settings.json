@@ -15,6 +15,11 @@
       "mcp__code-review-graph__*"
     ]
   },
+  "statusLine": {
+    "type": "command",
+    "command": ".claude/hooks/statusline.sh",
+    "refreshInterval": 30
+  },
   "hooks": {
     "SessionStart": [
       {
