@@ -18,6 +18,48 @@ if command -v code-review-graph >/dev/null 2>&1; then
   code-review-graph detect-changes --brief || true
 fi
 
+# 0.5) Claude setup reference check
+# Checks if staged deletions/renames would break .claude/ agent/skill references
+if [ "${SKIP_REF_CHECK:-}" = "1" ]; then
+  echo "[pre-commit] SKIP_REF_CHECK=1 set; skipping reference check"
+else
+  EXTRACT_SCRIPT=".claude/hooks/lib/extract-refs.sh"
+  if [ -x "$EXTRACT_SCRIPT" ]; then
+    # Get staged deletions and renames
+    DELETED_OR_RENAMED=$(git diff --cached --name-only --diff-filter=DR 2>/dev/null || true)
+    if [ -n "$DELETED_OR_RENAMED" ]; then
+      # Get all referenced paths
+      REF_PATHS=$("$EXTRACT_SCRIPT" | cut -d: -f2 | sort -u)
+
+      BROKEN=""
+      BROKEN_COUNT=0
+
+      while IFS= read -r changed_file; do
+        if echo "$REF_PATHS" | grep -qxF "$changed_file"; then
+          # Find which agent/skill references this path
+          SOURCES=$("$EXTRACT_SCRIPT" | grep ":${changed_file}$" | cut -d: -f1 | sort -u)
+          BROKEN="${BROKEN}\n  ${changed_file} (DELETED/RENAMED)"
+          while IFS= read -r src; do
+            BROKEN="${BROKEN}\n    -> referenced in: ${src}"
+          done <<< "$SOURCES"
+          BROKEN_COUNT=$((BROKEN_COUNT + 1))
+        fi
+      done <<< "$DELETED_OR_RENAMED"
+
+      if [ "$BROKEN_COUNT" -gt 0 ]; then
+        echo "[pre-commit] Claude setup reference check"
+        echo "BLOCKED: Staged changes would break .claude/ references:"
+        printf "$BROKEN\n"
+        echo ""
+        echo "  Fix: Update the agent/skill files to reflect the new paths, then re-stage."
+        echo "  Bypass: SKIP_REF_CHECK=1 git commit ..."
+        exit 1
+      fi
+    fi
+    echo "[pre-commit] Reference check: no broken .claude/ references"
+  fi
+fi
+
 if ! command -v bun >/dev/null 2>&1; then
   echo "[pre-commit] bun not found; skipping checks"
   exit 0
