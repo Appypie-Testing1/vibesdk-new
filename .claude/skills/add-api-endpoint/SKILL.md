@@ -85,18 +85,21 @@ export class MyController extends BaseController {
 
 **File:** `worker/api/routes/<domain>Routes.ts`
 
+Uses `adaptController` (from `worker/api/honoAdapter.ts`) and `setAuthLevel` middleware:
+
 ```typescript
 import { Hono } from 'hono';
-import type { AppEnv } from '../../types/appenv';
+import { AppEnv } from '../../types/appenv';
+import { adaptController } from '../honoAdapter';
+import { AuthConfig, setAuthLevel } from '../../middleware/auth/routeAuth';
 import { MyController } from '../controllers/<domain>/controller';
 
 export function setupMyRoutes(app: Hono<AppEnv>): void {
-  app.get('/api/my-endpoint', async (c) => {
-    const response = await MyController.getItem(c.req.raw, c.env, c.executionCtx, c.get('routeContext'));
-    return c.json(response.body, response.status);
-  });
+  app.get('/api/my-endpoint', setAuthLevel(AuthConfig.authenticated), adaptController(MyController, MyController.getItem));
 }
 ```
+
+`adaptController` handles the Hono-to-controller argument conversion (builds `RouteContext` from Hono context). `setAuthLevel` sets the auth requirement (`authenticated`, `optional`, or `public`).
 
 ### 5. Register Route
 
