@@ -75,3 +75,9 @@ Do not proceed past this point without explicit user instruction.
 
 - Cloudflare WARP (full mode) can interfere with deployment tunnels
 - Ensure `.prod.vars` exists and has valid credentials before deploying
+
+## Expert Agents
+
+For complex scenarios, delegate to these domain experts:
+- **sandbox-expert**: Container/tunnel issues, WARP interference, staging vs production
+- **security-auditor**: Pre-deploy security review of changes touching auth, secrets, or middleware

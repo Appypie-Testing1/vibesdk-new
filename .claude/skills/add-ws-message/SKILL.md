@@ -94,3 +94,10 @@ Expected: No type errors.
 - Constants: `worker/agents/constants.ts`
 - Backend handler: `worker/agents/core/websocket.ts`
 - Frontend handler: `src/routes/chat/utils/handle-websocket-message.ts`
+
+## Expert Agents
+
+For complex scenarios, delegate to these domain experts:
+- **websocket-expert**: Message deduplication, state restoration, reconnect behavior
+- **durable-objects-expert**: If the message changes CodeGenState fields
+- **convention-checker**: Verify type naming and handler patterns

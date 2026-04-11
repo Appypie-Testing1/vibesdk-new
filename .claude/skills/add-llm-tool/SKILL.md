@@ -89,3 +89,10 @@ Existing tools to study for patterns:
 - Simple tool: `worker/agents/tools/toolkit/read-files.ts`
 - Tool with resource types: `worker/agents/tools/toolkit/regenerate-file.ts`
 - Tool with state guards: `worker/agents/tools/toolkit/deep-debugger.ts`
+
+## Expert Agents
+
+For complex scenarios, delegate to these domain experts:
+- **inference-expert**: Tool execution pipeline, resource declarations, loop detection implications
+- **durable-objects-expert**: If the tool needs to access or modify agent state
+- **convention-checker**: Verify the tool follows the factory pattern correctly

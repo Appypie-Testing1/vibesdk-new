@@ -126,3 +126,10 @@ async getMyItem(id: string): Promise<ApiResponse<MyNewData>> {
 
 Run: `bun run typecheck`
 Expected: No type errors.
+
+## Expert Agents
+
+For complex scenarios, delegate to these domain experts:
+- **database-expert**: Schema design, complex queries, migration implications
+- **convention-checker**: Verify the new endpoint follows all project patterns
+- **security-auditor**: If the endpoint handles user input, auth tokens, or sensitive data

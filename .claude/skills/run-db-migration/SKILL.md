@@ -70,3 +70,9 @@ Do not proceed past this point without explicit user instruction.
 - Staging: uses `wrangler.staging.jsonc` with `vibesdk-db-staging`
 - Schema: `worker/database/schema.ts`
 - Migrations output: `/migrations`
+
+## Expert Agents
+
+For complex scenarios, delegate to these domain experts:
+- **database-expert**: Schema design, index strategy, migration safety, Drizzle patterns
+- **security-auditor**: If the migration touches user data, encryption, or access control
