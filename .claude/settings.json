@@ -1,4 +1,20 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(bun run typecheck)",
+      "Bash(bun run test*)",
+      "Bash(bun run lint)",
+      "Bash(bun run knip*)",
+      "Bash(bun run build)",
+      "Bash(bun run db:check)",
+      "Bash(bun run db:generate)",
+      "Bash(bun run db:migrate:local)",
+      "Bash(git *)",
+      "Bash(code-review-graph *)",
+      "Bash(.claude/hooks/*)",
+      "mcp__code-review-graph__*"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
