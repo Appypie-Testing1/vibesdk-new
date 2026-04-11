@@ -4,12 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+**Setup (first-time):**
+```bash
+bun install          # Install dependencies
+bun run setup        # Interactive first-time setup (Cloudflare, D1, env vars)
+```
+
 **Development:**
 ```bash
-bun run dev          # Start frontend + worker dev server (Vite + Cloudflare)
+bun run dev          # Start Vite dev server (DEV_MODE=true)
 bun run typecheck    # TypeScript type-check without emitting
 bun run lint         # ESLint
 bun run build        # tsc + vite build (produces dist/)
+bun run knip         # Dead code / unused export detection
+bun run knip:fix     # Auto-fix unused exports
 ```
 
 **Testing (root — runs in Cloudflare Workers via vitest-pool-workers):**
@@ -17,6 +25,7 @@ bun run build        # tsc + vite build (produces dist/)
 bun run test                        # Run all tests once
 bun run test:watch                  # Watch mode
 bun run test:coverage               # Coverage report
+bun run test:integration            # Run SDK integration tests (needs VIBESDK_RUN_INTEGRATION_TESTS=1)
 vitest run path/to/file.test.ts     # Run a single test file
 ```
 
@@ -40,10 +49,8 @@ bun run deploy               # Deploy via scripts/deploy.ts (reads .prod.vars)
 ```
 
 ## Communication Style
-- Be professional, concise, and direct
-- Do NOT use emojis in code reviews, changelogs, or any generated content. You may use professional visual indicators or favor markdown formatting over emojis.
-- Focus on substance over style
-- Use clear technical language
+- Professional, concise, direct. No emojis in code, comments, reviews, or generated content.
+- Substance over style; clear technical language.
 
 ## Project Overview
 vibesdk is an AI-powered full-stack application generation platform built on Cloudflare infrastructure.
@@ -59,21 +66,24 @@ vibesdk is an AI-powered full-stack application generation platform built on Clo
 **Project Structure**
 
 **Frontend (`/src`):**
-- React application with 80+ components
+- React application with components, hooks, and route views
 - Single source of truth for types: `src/api-types.ts`
 - All API calls in `src/lib/api-client.ts`
 - Custom hooks in `src/hooks/`
 - Route components in `src/routes/`
 
 **Backend (`/worker`):**
-- Entry point: `worker/index.ts` (7860 lines)
-- Agent system: `worker/agents/` (88 files)
-  - Core: SimpleCodeGeneratorAgent (Durable Object, 2800+ lines)
-  - Operations: PhaseGeneration, PhaseImplementation, UserConversationProcessor
-  - Tools: tools for LLM (read-files, run-analysis, regenerate-file, etc.)
+- Entry point: `worker/index.ts` (routes to API/agent handlers)
+- Agent system: `worker/agents/`
+  - Core: `CodeGeneratorAgent` in `worker/agents/core/codingAgent.ts` (extends `Agent` from "agents" package)
+  - Behaviors: `worker/agents/core/behaviors/` (phasic, agentic coding strategies)
+  - Objectives: `worker/agents/core/objectives/` (project objectives)
+  - Operations: PhaseGeneration, PhaseImplementation, UserConversationProcessor, DeepDebugger
+  - Tools: `worker/agents/tools/toolkit/` (read-files, run-analysis, regenerate-file, etc.)
   - Git: isomorphic-git with SQLite filesystem
 - Database: `worker/database/` (Drizzle ORM, D1)
-- Services: `worker/services/` (sandbox, code-fixer, oauth, rate-limit, secrets)
+- Middleware: `worker/middleware/` (CSRF, websocket security)
+- Services: `worker/services/` (one directory per concern -- sandbox, secrets, oauth, rate-limit, deployer, etc.)
 - API: `worker/api/` (routes, controllers, handlers)
 
 **Other:**
@@ -81,24 +91,21 @@ vibesdk is an AI-powered full-stack application generation platform built on Clo
 - `/sdk` - Client SDK (`@cf-vibesdk/sdk`), separate `package.json`, own bun-based tests
 - `/migrations` - D1 database migrations
 - `/container` - Sandbox container tooling
-- `/templates` - Project scaffolding templates
-
-**Core Architecture:**
-- Each chat session is a Durable Object instance (SimpleCodeGeneratorAgent)
-- State machine drives code generation (IDLE → PHASE_GENERATING → PHASE_IMPLEMENTING → REVIEWING)
-- Git history stored in SQLite, full clone protocol support
-- WebSocket for real-time streaming and state synchronization
+- `/scripts` - Deploy, setup, and undeploy scripts
+- `/docs` - Setup guide, architecture diagrams, LLM docs, Postman collection
+- `/debug-tools` - Python/TS analysis scripts (AI request analyzer, conversation analyzer, state analyzer)
 
 ## Key Architectural Patterns
 
-**Durable Objects Pattern:**
-- Each chat session = Durable Object instance
-- Persistent state in SQLite (blueprint, files, history)
-- Ephemeral state in memory (abort controllers, active promises)
+**Agent Pattern:**
+- Each chat session = `CodeGeneratorAgent` instance (extends `Agent` from Cloudflare's "agents" framework, NOT raw DurableObject)
+- Behavior selected at init via `behaviorType` prop: `'phasic'` (default, phase-based generation) or `'agentic'` (autonomous agent-driven)
+- Persistent state in SQLite (blueprint, files, history); ephemeral state in memory (abort controllers, active promises)
 - Single-threaded per instance
+- Separate Durable Objects for rate limiting (`DORateLimitStore`), secrets (`UserSecretsStore`), global state (`GlobalDurableObject`)
 
 **State Machine:**
-IDLE → PHASE_GENERATING → PHASE_IMPLEMENTING → REVIEWING → IDLE
+IDLE -> PHASE_GENERATING -> PHASE_IMPLEMENTING -> REVIEWING -> IDLE
 
 **CodeGenState (Agent State):**
 - Project Identity: blueprint, projectName, templateName
@@ -114,10 +121,12 @@ IDLE → PHASE_GENERATING → PHASE_IMPLEMENTING → REVIEWING → IDLE
 - Message deduplication (tool execution causes duplicates)
 
 **Git System:**
-- isomorphic-git with SQLite filesystem adapter
+- `GitVersionControl` class wraps isomorphic-git; key methods: commit(), reset(), log(), show()
+- SQLite filesystem adapter: `worker/agents/git/fs-adapter.ts`
 - Full commit history in Durable Object storage
 - Git clone protocol support (rebase on template)
-- FileManager auto-syncs from git via callbacks
+- FileManager auto-syncs from git via callback registration
+- Access control: user conversations get safe commands, debugger gets full access
 
 ## Common Development Tasks
 
@@ -125,7 +134,7 @@ IDLE → PHASE_GENERATING → PHASE_IMPLEMENTING → REVIEWING → IDLE
 Edit `/worker/agents/inferutils/config.ts`. There are two configs: `DEFAULT_AGENT_CONFIG` (Gemini-only, used when `PLATFORM_MODEL_PROVIDERS` env var is unset) and `PLATFORM_AGENT_CONFIG` (multi-provider, used at build.cloudflare.dev). The exported `AGENT_CONFIG` selects between them at runtime.
 
 **Modify Conversation Agent Behavior:**
-Edit `/worker/agents/operations/UserConversationProcessor.ts` (system prompt line 50)
+Edit `/worker/agents/operations/UserConversationProcessor.ts` (SYSTEM_PROMPT at line ~74)
 
 **Add New WebSocket Message:**
 1. Add type to `worker/api/websocketTypes.ts`
@@ -157,19 +166,12 @@ Edit `/worker/agents/operations/UserConversationProcessor.ts` (system prompt lin
 
 **User Secrets Store (Durable Object):**
 - Location: `/worker/services/secrets/`
-- Purpose: Encrypted storage for user API keys with key rotation
-- Architecture: One DO per user, XChaCha20-Poly1305 encryption, SQLite backend
-- Key derivation: MEK → UMK → DEK (hierarchical PBKDF2)
-- Features: Key rotation, soft deletion, access tracking, expiration support
+- Purpose: Encrypted storage for user API keys
+- Architecture: One DO per user, AES-GCM encryption, SQLite backend
+- Key model: VMK (Vault Master Key, derived client-side, never stored on server) + SK (Session Key, random per-session). Server holds only `AES-GCM(SK, VMK)` in DO memory.
+- DB dump = useless encrypted blobs; server memory = needs client SK
 - RPC Methods: Return `null`/`boolean` on error, never throw exceptions
-- Testing: 90 comprehensive tests in `/test/worker/services/secrets/`
-
-**Git System:**
-- GitVersionControl class wraps isomorphic-git
-- Key methods: commit(), reset(), log(), show()
-- FileManager auto-syncs via callback registration
-- Access control: user conversations get safe commands, debugger gets full access
-- SQLite filesystem adapter (`/worker/agents/git/fs-adapter.ts`)
+- Tests: `worker/services/secrets/UserSecretsStore.test.ts`
 
 **Abort Controller Pattern:**
 - `getOrCreateAbortController()` reuses controller for nested operations
@@ -212,20 +214,19 @@ Edit `/worker/agents/operations/UserConversationProcessor.ts` (system prompt lin
 - Utilities/Hooks: kebab-case.ts
 - Backend Services: PascalCase.ts
 
-## Common Pitfalls
+## Environment
 
-**Don't:**
-- Use `any` type (find or create proper types)
-- Copy-paste code (extract to utilities)
-- Use Vite env variables in Worker code
-- Forget to update types when changing APIs
-- Create new implementations without searching for existing ones
-- Use emojis in code or comments
-- Write verbose AI-like comments
+Local dev requires a `.dev.vars` file (copy from `.dev.vars.example`). Key variables:
+```
+CLOUDFLARE_API_TOKEN   # Cloudflare API access
+CLOUDFLARE_ACCOUNT_ID  # Your Cloudflare account
+JWT_SECRET             # Auth token signing
+WEBHOOK_SECRET         # Webhook verification
+```
+Cloudflare resources needed: KV namespace (`VibecoderStore`), D1 database (`vibesdk-db`), R2 bucket (`vibesdk-templates`). IDs go in `wrangler.jsonc`. Full walkthrough: `docs/setup.md`.
 
-**Do:**
-- Search codebase thoroughly before creating new code
-- Follow existing patterns consistently
-- Keep comments concise and purposeful
-- Write production-ready code
-- Test thoroughly before submitting
+## Gotchas
+
+- **Vite env vars in Workers:** Vite env variables (`import.meta.env.*`) are NOT available in Worker code. Use `env` from the Worker bindings instead.
+- **Cloudflare WARP:** WARP (full mode) breaks anonymous Cloudflared tunnels used for local dev previews. Disable WARP or switch to DNS-only (1.1.1.1) mode while developing locally.
+- **First-time setup:** See `docs/setup.md` for the full setup guide including Cloudflare API token, D1 database, and env var configuration.
