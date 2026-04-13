@@ -214,6 +214,21 @@ Edit `/worker/agents/operations/UserConversationProcessor.ts` (SYSTEM_PROMPT at 
 - Utilities/Hooks: kebab-case.ts
 - Backend Services: PascalCase.ts
 
+## Debugging and Security Hotspots
+
+When debugging, check these subsystem-specific failure modes first:
+- **Durable Objects / State:** state machine transitions in `worker/agents/core/codingAgent.ts`; abort controller cleanup; `CodeGenState` field consistency
+- **WebSocket:** all three layers must stay in sync -- `worker/api/websocketTypes.ts`, `worker/agents/core/websocket.ts`, `src/routes/chat/utils/handle-websocket-message.ts`; verify message deduplication; test reconnect state restoration
+- **Inference / LLM:** model config in `worker/agents/inferutils/config.ts`; tool execution loop; loop detection triggers
+- **Database:** migration state (`bun run db:check`); service query logic; Drizzle schema types
+- **Sandbox:** container lifecycle; Cloudflare tunnel status; WARP interference
+
+When reviewing or editing, these paths require extra scrutiny:
+- `worker/services/secrets/` -- vault crypto (Argon2id/AES-GCM); RPC methods must return `null`/`boolean` on error, never throw
+- `worker/middleware/` -- CSRF, WebSocket security
+- `worker/utils/authUtils.ts` -- authentication, JWT signing
+- Any file handling user input or external data (injection, authz checks)
+
 ## Environment
 
 Local dev requires a `.dev.vars` file (copy from `.dev.vars.example`). Key variables:
@@ -230,42 +245,3 @@ Cloudflare resources needed: KV namespace (`VibecoderStore`), D1 database (`vibe
 - **Vite env vars in Workers:** Vite env variables (`import.meta.env.*`) are NOT available in Worker code. Use `env` from the Worker bindings instead.
 - **Cloudflare WARP:** WARP (full mode) breaks anonymous Cloudflared tunnels used for local dev previews. Disable WARP or switch to DNS-only (1.1.1.1) mode while developing locally.
 - **First-time setup:** See `docs/setup.md` for the full setup guide including Cloudflare API token, D1 database, and env var configuration.
-
-<!-- code-review-graph MCP tools -->
-## MCP Tools: code-review-graph
-
-**IMPORTANT: This project has a knowledge graph. ALWAYS use the
-code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
-
-### When to use graph tools FIRST
-
-- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
-- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
-- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
-- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
-- **Architecture questions**: `get_architecture_overview` + `list_communities`
-
-Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
-
-### Key Tools
-
-| Tool | Use when |
-|------|----------|
-| `detect_changes` | Reviewing code changes — gives risk-scored analysis |
-| `get_review_context` | Need source snippets for review — token-efficient |
-| `get_impact_radius` | Understanding blast radius of a change |
-| `get_affected_flows` | Finding which execution paths are impacted |
-| `query_graph` | Tracing callers, callees, imports, tests, dependencies |
-| `semantic_search_nodes` | Finding functions/classes by name or keyword |
-| `get_architecture_overview` | Understanding high-level codebase structure |
-| `refactor_tool` | Planning renames, finding dead code |
-
-### Workflow
-
-1. The graph auto-updates on file changes (via hooks).
-2. Use `detect_changes` for code review.
-3. Use `get_affected_flows` to understand impact.
-4. Use `query_graph` pattern="tests_for" to check coverage.

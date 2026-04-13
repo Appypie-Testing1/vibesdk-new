@@ -12,13 +12,7 @@ if [ "${SKIP_TESTS:-}" = "1" ]; then
   exit 0
 fi
 
-# 0) Code review graph change detection
-if command -v code-review-graph >/dev/null 2>&1; then
-  echo "[pre-commit] Running code-review-graph change detection"
-  code-review-graph detect-changes --brief || true
-fi
-
-# 0.5) Claude setup reference check
+# 0) Claude setup reference check
 # Checks if staged deletions/renames would break .claude/ agent/skill references
 if [ "${SKIP_REF_CHECK:-}" = "1" ]; then
   echo "[pre-commit] SKIP_REF_CHECK=1 set; skipping reference check"

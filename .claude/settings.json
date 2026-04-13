@@ -10,20 +10,13 @@
       "Bash(bun run db:generate)",
       "Bash(bun run db:migrate:local)",
       "Bash(git *)",
-      "Bash(code-review-graph *)",
-      "Bash(.claude/hooks/*)",
-      "mcp__code-review-graph__*"
+      "Bash(.claude/hooks/*)"
     ]
   },
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
-          {
-            "type": "command",
-            "command": "code-review-graph status",
-            "timeout": 3
-          },
           {
             "type": "command",
             "command": ".claude/hooks/session-context.sh",
@@ -50,16 +43,6 @@
       }
     ],
     "PostToolUse": [
-      {
-        "matcher": "Edit|Write|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "code-review-graph update --skip-flows",
-            "timeout": 5
-          }
-        ]
-      },
       {
         "matcher": "Edit|Write",
         "hooks": [

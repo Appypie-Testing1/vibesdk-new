@@ -17,7 +17,7 @@ Automatically, as the first step of brainstorming. When brainstorming starts, th
 ```
 User: "make the debugger smarter"
          |
-    [1] Graph search -- semantic_search_nodes + query_graph
+    [1] Symbol search -- Grep (scoped by glob/type) + subsystem map
          |
     [2] File reading -- read the top 3-5 relevant files found
          |
@@ -30,16 +30,16 @@ User: "make the debugger smarter"
     [6] Brainstorming continues with refined prompt
 ```
 
-### Step 1: Graph search
+### Step 1: Symbol search
 
-Use code-review-graph MCP tools:
-- `semantic_search_nodes` with keywords extracted from the user's prompt
-- `query_graph` with `callers_of` / `callees_of` / `imports_of` to understand the dependency context of what was found
-- `get_architecture_overview` if the prompt is broad (e.g., "improve performance") to identify which subsystem is relevant
+Use Grep/Glob scoped to the likely subsystem (see the architecture map in `CLAUDE.md` -- "Project Structure" and "Key Architectural Patterns"):
+- `Grep` with keywords extracted from the user's prompt (tight `glob` and `type` filters to cut noise)
+- For each hit, re-grep the symbol name with `-C 2` to surface call sites and imports
+- For broad prompts (e.g., "improve performance"), start from the subsystem map rather than searching blind
 
 ### Step 2: File reading
 
-Read the top 3-5 files identified by the graph search. Focus on:
+Read the top 3-5 files identified by the symbol search. Focus on:
 - The primary file(s) the user's intent maps to
 - Key interfaces/types those files depend on
 - Configuration that governs behavior (e.g., AGENT_CONFIG for agent-related prompts)
@@ -123,13 +123,13 @@ get_runtime_errors > get_logs. Guard: cannot run during code generation
 
 ## Integration with superpowers:brainstorming
 
-The refine-prompt skill is invoked by the brainstorming skill before its first clarifying question. The brainstorming checklist step "Explore project context" is effectively replaced/enhanced by this skill's graph search + file reading. The rest of brainstorming proceeds as normal.
+The refine-prompt skill is invoked by the brainstorming skill before its first clarifying question. The brainstorming checklist step "Explore project context" is effectively replaced/enhanced by this skill's symbol search + file reading. The rest of brainstorming proceeds as normal.
 
 ## Research tools used
 
 | Tool | Purpose |
 |------|---------|
-| `semantic_search_nodes` | Find relevant functions/classes by keywords from prompt |
-| `query_graph` | Trace callers, callees, imports, tests for context |
-| `get_architecture_overview` | Identify relevant subsystem for broad prompts |
+| `Grep` | Find relevant functions/classes by keywords from prompt (scope with `glob`/`type`) |
+| `Grep` with `-C 2` | Trace call sites and imports around a matched symbol |
+| Subsystem map (`CLAUDE.md`) | Identify relevant subsystem for broad prompts |
 | `Read` | Read actual file content for the top 3-5 results |
