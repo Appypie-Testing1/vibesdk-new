@@ -573,3 +573,379 @@ For presentation, workflow, and general project types, the agentic behavior repl
 Key file: `worker/agents/core/behaviors/agentic.ts`
 
 The same underlying operations are available (file generation, code fixing, sandbox deployment), but orchestration is driven by LLM decisions rather than the state machine. This gives the agent flexibility for project types where a linear phase-based approach does not fit the generation pattern.
+
+---
+
+## 5. Backend Architecture
+
+### 5.1 Worker Entry Point and Routing
+
+The backend entry point is `worker/index.ts`. It receives all incoming requests and routes them to either the HTTP API handler (Hono) or the Durable Object WebSocket handler depending on the path.
+
+Hono is used as the HTTP router. Routes are organized by domain in `worker/api/routes/` and loaded into a central registry at `worker/api/routes/index.ts`. Each route file pairs with a corresponding controller directory in `worker/api/controllers/`.
+
+**Route files in `worker/api/routes/`:**
+
+| File | Domain |
+|---|---|
+| `authRoutes.ts` | Registration, login, sessions, OAuth, API keys |
+| `appRoutes.ts` | App CRUD, visibility, favorites, stars, git token |
+| `userRoutes.ts` | User profile, paginated app listing |
+| `statsRoutes.ts` | User stats and activity |
+| `analyticsRoutes.ts` | User analytics, agent analytics |
+| `codegenRoutes.ts` | Session creation, WebSocket connect, preview, build download |
+| `modelConfigRoutes.ts` | Per-user model configuration |
+| `modelProviderRoutes.ts` | User-supplied model provider management |
+| `userSecretsRoutes.ts` | Vault unlock, lock, status |
+| `secretsRoutes.ts` | Secret templates and platform-level secrets |
+| `githubExporterRoutes.ts` | GitHub authorize, export, check-remote |
+| `statusRoutes.ts` | Platform health and status |
+| `capabilitiesRoutes.ts` | Platform capabilities (feature flags) |
+| `sentryRoutes.ts` | Error reporting relay |
+| `imagesRoutes.ts` | Image asset serving |
+| `database.ts` | Internal database utility routes |
+| `index.ts` | Route registry and health check |
+
+### 5.2 Durable Objects
+
+All stateful backend concerns are handled by Durable Objects. Each instance is single-threaded, which eliminates concurrency issues within a session.
+
+| Durable Object | Class | Purpose |
+|---|---|---|
+| `CodeGeneratorAgent` | `CodeGenObject` | One per chat session; holds generation state, runs the state machine, receives WebSocket connections |
+| `UserAppSandboxService` | `Sandbox` | Sandbox container lifecycle management; allocates, monitors, and tears down containers |
+| `DORateLimitStore` | `DORateLimitStore` | Per-user sliding window rate limiting for API and auth endpoints |
+| `UserSecretsStore` | `UserSecretsStore` | Encrypted secret vault per user; AES-GCM storage, RPC interface |
+| `GlobalDurableObject` | `GlobalDurableObject` | Global platform state shared across all Workers instances |
+
+`CodeGeneratorAgent` extends the `Agent` class from Cloudflare's "agents" framework, not a raw `DurableObject`. This provides built-in WebSocket lifecycle management, SQLite-backed persistent state, and RPC tooling. Ephemeral state (abort controllers, active promise handles) lives only in object memory and is reconstructed after hibernation.
+
+### 5.3 Inference Pipeline
+
+**Call flow:**
+
+```
+executeInference()
+  -> infer()
+     -> OpenAI-compatible client (provider-specific base URL)
+        -> AI Gateway (optional)
+     -> tool execution loop
+        -> loop detection
+```
+
+All LLM requests are routed through an OpenAI-compatible interface regardless of the underlying provider (OpenAI, Anthropic, Google). The AI Gateway URL pattern is:
+
+```
+https://gateway.ai.cloudflare.com/v1/{accountId}/{gatewayName}/{provider}
+```
+
+**Model configuration** is defined in `worker/agents/inferutils/config.ts`:
+
+| Config | When Active | Description |
+|---|---|---|
+| `PLATFORM_AGENT_CONFIG` | `PLATFORM_MODEL_PROVIDERS` env var is set | Multi-provider; used in the hosted platform deployment |
+| `DEFAULT_AGENT_CONFIG` | Fallback | Gemini-only; used in self-hosted / local development |
+
+The exported `AGENT_CONFIG` selects between them at runtime based on the environment variable.
+
+**Per-operation config keys** (each maps to a specific model + parameters):
+
+| Key | Operation |
+|---|---|
+| `blueprint` | Blueprint generation |
+| `phaseGeneration` | Phase plan generation |
+| `phaseImplementation` | Phase code implementation |
+| `codeReview` | Post-phase code review |
+| `codeFixer` | TypeScript error fixing |
+| `deepDebugger` | Autonomous deep debugger (high reasoning effort) |
+| `userConversation` | User conversation agent |
+| `templateSelection` | Template selection |
+
+User model overrides are stored in the `user_model_configs` DB table and applied at inference time, allowing users to supply their own models and API keys (BYOK). Loop detection is handled in `worker/agents/inferutils/loopDetection.ts` and aborts the inference loop when repeated identical tool calls are detected.
+
+### 5.4 Tool System
+
+Tools follow a factory pattern: each tool file in `worker/agents/tools/toolkit/` exports a `createToolName(agent, logger)` function. Tools are assembled into two sets in `worker/agents/tools/customTools.ts`:
+
+- `buildTools()` -- conversation tool set; safe subset available to the user-facing agent
+- `buildDebugTools()` -- debugger tool set; full access including destructive operations
+
+**All 24 tools:**
+
+| Tool File | Tool Name | Description |
+|---|---|---|
+| `alter-blueprint.ts` | `alter_blueprint` | Modify an existing project blueprint |
+| `completion-signals.ts` | `completion_signals` | Signal task completion to the orchestration layer |
+| `deep-debugger.ts` | `deep_debug` | Trigger autonomous debugging session |
+| `deploy-preview.ts` | `deploy_preview` | Redeploy sandbox for preview testing |
+| `exec-commands.ts` | `exec_commands` | Execute shell commands in the sandbox container |
+| `feedback.ts` | `feedback` | Provide structured feedback to the system |
+| `generate-blueprint.ts` | `generate_blueprint` | Create the initial project blueprint |
+| `generate-files.ts` | `generate_files` | Generate code files from the blueprint |
+| `generate-images.ts` | `generate_images` | Generate image assets for the project |
+| `get-logs.ts` | `get_logs` | Fetch runtime logs from the sandbox |
+| `get-runtime-errors.ts` | `get_runtime_errors` | Fetch error reports from the sandbox |
+| `git.ts` | `git` | Version control operations (parameterized: safe subset for users, full access for debugger) |
+| `init-suitable-template.ts` | `init_suitable_template` | Select and import the most appropriate project template |
+| `initialize-slides.ts` | `initialize_slides` | Set up presentation slide structure |
+| `queue-request.ts` | `queue_request` | Relay user modification requests to the generation agent |
+| `read-files.ts` | `read_files` | Read file contents from the generated project |
+| `regenerate-file.ts` | `regenerate_file` | Regenerate a specific file (used during fixing and debugging) |
+| `rename-project.ts` | `rename_project` | Rename the project |
+| `run-analysis.ts` | `run_analysis` | Run static analysis on generated code |
+| `virtual-filesystem.ts` | `virtual_filesystem` | Filesystem operations on the in-memory project tree |
+| `wait-for-debug.ts` | `wait_for_debug` | Wait for a debug session to complete |
+| `wait-for-generation.ts` | `wait_for_generation` | Wait for a generation phase to complete |
+| `wait.ts` | `wait` | Wait for sandbox state changes |
+| `web-search.ts` | `web_search` | Search the web for documentation or context |
+
+### 5.5 Database Layer
+
+The database layer uses Drizzle ORM backed by Cloudflare D1 (SQLite). The schema is defined in `worker/database/schema.ts`. Each domain has a dedicated service class in `worker/database/services/`.
+
+**Schema tables by group:**
+
+| Group | Tables |
+|---|---|
+| User / Auth | `users`, `sessions`, `api_keys`, `oauth_states`, `auth_attempts`, `password_reset_tokens`, `email_verification_tokens`, `verification_otps` |
+| Apps | `apps`, `favorites`, `stars` |
+| Community | `app_likes`, `app_comments`, `comment_likes` |
+| Analytics | `app_views` |
+| Configuration | `user_model_configs`, `user_model_providers`, `system_settings` |
+| Security | `audit_logs` |
+
+**Migration workflow:**
+
+```
+bun run db:generate        # Generate migration files from schema changes
+bun run db:migrate:local   # Apply migrations to local D1
+bun run db:studio          # Inspect local DB in Drizzle Studio
+bun run db:migrate:remote  # Apply migrations to production D1
+```
+
+### 5.6 API Endpoints Reference
+
+#### Auth (`authRoutes.ts`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/auth/register` | Public | Create new account with email/password |
+| `POST` | `/api/auth/login` | Public | Login, receive access token + refresh cookie |
+| `POST` | `/api/auth/verify-email` | Public | Verify email with OTP code |
+| `POST` | `/api/auth/resend-verification` | Public | Resend email verification OTP |
+| `GET` | `/api/auth/check` | Public | Check auth status (returns user if valid session) |
+| `GET` | `/api/auth/csrf-token` | Public | Retrieve CSRF token |
+| `GET` | `/api/auth/providers` | Public | List available OAuth providers |
+| `GET` | `/api/auth/profile` | Authenticated | Get current user profile |
+| `POST` | `/api/auth/logout` | Authenticated | Invalidate session and clear cookies |
+| `GET` | `/api/auth/sessions` | Authenticated | List active sessions |
+| `DELETE` | `/api/auth/sessions/:id` | Authenticated | Revoke a specific session |
+| `GET` | `/api/auth/api-keys` | Authenticated | List API keys |
+| `POST` | `/api/auth/api-keys` | Authenticated | Create API key |
+| `DELETE` | `/api/auth/api-keys/:id` | Authenticated | Revoke API key |
+| `GET` | `/api/auth/oauth/:provider` | Public | Initiate OAuth flow |
+| `GET` | `/api/auth/oauth/:provider/callback` | Public | OAuth callback handler |
+
+#### Apps (`appRoutes.ts`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/apps` | Public | List public apps |
+| `GET` | `/api/apps/mine` | Authenticated | List current user's apps |
+| `GET` | `/api/apps/recent` | Authenticated | List recently accessed apps |
+| `GET` | `/api/apps/favorites` | Authenticated | List favorited apps |
+| `POST` | `/api/apps/:id/star` | Authenticated | Star an app |
+| `DELETE` | `/api/apps/:id/star` | Authenticated | Unstar an app |
+| `POST` | `/api/apps/:id/favorite` | Authenticated | Favorite an app |
+| `DELETE` | `/api/apps/:id/favorite` | Authenticated | Unfavorite an app |
+| `GET` | `/api/apps/:id` | Public | Get app details |
+| `PUT` | `/api/apps/:id` | Owner only | Update app metadata |
+| `PATCH` | `/api/apps/:id/visibility` | Owner only | Change app visibility |
+| `DELETE` | `/api/apps/:id` | Owner only | Delete app |
+| `GET` | `/api/apps/:id/git-token` | Owner only | Get git access token for app |
+
+#### User (`userRoutes.ts`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/users/:id/apps` | Public | List a user's public apps (paginated) |
+| `PATCH` | `/api/users/profile` | Authenticated | Update profile (display name, avatar) |
+
+#### Stats (`statsRoutes.ts`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/stats/me` | Authenticated | Current user stats (app count, stars, etc.) |
+| `GET` | `/api/stats/activity` | Authenticated | User activity timeline |
+
+#### Analytics (`analyticsRoutes.ts`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/analytics/user` | Authenticated | Aggregated user analytics |
+| `GET` | `/api/analytics/agent` | Authenticated | Agent usage and token analytics |
+
+#### Agent / CodeGen (`codegenRoutes.ts`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/agent/session` | Authenticated | Create a new agent session (returns agentId) |
+| `GET` | `/api/agent/:id/ws` | Authenticated | WebSocket upgrade endpoint |
+| `GET` | `/api/agent/:id/connect` | Authenticated | Alternative WebSocket connect path |
+| `GET` | `/api/agent/:id/preview` | Authenticated | Get preview URL for sandbox |
+| `GET` | `/api/agent/:id/download` | Authenticated | Download build artifact |
+
+#### Model Config (`modelConfigRoutes.ts`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/model-config` | Authenticated | List user model configurations |
+| `GET` | `/api/model-config/defaults` | Authenticated | Get platform default model configs |
+| `GET` | `/api/model-config/byok-providers` | Authenticated | List BYOK-compatible providers |
+| `GET` | `/api/model-config/:operation` | Authenticated | Get config for a specific operation |
+| `PUT` | `/api/model-config/:operation` | Authenticated | Update config for a specific operation |
+| `DELETE` | `/api/model-config/:operation` | Authenticated | Delete override for a specific operation |
+| `POST` | `/api/model-config/test` | Authenticated | Test a model configuration |
+| `DELETE` | `/api/model-config` | Authenticated | Reset all model configs to defaults |
+
+#### Model Providers (`modelProviderRoutes.ts`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/model-providers` | Authenticated | List user model providers |
+| `POST` | `/api/model-providers` | Authenticated | Add a model provider |
+| `PUT` | `/api/model-providers/:id` | Authenticated | Update a model provider |
+| `DELETE` | `/api/model-providers/:id` | Authenticated | Remove a model provider |
+| `POST` | `/api/model-providers/:id/test` | Authenticated | Test connectivity for a provider |
+
+#### Vault / Secrets (`userSecretsRoutes.ts`, `secretsRoutes.ts`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/vault/unlock` | Authenticated | Unlock vault with master password |
+| `POST` | `/api/vault/lock` | Authenticated | Lock vault |
+| `GET` | `/api/vault/status` | Authenticated | Check vault lock state |
+| `GET` | `/api/secrets/templates` | Authenticated | List available secret templates |
+
+#### GitHub Export (`githubExporterRoutes.ts`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/github/authorize` | Authenticated | Initiate GitHub OAuth for export |
+| `POST` | `/api/github/export` | Authenticated | Export project to GitHub repository |
+| `GET` | `/api/github/check-remote` | Authenticated | Check if remote repository exists |
+
+#### Status / Capabilities (`statusRoutes.ts`, `capabilitiesRoutes.ts`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/status` | Public | Platform status |
+| `GET` | `/api/capabilities` | Public | Feature flags and platform capabilities |
+
+#### Health (`index.ts`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/health` | Public | Worker health check |
+
+### 5.7 Authentication and Security
+
+**Token model:**
+
+Access tokens are short-lived JWTs. Refresh tokens are stored in httpOnly cookies and used to reissue access tokens without re-authentication. JWT signing uses the `JWT_SECRET` environment variable.
+
+**OAuth flow:**
+
+1. Client calls `GET /api/auth/oauth/:provider` -- server generates state, stores in `oauth_states` table, redirects to provider
+2. Provider redirects to `GET /api/auth/oauth/:provider/callback` with code + state
+3. Server verifies state, exchanges code for tokens, creates or updates the user record, sets cookies
+
+Supported providers: Google, GitHub.
+
+**Email/password flow:**
+
+Registration triggers OTP email verification. The OTP is stored in `verification_otps`. Login is blocked until email is verified. Password resets use `password_reset_tokens` with short expiry.
+
+**CSRF protection:**
+
+CSRF tokens have a 7200-second expiry. The `api-client.ts` on the frontend automatically retries on a 403 by refreshing the token. The middleware is in `worker/middleware/`.
+
+**Rate limiting:**
+
+| Limiter | Limit | Window |
+|---|---|---|
+| `API_RATE_LIMITER` | 10,000 requests | 60 seconds |
+| `AUTH_RATE_LIMITER` | 1,000 requests | 60 seconds |
+
+Rate limiting is enforced by the `DORateLimitStore` Durable Object using a sliding window algorithm.
+
+**Vault crypto model:**
+
+The vault uses a zero-knowledge design. The server never has access to plaintext secrets.
+
+| Component | Description |
+|---|---|
+| VMK (Vault Master Key) | Derived client-side from the user's master password via Argon2id; never sent to the server |
+| SK (Session Key) | Random per-session key generated on the server |
+| Server storage | Server holds only `AES-GCM(SK, VMK)` in DO memory; DB stores only ciphertext blobs |
+| Security property | A DB dump produces only useless encrypted blobs; server memory alone requires the client SK to be useful |
+
+RPC methods on `UserSecretsStore` return `null` or `boolean` on error and never throw exceptions.
+
+**Auth middleware levels:**
+
+| Level | Description |
+|---|---|
+| `public` | No authentication required |
+| `authenticated` | Valid session or API key required |
+| `ownerOnly` | Authenticated + resource ownership verified |
+
+**Security-sensitive files requiring extra scrutiny:**
+
+- `worker/services/secrets/` -- vault crypto implementation
+- `worker/middleware/` -- CSRF and WebSocket security
+- `worker/utils/authUtils.ts` -- JWT signing and verification
+- Any file handling user input or external data (injection, authorization checks)
+
+### 5.8 WebSocket Protocol
+
+Clients connect to `/api/agent/{agentId}/ws` after session creation. The connection is upgraded to a WebSocket handled by the `CodeGeneratorAgent` Durable Object.
+
+**Connection lifecycle:**
+
+1. Client sends initial connect message
+2. Server responds with `agent_connected` containing a full state snapshot -- all files, conversation history, current dev state
+3. Client restores UI from snapshot
+4. Subsequent messages are real-time events
+
+**Message deduplication:**
+
+Tool execution during generation causes duplicate AI messages. The backend skips redundant LLM calls when tool results are empty. The frontend deduplicates both live and restored messages using utility functions in `src/routes/chat/utils/`.
+
+**Message categories and key types:**
+
+| Category | Message Types |
+|---|---|
+| Agent State | `cf_agent_state`, `agent_connected`, `template_updated` |
+| Conversation | `conversation_state`, `conversation_response`, `conversation_cleared` |
+| Code Generation | `generation_started`, `file_generating`, `file_chunk_generated`, `file_generated`, `generation_complete` |
+| Code Review | `code_reviewing`, `code_reviewed`, `runtime_error_found`, `static_analysis_results` |
+| Phased Generation | `phase_generating`, `phase_generated`, `phase_implementing`, `phase_implemented` |
+| Deployment | `deployment_started`, `deployment_completed`, `deployment_failed` |
+| Preview | `preview_force_refresh`, `screenshot_capture_*`, `screenshot_analysis_result` |
+| GitHub Export | `github_export_started`, `github_export_progress`, `github_export_completed`, `github_export_error` |
+| Commands | `command_executing`, `command_executed`, `command_execution_failed` |
+| Terminal | `terminal_command`, `terminal_output`, `server_log` |
+| Model Config | `model_configs_info` |
+| EAS Builds | `eas_build_status`, `eas_build_complete`, `eas_build_error` |
+| Vault | `vault_unlocked`, `vault_locked`, `vault_required` |
+
+**Three layers that must stay in sync when adding or modifying message types:**
+
+| Layer | File |
+|---|---|
+| Type definitions | `worker/api/websocketTypes.ts` |
+| Backend handler | `worker/agents/core/websocket.ts` |
+| Frontend handler | `src/routes/chat/utils/handle-websocket-message.ts` |
+
+Modifying a WebSocket message type without updating all three layers will result in silent failures where either the backend sends a message the frontend ignores or the frontend expects a field that no longer exists.
