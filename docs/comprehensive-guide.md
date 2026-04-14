@@ -459,3 +459,117 @@ Templates are uploaded to R2 as part of the main deploy pipeline, executed via `
 4. The script zips each template directory and uploads the bundles to R2 along with an updated `template_catalog.json`.
 
 The staging environment uses the `vibesdk-templates-staging` bucket, keeping template versions independent between environments.
+
+## 4. Complete App Generation Flow
+
+This section traces the full journey of a user prompt becoming a deployed, running application -- from the initial HTTP request through blueprint generation, phased code generation, sandbox deployment, and iterative refinement.
+
+### 4.1 Session Initialization
+
+The frontend sends a POST to `/api/agent` with a `CodeGenArgs` body containing: `query`, `language`, `frameworks`, `images`, `behaviorType`, and `projectType`. `CodingAgentController.startCodeGeneration()` in `worker/api/controllers/agent/controller.ts` creates a unique agent ID via `generateId()` and returns a streaming SSE response (`text/event-stream`) that includes the WebSocket URL. The client then connects via WebSocket to `/api/agent/{agentId}/ws` for all subsequent bidirectional communication.
+
+Behavior type is resolved at this point: `phasic` for standard app projects (default), `agentic` for presentations, workflows, and general-purpose projects.
+
+Key files: `worker/api/controllers/agent/controller.ts`, `worker/api/routes/codegenRoutes.ts`
+
+### 4.2 Blueprint Generation
+
+Template selection follows the flow described in Section 3. Once a template is selected, `generateBlueprint()` in `worker/agents/planning/blueprint.ts` takes the user query and selected template, then calls the LLM with a specialized system prompt to produce a structured blueprint.
+
+For phasic behavior, the blueprint schema includes: `title`, `projectName`, `description`, `views`, `userFlow`, `dataFlow`, `architecture`, `frameworks`, `pitfalls`, `implementationRoadmap` (ordered array of phases), and `initialPhase`. The blueprint is streamed back to the client chunk by chunk via the `onBlueprintChunk()` callback as inference progresses.
+
+### 4.3 State Machine (Phasic Behavior)
+
+The phasic behavior drives code generation through a deterministic state machine:
+
+```
+IDLE -> PHASE_GENERATING -> PHASE_IMPLEMENTING -> REVIEWING -> FINALIZING -> IDLE
+```
+
+Key fields in `CodeGenState` (`worker/agents/core/state.ts`):
+
+- `blueprint` -- the generated blueprint
+- `generatedFilesMap` -- tracks all generated files across phases
+- `generatedPhases` -- completed phases array
+- `currentPhase` -- phase currently being worked on
+- `phasesCounter` -- remaining phases (max 10)
+- `currentDevState` -- current state machine position
+- `shouldBeGenerating` -- generation active flag
+- `sandboxInstanceId` -- sandbox container ID
+- `conversationMessages` -- full chat history
+
+Each `CodeGeneratorAgent` instance is single-threaded per Durable Object, enforcing sequential phase execution.
+
+Key files: `worker/agents/core/state.ts`, `worker/agents/core/codingAgent.ts`, `worker/agents/core/behaviors/phasic.ts`
+
+### 4.4 Phase Generation
+
+`PhaseGenerationOperation` in `worker/agents/operations/PhaseGeneration.ts` runs at the start of each cycle. It analyzes the current codebase state, compares it against the blueprint roadmap to identify what has been built versus what remains, and designs the next deployable milestone with emphasis on visual quality, UX, and accessibility.
+
+Output schema: phase name, description, an array of files with their purposes, install commands to run, and a `lastPhase` boolean. `lastPhase: true` signals that the roadmap is complete and no critical errors remain -- triggering the finalization path rather than another generation cycle.
+
+### 4.5 Phase Implementation (File Generation)
+
+`PhaseImplementationOperation` in `worker/agents/operations/PhaseImplementation.ts` runs streaming inference to produce all files for the current phase. Files are emitted using SCOF (Structured Code Output Format), defined in `worker/agents/output-formats/streaming-formats/scof.ts`:
+
+```
+FILE path/to/file.tsx
+[file content here]
+EOF
+```
+
+The SCOF parser is designed to handle arbitrary streaming chunk boundaries robustly. Parser callbacks (`onFileOpen`, `onFileChunk`, `onFileClose`) relay progress to the client in real-time via WebSocket messages: `file_generating`, `file_chunk_generated`, and `file_generated`. If `RealtimeCodeFixer` is enabled, it runs inline during this phase to catch issues before the phase completes.
+
+### 4.6 Code Review and Fixing
+
+`FastCodeFixerOperation` in `worker/agents/operations/PostPhaseCodeFixer.ts` runs a post-phase review cycle, iterating up to 5 times until no critical issues remain. `RealtimeCodeFixer` in `worker/agents/assistants/realtimeCodeFixer.ts` applies targeted search-replace diffs for common error classes:
+
+- Infinite render loops (missing `useEffect` deps, `setState` in render body)
+- Import and export integrity errors
+- Undefined variable access
+- Syntax errors and JSX mismatches
+- Invalid Tailwind class usage
+- Nested Router components
+
+Diffs use the following format:
+
+```
+<<<<<<< SEARCH
+[old code]
+=======
+[new code]
+>>>>>>> REPLACE
+```
+
+Static analysis is performed via the sandbox using ESLint and the TypeScript compiler to surface errors that pattern-based fixing cannot catch.
+
+### 4.7 Sandbox Deployment
+
+After each phase, generated files are deployed to a sandbox container for live preview and runtime error collection:
+
+- Local dev: Docker containers managed by `LocalSandboxService`
+- Production: Cloudflare Containers managed by `RemoteSandboxService`
+
+Execution sequence: write all files -> run install and build commands (`npm install`, build step) -> return a preview URL. Runtime errors and logs are fetched via `getRuntimeErrors()` and `getLogs()` and fed into the next review cycle.
+
+Key file: `worker/services/sandbox/BaseSandboxService.ts`
+
+### 4.8 User Conversation and Iteration
+
+`UserConversationProcessor` in `worker/agents/operations/UserConversationProcessor.ts` handles all follow-up messages after initial generation. It presents a conversational interface between the user and the underlying agent system, speaking as the developer ("I'll fix that").
+
+Available tools in conversation context: `queue_request` (relay modifications to the dev agent), `get_logs`, `deep_debug`, `git`, `deploy_preview`, `web_search`. User feedback can trigger new phase generation cycles or targeted file regeneration without restarting the full flow.
+
+### 4.9 Deep Debugger
+
+`DeepDebuggerOperation` in `worker/agents/operations/DeepDebugger.ts` handles persistent runtime errors that regular post-phase fixing cannot resolve. It runs as an autonomous debugging agent with full tool access: `read_file`, `get_logs`, `get_runtime_errors`, `get_file_list`, `write_file`, `wait`, `deploy_preview`.
+
+The deep debugger uses the `deepDebugger` model config key (high reasoning effort). It cannot run during active code generation -- enforced via `isCodeGenerating()` -- and returns a transcript of all diagnostic steps taken so the conversation agent can summarize findings for the user.
+
+### 4.10 Agentic Behavior (Alternative Flow)
+
+For presentation, workflow, and general project types, the agentic behavior replaces the phasic state machine with an autonomous LLM loop. The LLM holds a plan string and decides what to do at each step rather than following predefined state transitions.
+
+Key file: `worker/agents/core/behaviors/agentic.ts`
+
+The same underlying operations are available (file generation, code fixing, sandbox deployment), but orchestration is driven by LLM decisions rather than the state machine. This gives the agent flexibility for project types where a linear phase-based approach does not fit the generation pattern.
