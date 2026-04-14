@@ -1046,3 +1046,83 @@ Singleton `apiClient` exported from `src/lib/api-client.ts`. Type-safe methods w
 | Sonner | Toast notifications |
 | Embla Carousel | Carousel components |
 | Lucide React | Icon library |
+
+## 7. SDK Package
+
+The `@cf-vibesdk/sdk` package provides programmatic access to vibesdk for building integrations, automation, and custom tooling.
+
+### 7.1 Overview
+
+- Standalone library in the `sdk/` directory with its own `package.json`
+- Package name: `@cf-vibesdk/sdk`, version: `0.0.3`
+- ES module (`"type": "module"`)
+- Two entry points: `.` (browser-compatible default) and `./node` (Node.js specific)
+- Source files in `sdk/src/`
+
+### 7.2 Core Classes
+
+| Class | File | Purpose |
+|---|---|---|
+| VibeClient | `sdk/src/client.ts` | Main entry point -- authentication, app management, session creation |
+| BuildSession | `sdk/src/session.ts` | Long-lived session managing a single build lifecycle |
+| PhasicClient | `sdk/src/phasic.ts` | Phasic (phase-based) behavior wrapper |
+| AgenticClient | `sdk/src/agentic.ts` | Agentic (autonomous) behavior wrapper |
+| WorkspaceStore | `sdk/src/workspace.ts` | File system workspace management |
+| SessionStateStore | `sdk/src/state.ts` | Session state persistence and recovery |
+
+### 7.3 Usage Examples
+
+```typescript
+import { VibeClient } from '@cf-vibesdk/sdk';
+
+// Create a client
+const client = new VibeClient({
+  baseUrl: 'https://your-instance.example.com',
+  credentials: { apiKey: 'your-api-key' }
+});
+
+// Build an app from a prompt
+const session = await client.build('Create a todo app with authentication', {
+  projectType: 'app'
+});
+
+// Connect to an existing session
+const existing = await client.connect('agent-id-here');
+
+// List apps
+const publicApps = await client.apps.listPublic();
+const myApps = await client.apps.listMine();
+const app = await client.apps.get('app-id');
+
+// Get git clone token
+const token = await client.apps.getGitCloneToken('app-id');
+```
+
+### 7.4 Event System
+
+`BuildSession` emits events for tracking generation progress. State types exported from the SDK:
+
+- `ConnectionState` -- WebSocket connection status
+- `GenerationState` -- current generation phase
+- `PhaseState` -- individual phase progress
+- `SessionState` -- overall session state
+
+WebSocket message types are also available to SDK consumers for lower-level integration.
+
+### 7.5 Utilities
+
+- `BlueprintStreamParser` -- parse streamed blueprint data from the API
+- `blueprintToMarkdown()` -- convert a blueprint object to human-readable markdown
+- `withTimeout(promise, ms)` -- wrap async operations with a timeout; throws `TimeoutError` on expiry
+
+### 7.6 Testing
+
+```bash
+# Unit tests
+cd sdk && bun test test/*.test.ts
+
+# Integration tests (requires API key)
+cd sdk && bun test --timeout 600000 test/integration/*.test.ts
+```
+
+Integration tests require the `VIBESDK_INTEGRATION_API_KEY` environment variable.
