@@ -100,3 +100,243 @@ The `worker/` directory is organized by concern. The following table covers all 
 | `worker/middleware/` | CSRF protection, WebSocket security checks, authentication middleware |
 
 ---
+
+## 2. Prerequisites and Local Setup
+
+### 2.1 Required Software
+
+| Tool | Version | Notes |
+|---|---|---|
+| Node.js | 18+ | Required for tooling compatibility |
+| Bun | Latest | All project scripts use Bun. Install: `curl -fsSL https://bun.sh/install | bash` |
+| Docker | Latest | Required for local sandbox containers |
+| Git | Any recent | For version control and isomorphic-git operations |
+
+### 2.2 Cloudflare Account
+
+A Cloudflare account is required. Plan requirements:
+
+| Feature | Free Tier | Paid Plan |
+|---|---|---|
+| Basic development | Sufficient | Not required |
+| KV namespace quota | 10 namespaces | Higher limits |
+| D1 database | Limited | Recommended for production |
+| R2 bucket | Limited | Recommended for production |
+| Workers for Platforms (app deployment button) | Not available | Required |
+| Advanced Certificate Manager (first-level subdomains) | Not available | Required |
+
+### 2.3 API Token Creation
+
+The setup script requires a Cloudflare API token with specific permissions. Follow these steps:
+
+1. Go to Cloudflare dashboard -> My Profile -> API Tokens -> Create Token
+2. Select "Edit Cloudflare Workers" as the base template
+3. Add the following permissions that the template does not include by default:
+
+**Account-level permissions (add all of these):**
+
+| Permission | Access Level |
+|---|---|
+| Workers KV Storage | Edit |
+| Workers Scripts | Edit |
+| Account Settings | Read |
+| Workers Tail | Read |
+| Workers R2 Storage | Edit |
+| Cloudflare Pages | Edit |
+| Workers Builds Configuration | Edit |
+| Workers Agents Configuration | Edit |
+| Workers Observability | Edit |
+| Containers | Edit |
+| D1 | Edit |
+| AI Gateway | Read, Edit, Run |
+| Cloudchamber | Edit |
+| Browser Rendering | Edit |
+
+**Zone-level permissions:**
+
+| Resource | Permission | Access Level |
+|---|---|---|
+| All zones | Workers Routes | Edit |
+
+**User-level permissions:**
+
+| Permission | Access Level |
+|---|---|
+| User Details | Read |
+| Memberships | Read |
+
+### 2.4 Automated Setup (Recommended)
+
+The interactive setup script handles all resource creation and configuration in a single pass.
+
+```bash
+bun install
+bun run setup
+```
+
+The script walks through the following prompts in order:
+
+| Prompt | What to enter |
+|---|---|
+| Cloudflare Account ID | Found in the sidebar of the Cloudflare dashboard |
+| Cloudflare API Token | The token created in step 2.3 |
+| Custom domain | Your production domain, or press Enter for localhost-only development |
+| Remote vs local-only | Choose remote to create Cloudflare resources, local to skip |
+| AI Gateway configuration | Select Cloudflare AI Gateway (recommended) -- auto-configures the gateway token |
+| AI provider selection | Multi-select: OpenAI, Anthropic, Google AI Studio, Cerebras, OpenRouter, or Custom |
+| OAuth credentials (Google) | Client ID and secret from Google Cloud Console, or skip for email-only auth |
+| OAuth credentials (GitHub) | Client ID and secret from GitHub OAuth Apps, or skip |
+
+After gathering credentials, the script automatically:
+
+- Creates a KV namespace (`VibecoderStore`)
+- Creates a D1 database (`vibesdk-db`)
+- Creates an R2 bucket (`vibesdk-templates`)
+- Creates an AI Gateway (if selected)
+- Applies the database schema migrations
+- Uploads project templates to R2
+- Writes all configuration to `wrangler.jsonc` and `.dev.vars`
+
+### 2.5 Manual Setup
+
+If you prefer to configure everything manually instead of using the setup script:
+
+**Step 1: Copy the environment file**
+
+```bash
+cp .dev.vars.example .dev.vars
+```
+
+**Step 2: Fill in environment variables**
+
+Open `.dev.vars` and set the following variables:
+
+| Variable | Required | Description | Where to get it |
+|---|---|---|---|
+| `CLOUDFLARE_API_TOKEN` | Yes (deploy) | API token for Cloudflare access | Cloudflare dashboard -> My Profile -> API Tokens |
+| `CLOUDFLARE_ACCOUNT_ID` | Yes (deploy) | Your Cloudflare account ID | Cloudflare dashboard sidebar |
+| `CLOUDFLARE_AI_GATEWAY_TOKEN` | Recommended | Token for AI Gateway creation and access; requires at least Run permission | Cloudflare dashboard -> AI Gateway |
+| `CLOUDFLARE_AI_GATEWAY_URL` | Optional | Override URL for AI Gateway endpoint; leave unset if using auto-configuration | AI Gateway dashboard |
+| `GOOGLE_AI_STUDIO_API_KEY` | Yes (default config) | API key for Gemini models; required for the default `DEFAULT_AGENT_CONFIG` | https://aistudio.google.com/ |
+| `ANTHROPIC_API_KEY` | Optional | API key for Anthropic Claude models | https://console.anthropic.com/ |
+| `OPENAI_API_KEY` | Optional | API key for OpenAI models | https://platform.openai.com/ |
+| `OPENROUTER_API_KEY` | Optional | API key for OpenRouter model aggregator | https://openrouter.ai/ |
+| `GROQ_API_KEY` | Optional | API key for Groq inference | https://console.groq.com/ |
+| `GOOGLE_CLIENT_ID` | Optional | OAuth 2.0 client ID for Google login | Google Cloud Console -> APIs & Services -> Credentials |
+| `GOOGLE_CLIENT_SECRET` | Optional | OAuth 2.0 client secret for Google login | Google Cloud Console -> APIs & Services -> Credentials |
+| `GITHUB_CLIENT_ID` | Optional | OAuth App client ID for GitHub login | GitHub -> Settings -> Developer Settings -> OAuth Apps |
+| `GITHUB_CLIENT_SECRET` | Optional | OAuth App client secret for GitHub login | GitHub -> Settings -> Developer Settings -> OAuth Apps |
+| `GITHUB_EXPORTER_CLIENT_ID` | Optional | Separate OAuth App for GitHub export feature | GitHub -> Settings -> Developer Settings -> OAuth Apps |
+| `GITHUB_EXPORTER_CLIENT_SECRET` | Optional | Client secret for GitHub export OAuth App | GitHub -> Settings -> Developer Settings -> OAuth Apps |
+| `JWT_SECRET` | Yes | Secret used to sign authentication tokens; generate any long random string | Generate with: `openssl rand -hex 32` |
+| `WEBHOOK_SECRET` | Yes | Secret for webhook signature verification | Generate with: `openssl rand -hex 32` |
+| `CUSTOM_DOMAIN` | Optional | Your production domain for CORS configuration | Your domain registrar |
+| `ENVIRONMENT` | Optional | Deployment environment: `dev`, `staging`, or `prod` | Set manually |
+
+**Step 3: Create Cloudflare resources via CLI**
+
+```bash
+npx wrangler kv namespace create VibecoderStore
+npx wrangler d1 create vibesdk-db
+npx wrangler r2 bucket create vibesdk-templates
+```
+
+Each command prints an `id` field. Copy these IDs into `wrangler.jsonc` under the corresponding binding entries.
+
+### 2.6 Database Setup
+
+After creating the D1 database and updating `wrangler.jsonc` with its ID, apply the schema:
+
+```bash
+bun run db:generate       # Generate migration files from the Drizzle schema
+bun run db:migrate:local  # Apply migrations to the local D1 instance
+bun run db:studio         # Open Drizzle Studio for visual inspection of the schema
+```
+
+For production, use `bun run db:migrate:remote` to apply migrations to the remote D1 database.
+
+### 2.7 Starting Development
+
+```bash
+bun run dev  # Starts the Vite dev server at localhost:5173
+```
+
+On first launch, register an account via the UI. If no OAuth providers are configured, only email-based registration and login are available.
+
+### 2.8 AI Provider Configuration
+
+**Google AI Studio (Gemini)** is the default provider and works out of the box with a free API key from https://aistudio.google.com/. This is the same configuration used at build.cloudflare.dev.
+
+To use other providers, edit `worker/agents/inferutils/config.ts`. The file contains two configurations:
+
+| Config | When Used | Description |
+|---|---|---|
+| `DEFAULT_AGENT_CONFIG` | `PLATFORM_MODEL_PROVIDERS` env var is unset | Gemini-only; the default for self-hosted deployments |
+| `PLATFORM_AGENT_CONFIG` | `PLATFORM_MODEL_PROVIDERS` env var is set | Multi-provider; used on build.cloudflare.dev |
+
+When switching providers, update the model name strings in the relevant config to use the `provider/model-name` format. Examples:
+
+```
+openai/gpt-4o
+anthropic/claude-3-5-sonnet-20241022
+google/gemini-2.0-flash-001
+```
+
+### 2.9 Troubleshooting
+
+**Cloudflare WARP interference**
+
+Cause: WARP in full-tunnel mode intercepts and breaks anonymous cloudflared tunnels, which are used to expose local sandbox previews to the internet.
+
+Solution: Disable WARP, or switch it to DNS-only mode (1.1.1.1) while doing local development.
+
+---
+
+**D1 "Unauthorized" error**
+
+Cause: The API token is missing the D1:Edit permission, or the Cloudflare account does not have a paid plan that includes D1.
+
+Solution: Update the token permissions following step 2.3, or upgrade the Cloudflare plan.
+
+---
+
+**R2 "Unauthorized" error**
+
+Cause: Same as D1 -- missing Workers R2 Storage:Edit permission or plan limitation.
+
+Solution: Update token permissions or upgrade the plan.
+
+---
+
+**AI Gateway creation failed**
+
+Cause: The API token is missing AI Gateway permissions.
+
+Solution: Add AI Gateway:Read, AI Gateway:Edit, and AI Gateway:Run to the token.
+
+---
+
+**Docker not running**
+
+Cause: The sandbox service requires Docker to run container instances locally.
+
+Solution: Start Docker Desktop before running `bun run dev`.
+
+---
+
+**Corporate network SSL issues**
+
+Cause: Corporate networks that perform SSL inspection use a custom CA certificate not trusted by the sandbox container's default certificate store. Requests from the container to external services fail with certificate validation errors.
+
+Solution: Add your corporate root CA certificate to the sandbox Dockerfile. Edit `container/SandboxDockerfile` (or your equivalent container definition):
+
+```dockerfile
+COPY your-root-ca.pem /usr/local/share/ca-certificates/your-root-ca.crt
+RUN update-ca-certificates
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/your-root-ca.crt
+```
+
+**Warning:** Never commit corporate CA certificate files to a public repository.
+
+---
