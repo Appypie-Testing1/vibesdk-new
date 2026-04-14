@@ -1126,3 +1126,334 @@ cd sdk && bun test --timeout 600000 test/integration/*.test.ts
 ```
 
 Integration tests require the `VIBESDK_INTEGRATION_API_KEY` environment variable.
+
+---
+
+## 8. Deployment and Operations
+
+### 8.1 Environment Variables Reference
+
+All secrets and credentials are stored in `.dev.vars` for local development and `.prod.vars` for production deployment. Copy `.dev.vars.example` to `.dev.vars` and fill in the values below.
+
+#### Cloudflare Credentials
+
+| Variable | Required | Description | Where to Get It |
+|---|---|---|---|
+| `CLOUDFLARE_API_TOKEN` | Yes | API token with Account-level permissions for deployment | [Cloudflare Dashboard](https://dash.cloudflare.com/profile/api-tokens) -- create token with Workers, D1, R2, KV, and AI Gateway permissions |
+| `CLOUDFLARE_ACCOUNT_ID` | Yes | Your Cloudflare account ID | Cloudflare Dashboard -- visible in the right sidebar of any zone overview page |
+
+#### Security Secrets
+
+| Variable | Required | Description | Where to Get It |
+|---|---|---|---|
+| `JWT_SECRET` | Yes | Secret key for signing authentication tokens | Generate with `openssl rand -base64 32` or any random 32+ byte string |
+| `WEBHOOK_SECRET` | Yes | Secret for verifying incoming webhook payloads | Generate with `openssl rand -base64 32` or any random 32+ byte string |
+
+#### AI Gateway
+
+| Variable | Required | Description | Where to Get It |
+|---|---|---|---|
+| `CLOUDFLARE_AI_GATEWAY_TOKEN` | Yes | API token used to authenticate with the AI Gateway; if it has read and edit permissions, the gateway is created automatically during setup | Same API token as `CLOUDFLARE_API_TOKEN`, or a scoped token with AI Gateway permissions |
+| `CLOUDFLARE_AI_GATEWAY_URL` | No | Override URL for the AI Gateway endpoint; leave unset to use the auto-resolved gateway URL | Cloudflare Dashboard > AI Gateway -- copy the gateway URL |
+
+#### AI Provider Keys
+
+At least one provider key is required. The platform routes LLM calls through whichever providers are configured.
+
+| Variable | Required | Description | Where to Get It |
+|---|---|---|---|
+| `OPENAI_API_KEY` | At least one required | OpenAI API key for GPT model access | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| `ANTHROPIC_API_KEY` | At least one required | Anthropic API key for Claude model access | [console.anthropic.com](https://console.anthropic.com) |
+| `GOOGLE_AI_STUDIO_API_KEY` | At least one required | Google AI Studio key for Gemini model access | [aistudio.google.com](https://aistudio.google.com) -- uncommented by default in `.dev.vars.example` |
+| `OPENROUTER_API_KEY` | No | OpenRouter key for multi-provider routing | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `GROQ_API_KEY` | No | Groq key for fast inference | [console.groq.com](https://console.groq.com) |
+
+#### OAuth (All Optional)
+
+| Variable | Required | Description | Where to Get It |
+|---|---|---|---|
+| `GOOGLE_CLIENT_ID` | No | Google OAuth client ID for Google login | [Google Cloud Console](https://console.cloud.google.com) > APIs & Services > Credentials |
+| `GOOGLE_CLIENT_SECRET` | No | Google OAuth client secret | Same as above |
+| `GITHUB_CLIENT_ID` | No | GitHub OAuth app client ID for GitHub login | [GitHub Developer Settings](https://github.com/settings/developers) > OAuth Apps |
+| `GITHUB_CLIENT_SECRET` | No | GitHub OAuth app client secret | Same as above |
+| `GITHUB_EXPORTER_CLIENT_ID` | No | Separate GitHub OAuth app for the GitHub export feature | Create a second GitHub OAuth App scoped to repo access |
+| `GITHUB_EXPORTER_CLIENT_SECRET` | No | Secret for the GitHub exporter OAuth app | Same as above |
+
+#### Domain / Environment
+
+| Variable | Required | Description | Where to Get It |
+|---|---|---|---|
+| `CUSTOM_DOMAIN` | No | Custom domain for CORS and routing (e.g., `your-domain.com`) | Your domain configured in Cloudflare DNS |
+| `ENVIRONMENT` | No | Runtime environment identifier: `dev`, `staging`, or `prod` | Set manually based on target environment |
+
+---
+
+### 8.2 Wrangler Configuration Anatomy
+
+The primary configuration file is `wrangler.jsonc`. Each key section is described below using the actual production values.
+
+**Top-level identity:**
+
+- `name`: `"vibesdk-production"` -- the Workers service name shown in the Cloudflare dashboard.
+- `main`: `"worker/index.ts"` -- the Worker entry point compiled by Wrangler at deploy time.
+- `compatibility_date`: `"2025-01-15"` -- locks the Workers runtime API surface to this date.
+- `compatibility_flags`: `["nodejs_compat"]` -- enables the Node.js compatibility layer (required for packages using Node built-ins).
+
+**D1 Database (`d1_databases`):**
+
+```jsonc
+{
+  "binding": "DB",
+  "database_name": "vibesdk-db",
+  "database_id": "60fccd3b-21b1-44ea-bb30-a596b10d1bdc",
+  "migrations_dir": "migrations",
+  "remote": true
+}
+```
+
+`DB` is the binding name used in Worker code via `env.DB`. Replace `database_id` with your own D1 ID after running `wrangler d1 create vibesdk-db`.
+
+**KV Namespace (`kv_namespaces`):**
+
+```jsonc
+{
+  "binding": "VibecoderStore",
+  "id": "a72896494bdd4991b3ab1cfec53903e2",
+  "remote": true
+}
+```
+
+General-purpose key-value store accessed via `env.VibecoderStore`. Replace `id` with your own KV namespace ID.
+
+**R2 Buckets (`r2_buckets`):**
+
+| Binding | Bucket Name | Purpose |
+|---|---|---|
+| `TEMPLATES_BUCKET` | `vibesdk-templates` | Stores project template archives cloned from the templates repository |
+| `R2_BUCKET` | `appypievibe` | General-purpose object storage for generated app assets |
+
+**Durable Objects (`durable_objects.bindings`):**
+
+All five Durable Objects are declared here. Each `class_name` must match the exported class name in the Worker source.
+
+| Binding Name | Class Name | Purpose |
+|---|---|---|
+| `CodeGenObject` | `CodeGeneratorAgent` | One instance per chat session; holds all code generation state and git history |
+| `Sandbox` | `UserAppSandboxService` | Manages container lifecycle for a user's sandbox |
+| `DORateLimitStore` | `DORateLimitStore` | Per-user rate limit state, coordinated across requests |
+| `UserSecretsStore` | `UserSecretsStore` | Encrypted storage of user API keys (AES-GCM, one DO per user) |
+| `GlobalDurableObject` | `GlobalDurableObject` | Platform-wide shared state (feature flags, global counters) |
+
+**AI Binding (`ai`):**
+
+```jsonc
+{ "binding": "AI", "remote": true }
+```
+
+Exposes Cloudflare's Workers AI via `env.AI`. `remote: true` routes inference through Cloudflare's hosted AI infrastructure rather than a local model runtime.
+
+**Containers (`containers`):**
+
+```jsonc
+{
+  "class_name": "UserAppSandboxService",
+  "image": "registry.cloudflare.com/vibesdk-production-userappsandboxservice:727be683",
+  "instance_type": "standard-3",
+  "max_instances": 10
+}
+```
+
+The `instance_type` and `max_instances` values in this file are overridden at deploy time by `SANDBOX_INSTANCE_TYPE` and `MAX_SANDBOX_INSTANCES` environment variables (see Section 8.7). The comment in the file makes this explicit.
+
+**Dispatch Namespace (`dispatch_namespaces`):**
+
+```jsonc
+{
+  "binding": "DISPATCHER",
+  "namespace": "orange-build-default-namespace",
+  "remote": true
+}
+```
+
+Workers for Platforms dispatch namespace. Used to dynamically dispatch requests to user-deployed Workers.
+
+**Rate Limiters (`unsafe.bindings`):**
+
+| Binding Name | Namespace ID | Limit | Period | Purpose |
+|---|---|---|---|---|
+| `API_RATE_LIMITER` | `2101` | 10,000 requests | 60 seconds | General API endpoint rate limiting |
+| `AUTH_RATE_LIMITER` | `2102` | 1,000 requests | 60 seconds | Authentication endpoint rate limiting |
+
+**Static vars (`vars`):**
+
+| Variable | Production Value | Purpose |
+|---|---|---|
+| `TEMPLATES_REPOSITORY` | `https://github.com/cloudflare/vibesdk-templates` | Git URL for fetching project templates during deploy |
+| `DISPATCH_NAMESPACE` | `orange-build-default-namespace` | Workers for Platforms namespace name |
+| `CLOUDFLARE_AI_GATEWAY` | `vibesdk-gateway` | Name of the AI Gateway instance used for all LLM routing |
+| `CUSTOM_DOMAIN` | `vibesnappy.appypie.com` | Custom domain for CORS and routing |
+| `MAX_SANDBOX_INSTANCES` | `10` | Maximum number of concurrent container sandbox instances |
+| `SANDBOX_INSTANCE_TYPE` | `standard-3` | Cloudflare Containers instance size |
+| `PLATFORM_CAPABILITIES` | JSON object | Feature flag object controlling which app types are enabled (see Section 8.4) |
+| `ENABLE_READ_REPLICAS` | `"true"` | Enables D1 read replicas for improved read throughput |
+
+---
+
+### 8.3 worker-configuration.d.ts
+
+The file `worker-configuration.d.ts` (at the project root) contains the TypeScript interface `CloudflareBindings` that declares the types for every binding available in `env` inside Worker code.
+
+Update this file whenever you:
+
+- Add a new KV namespace, D1 database, or R2 bucket binding to `wrangler.jsonc`
+- Add a new Durable Object binding
+- Add a new `vars` entry that Worker code needs to reference
+- Add a custom AI provider -- the setup script auto-appends provider-specific vars to this interface
+
+The interface is used via `Env = CloudflareBindings` in the Worker entry point and propagated through the entire backend type system. Keeping it in sync with `wrangler.jsonc` prevents runtime binding errors that TypeScript would otherwise not catch.
+
+---
+
+### 8.4 Staging Environment
+
+The staging configuration lives in `wrangler.staging.jsonc`. Deploy to staging with:
+
+```bash
+wrangler deploy --config wrangler.staging.jsonc
+```
+
+**Staging-specific resources:**
+
+| Resource | Staging Name | Production Name |
+|---|---|---|
+| D1 Database | `vibesdk-db-staging` | `vibesdk-db` |
+| TEMPLATES_BUCKET | `vibesdk-templates-staging` | `vibesdk-templates` |
+| R2_BUCKET | `appypievibe-staging` | `appypievibe` |
+| KV Namespace | `VibecoderStore-staging` (logical) | `VibecoderStore` |
+| Domain | `vibestaging.appypie.com` | `vibesnappy.appypie.com` |
+| Worker Name | `vibesdk-staging` | `vibesdk-production` |
+
+**Feature flags:** Staging enables all three capability types (`app`, `presentation`, `general`) via `PLATFORM_CAPABILITIES`, whereas production currently has only `app` enabled. This allows testing new feature modes before production rollout.
+
+**Workers dev and preview URLs:** `workers_dev: true` and `preview_urls: true` are enabled in staging, providing direct `*.workers.dev` access for quick testing without the custom domain. Production has both set to `false`.
+
+**Shared resources:** The `vibesdk-gateway` AI Gateway is shared across environments. Each environment requires its own authentication tokens -- do not copy production AI Gateway tokens to staging.
+
+---
+
+### 8.5 Database Operations
+
+**Schema and config files:**
+
+- Schema definition: `worker/database/schema.ts` (Drizzle ORM table definitions)
+- Drizzle config: `drizzle.config.ts` (points Drizzle to the schema and migrations directory)
+
+**Commands:**
+
+```bash
+bun run db:generate       # Reads schema.ts, generates SQL migration files in migrations/
+bun run db:migrate:local  # Applies pending migrations to the local D1 database via wrangler
+bun run db:studio         # Opens Drizzle Studio in the browser for visual inspection and querying
+bun run db:migrate:remote # Applies pending migrations to the production D1 database (requires confirmation)
+```
+
+**Workflow for schema changes:**
+
+1. Edit `worker/database/schema.ts` with your table or column changes.
+2. Run `bun run db:generate` to produce a new SQL migration file in `migrations/`.
+3. Review the generated SQL to confirm it matches intent.
+4. Run `bun run db:migrate:local` to apply and test locally.
+5. After verification, run `bun run db:migrate:remote` to apply to production.
+
+Never edit migration files after they have been applied to a live database. Add a new migration instead.
+
+---
+
+### 8.6 Production Deployment
+
+Running `bun run deploy` executes `scripts/deploy.ts`, which orchestrates the full production deployment sequence:
+
+1. **Validate environment**: Reads `.prod.vars`, checks that all required variables are present, and validates the build configuration against `wrangler.jsonc`.
+2. **Parse wrangler config**: Loads and merges `wrangler.jsonc` with any deploy-time overrides.
+3. **Clone/pull templates**: Fetches the latest templates from `https://github.com/cloudflare/vibesdk-templates` and stages them locally.
+4. **Deploy templates to R2**: Runs `deploy_templates.sh` to upload the template archives to the `TEMPLATES_BUCKET` R2 bucket.
+5. **Ensure dispatch namespace**: Verifies or creates the Workers for Platforms dispatch namespace (`orange-build-default-namespace`).
+6. **Configure container instances**: Applies `SANDBOX_INSTANCE_TYPE` and `MAX_SANDBOX_INSTANCES` to the container configuration, overriding the static values in `wrangler.jsonc`.
+7. **Create/verify AI Gateway**: Creates the `vibesdk-gateway` AI Gateway if it does not exist, or verifies the existing one, and configures authentication tokens.
+8. **Run wrangler deploy**: Executes `wrangler deploy` with the production config, uploading the built Worker and all assets.
+9. **Graceful cleanup**: Registers SIGINT and SIGTERM handlers to perform cleanup (temp files, partial uploads) if the deploy is interrupted.
+
+Before deploying, run `bun run build` to produce the `dist/` directory. The deploy script does not run the build step automatically.
+
+---
+
+### 8.7 Container and Sandbox Configuration
+
+**Production (Cloudflare Containers):**
+
+- **Image**: `registry.cloudflare.com/vibesdk-production-userappsandboxservice:727be683`
+- **Instance type**: `standard-3` (default; override via `SANDBOX_INSTANCE_TYPE` var)
+- **Max instances**: `10` (default; override via `MAX_SANDBOX_INSTANCES` var)
+- Container lifecycle is managed by the `UserAppSandboxService` Durable Object
+
+**Local development (Docker):**
+
+- Requires Docker Desktop running before starting `bun run dev`
+- The `SandboxDockerfile` at the project root defines the sandbox image for custom local builds
+- By default, local dev disables containers (`"dev": { "enable_containers": false }` in `wrangler.jsonc`)
+- **Corporate networks**: If your network requires custom CA certificates (e.g., for TLS inspection), add the certificate installation steps to `SandboxDockerfile` before building. See Section 2.9 of this guide for the exact Dockerfile snippet.
+
+**Scaling considerations:** Each `UserAppSandboxService` Durable Object manages one container. Increasing `MAX_SANDBOX_INSTANCES` beyond your Cloudflare account's container quota will cause deployment errors. Check your account limits in the Cloudflare dashboard before raising this value.
+
+---
+
+### 8.8 AI Gateway Setup
+
+The AI Gateway provides caching, rate limiting, observability, and multi-provider routing for all LLM calls made by the platform.
+
+**Gateway name:** `vibesdk-gateway` (configured via the `CLOUDFLARE_AI_GATEWAY` var in `wrangler.jsonc`; shared between production and staging environments).
+
+**Automatic setup:** During `bun run setup`, the setup script creates the AI Gateway automatically if `CLOUDFLARE_AI_GATEWAY_TOKEN` has read and edit permissions. The token is set to the same value as `CLOUDFLARE_API_TOKEN` by default.
+
+**Manual setup:**
+
+1. Go to Cloudflare Dashboard > AI Gateway.
+2. Create a new gateway named `vibesdk-gateway`.
+3. Copy the gateway URL from the dashboard.
+4. Set in `.dev.vars`:
+   ```
+   CLOUDFLARE_AI_GATEWAY_TOKEN="<your-api-token>"
+   CLOUDFLARE_AI_GATEWAY_URL="<gateway-url-from-dashboard>"
+   ```
+
+**What the gateway provides:**
+
+- **Caching**: Identical LLM requests return cached responses, reducing latency and provider costs.
+- **Rate limiting**: Protects upstream providers from excessive request volumes.
+- **Monitoring**: Request logs, latency metrics, and token usage visible in the Cloudflare dashboard.
+- **Multi-provider routing**: A single gateway endpoint routes to OpenAI, Anthropic, Google, OpenRouter, and Groq based on the model requested.
+
+**Debugging note:** Gateway error 2009 is ambiguous -- it can indicate either a gateway authentication failure or an upstream provider authentication failure. When debugging LLM errors, trace by `requestId` in the AI Gateway logs rather than relying on the top-level error code alone.
+
+---
+
+### 8.9 CLI Commands Reference
+
+| Command | Description |
+|---|---|
+| `bun run dev` | Start Vite dev server (`DEV_MODE=true`) |
+| `bun run build` | TypeScript compile + Vite build (produces `dist/`) |
+| `bun run typecheck` | TypeScript type-check without emitting |
+| `bun run lint` | ESLint |
+| `bun run knip` | Dead code / unused export detection |
+| `bun run knip:fix` | Auto-fix unused exports |
+| `bun run test` | Run all tests once |
+| `bun run test:watch` | Watch mode |
+| `bun run test:coverage` | Coverage report |
+| `bun run test:integration` | Integration tests (requires `VIBESDK_RUN_INTEGRATION_TESTS=1`) |
+| `bun run db:generate` | Generate migrations from schema |
+| `bun run db:migrate:local` | Apply migrations to local D1 |
+| `bun run db:migrate:remote` | Apply migrations to production D1 |
+| `bun run db:studio` | Open Drizzle Studio |
+| `bun run deploy` | Deploy via `scripts/deploy.ts` (reads `.prod.vars`) |
+| `bun run setup` | Interactive first-time setup |
