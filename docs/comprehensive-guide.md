@@ -340,3 +340,122 @@ ENV NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/your-root-ca.crt
 **Warning:** Never commit corporate CA certificate files to a public repository.
 
 ---
+
+## 3. Templates System
+
+### 3.1 What Templates Are
+
+Templates are pre-built project scaffolds stored in Cloudflare R2. Instead of generating an application from a blank slate, the AI extends an existing, working project. Each template represents a specific framework and stack choice -- a complete, runnable codebase with configuration, dependencies, and structure already in place.
+
+Templates repository: `https://github.com/cloudflare/vibesdk-templates`
+
+The AI uses a template as a foundation: it reads the existing files, understands the established patterns, and generates new code that fits the project rather than inventing structure from scratch. This produces more consistent, idiomatic output than fully generative approaches.
+
+### 3.2 Project Types
+
+| Type | Use Case | Behavior | Sandbox |
+|---|---|---|---|
+| `app` | Full-stack web apps, mobile apps | Phasic (deterministic phases) | Yes |
+| `workflow` | Backend APIs, cron jobs, webhooks | Agentic (autonomous LLM loop) | Yes |
+| `presentation` | Slide decks, pitch decks | Agentic | Yes |
+| `general` | Docs, notes, specs in Markdown/MDX | Agentic | No |
+
+### 3.3 Template Data Structure
+
+Two levels of template data are defined in `worker/services/sandbox/sandboxTypes.ts`.
+
+**TemplateInfo** (metadata stored in the catalog):
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `string` | Unique template identifier |
+| `language` | `string` (optional) | "TypeScript" or "JavaScript" |
+| `frameworks` | `string[]` | Framework names used in this template |
+| `projectType` | `enum` | `app`, `workflow`, `presentation`, or `general` |
+| `description` | `object` | `selection` (used by AI for matching) and `usage` (how to build on it) |
+| `renderMode` | `enum` (optional) | `sandbox`, `browser`, `mobile`, or `mobile-fullstack` |
+| `slideDirectory` | `string` (optional) | Path to slides directory for presentation templates |
+| `disabled` | `boolean` | When true, template is excluded from selection |
+| `initCommand` | `string` (optional) | Command to run during sandbox initialization |
+
+**TemplateDetails** (full template with file contents, extends `TemplateInfo`):
+
+| Field | Type | Description |
+|---|---|---|
+| `fileTree` | `FileTreeNode` | Directory hierarchy representing the template structure |
+| `allFiles` | `Record<string, string>` | Map of file paths to file contents |
+| `deps` | `Record<string, string>` | Dependencies from `package.json` |
+| `importantFiles` | `string[]` | Files the agent should focus on when reading the project |
+| `dontTouchFiles` | `string[]` | Files the agent must not modify |
+| `redactedFiles` | `string[]` | Sensitive files filtered from AI context |
+
+### 3.4 Template Storage
+
+| Resource | Name |
+|---|---|
+| Production R2 bucket | `vibesdk-templates` |
+| Staging R2 bucket | `vibesdk-templates-staging` |
+| Catalog file | `template_catalog.json` at R2 bucket root |
+| Individual templates | `.zip` files containing all files and metadata |
+
+Templates are accessed via `BaseSandboxService.listTemplates()` in `worker/services/sandbox/BaseSandboxService.ts`. The catalog is fetched once per request and templates are loaded on demand by name.
+
+### 3.5 Template Selection Flow
+
+1. User prompt arrives at the agent.
+2. `predictProjectType(query)` in `worker/agents/planning/templateSelector.ts` classifies the prompt into `app`, `workflow`, `presentation`, or `general` using an LLM inference call.
+3. `selectTemplate(query, templates, projectType)` narrows the candidate set:
+   - Filters out disabled templates and templates with "minimal" in their name.
+   - Filters remaining templates by the detected project type (skipped for `general`).
+   - Auto-selects if only one template matches (common for `workflow` and `presentation`).
+   - Runs an AI inference call to rank and select among remaining candidates.
+4. Returns a `TemplateSelection` object with the following fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `selectedTemplateName` | `string` | The chosen template's name |
+| `reasoning` | `string` | Explanation of why this template was selected |
+| `useCase` | `enum` | SaaS Product Website, Dashboard, Blog, Portfolio, E-Commerce, General, Other |
+| `complexity` | `enum` | `simple`, `moderate`, or `complex` |
+| `styleSelection` | `enum` | Minimalist Design, Brutalism, Retro, Illustrative, Kid_Playful, Custom |
+| `projectType` | `enum` | The detected project type |
+
+### 3.6 Template Import and Customization
+
+Source: `worker/agents/utils/templateCustomizer.ts`
+
+`importTemplate(templateName)` loads the template's files into agent state. `customizeTemplateFiles()` then orchestrates the following sequence:
+
+1. Updates `package.json` with the project name and a `prepare` script.
+2. Updates `wrangler.jsonc` with the project name. Comments are preserved using `jsonc-parser`, which handles JSONC syntax that standard JSON parsers reject.
+3. Generates `.bootstrap.js` -- a self-deleting first-run setup script that runs once on sandbox initialization and removes itself after completion.
+4. Updates `.gitignore` to exclude bootstrap marker files.
+
+### 3.7 Template Placeholder System
+
+Source: `worker/services/sandbox/templateParser.ts`
+
+Templates use placeholders in `wrangler.jsonc` for Cloudflare resource IDs that are not known until deployment time. The `TemplateParser` class manages their lifecycle:
+
+```
+{{KV_ID}}   -- replaced with the KV namespace ID for this project
+{{D1_ID}}   -- replaced with the D1 database ID for this project
+```
+
+The replacement sequence:
+
+1. Detects placeholders in the wrangler config file.
+2. Extracts the binding names associated with each placeholder.
+3. Replaces placeholders with the actual Cloudflare resource IDs allocated during deployment setup.
+4. Validates that all placeholders were replaced before allowing deployment to proceed -- any remaining placeholder causes a hard failure rather than deploying a broken configuration.
+
+### 3.8 Deploying Templates to R2
+
+Templates are uploaded to R2 as part of the main deploy pipeline, executed via `bun run deploy` (which runs `scripts/deploy.ts`):
+
+1. Clones or pulls `https://github.com/cloudflare/vibesdk-templates` to a local path.
+2. Reads `wrangler.jsonc` to find the `TEMPLATES_BUCKET` R2 binding for the target environment.
+3. Executes `deploy_templates.sh` from the templates repository root.
+4. The script zips each template directory and uploads the bundles to R2 along with an updated `template_catalog.json`.
+
+The staging environment uses the `vibesdk-templates-staging` bucket, keeping template versions independent between environments.
