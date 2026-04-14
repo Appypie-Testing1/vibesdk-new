@@ -1457,3 +1457,114 @@ The AI Gateway provides caching, rate limiting, observability, and multi-provide
 | `bun run db:studio` | Open Drizzle Studio |
 | `bun run deploy` | Deploy via `scripts/deploy.ts` (reads `.prod.vars`) |
 | `bun run setup` | Interactive first-time setup |
+
+## 9. Development Workflow and Contribution Guide
+
+### 9.1 Code Quality Commands
+
+```bash
+bun run typecheck  # TypeScript type-check -- run before committing
+bun run lint       # ESLint checks
+bun run knip       # Dead code / unused export detection
+bun run knip:fix   # Auto-fix unused exports
+```
+
+### 9.2 Testing
+
+Test runner: Vitest with `vitest-pool-workers` (runs in the Cloudflare Workers runtime environment).
+
+| Command | Description |
+|---|---|
+| `bun run test` | Run all tests once |
+| `vitest run path/to/file.test.ts` | Run a single test file |
+| `bun run test:watch` | Watch mode |
+| `bun run test:coverage` | Coverage report |
+| `bun run test:integration` | Integration tests (requires `VIBESDK_RUN_INTEGRATION_TESTS=1`) |
+
+SDK tests run separately from the `sdk/` directory:
+
+```bash
+cd sdk && bun test test/*.test.ts                                    # Unit tests
+cd sdk && bun test --timeout 600000 test/integration/*.test.ts       # Integration tests (needs VIBESDK_INTEGRATION_API_KEY)
+```
+
+### 9.3 How-To Recipes
+
+**Add a new API endpoint:**
+
+1. Define request/response types in `src/api-types.ts`
+2. Add client method to `src/lib/api-client.ts`
+3. Create service in `worker/database/services/` (if DB access is needed)
+4. Create controller in `worker/api/controllers/`
+5. Add route in `worker/api/routes/`
+6. Register route in `worker/api/routes/index.ts`
+
+**Add a new WebSocket message:**
+
+1. Add message type to `worker/api/websocketTypes.ts`
+2. Handle in backend: `worker/agents/core/websocket.ts`
+3. Handle in frontend: `src/routes/chat/utils/handle-websocket-message.ts`
+
+**Add a new LLM tool:**
+
+1. Create `worker/agents/tools/toolkit/my-tool.ts`
+2. Export a factory function: `createMyTool(agent, logger)`
+3. Import in `worker/agents/tools/customTools.ts`
+4. Add to `buildTools()` (for conversation) or `buildDebugTools()` (for debugger)
+
+**Change the LLM model for an operation:**
+
+- Edit `worker/agents/inferutils/config.ts`
+- Modify the relevant key in `DEFAULT_AGENT_CONFIG` or `PLATFORM_AGENT_CONFIG`
+- Model name format: `provider/model-name` (e.g., `openai/gpt-4`, `anthropic/claude-3.5-sonnet`)
+
+**Modify conversation agent behavior:**
+
+- Edit `worker/agents/operations/UserConversationProcessor.ts`
+- The `SYSTEM_PROMPT` constant (around line 74) defines how the agent responds to users
+
+### 9.4 File Naming Conventions
+
+| Type | Convention | Example |
+|---|---|---|
+| React components | PascalCase.tsx | `ChatView.tsx`, `AppCard.tsx` |
+| Utilities and hooks | kebab-case.ts | `api-client.ts`, `use-chat.ts` |
+| Backend services | PascalCase.ts | `AppService.ts`, `UserService.ts` |
+
+### 9.5 Core Rules (Non-Negotiable)
+
+1. **Strict type safety** -- never use `any`. Frontend imports types from `@/api-types` (the single source of truth). Search the codebase for existing types before creating new ones.
+
+2. **DRY principle** -- search for similar functionality before implementing. Extract reusable utilities, hooks, and components. Never copy-paste code -- refactor into shared functions.
+
+3. **Follow existing patterns** -- frontend API calls go in `src/lib/api-client.ts`. Backend routes go in `worker/api/routes/`, controllers in `worker/api/controllers/`, DB services in `worker/database/services/`. Types shared between frontend and backend go in `shared/types/`, API types in `src/api-types.ts`.
+
+4. **Production-ready code only** -- no TODOs, no placeholders, no hacky workarounds. Comments explain purpose, not narration.
+
+5. **File naming** -- follow the conventions in Section 9.4.
+
+### 9.6 Debugging Hotspots
+
+| Subsystem | What to Check First |
+|---|---|
+| State machine | Transitions in `worker/agents/core/codingAgent.ts`; abort controller cleanup; `CodeGenState` field consistency |
+| WebSocket | All three layers in sync (types, backend handler, frontend handler); message deduplication; reconnect state restoration |
+| Inference/LLM | Model config in `worker/agents/inferutils/config.ts`; tool execution loop; loop detection triggers |
+| Database | Migration state (`bun run db:check`); service query logic; Drizzle schema types |
+| Sandbox | Container lifecycle; Cloudflare tunnel status; WARP interference |
+
+### 9.7 Security-Sensitive Paths
+
+These paths require extra scrutiny during review or modification:
+
+- `worker/services/secrets/` -- Vault crypto (Argon2id/AES-GCM). RPC methods must return `null`/`boolean` on error, never throw exceptions.
+- `worker/middleware/` -- CSRF protection, WebSocket security middleware.
+- `worker/utils/authUtils.ts` -- JWT signing, authentication logic, token validation.
+- Any file handling user input or external data -- check for injection, authorization, and validation.
+
+### 9.8 Gotchas
+
+- **Vite env vars in Workers**: `import.meta.env.*` variables are NOT available in Worker code. Use `env` from Worker bindings instead.
+- **Cloudflare WARP**: WARP in full mode breaks anonymous cloudflared tunnels used for local dev previews. Disable WARP or switch to DNS-only (1.1.1.1) mode while developing.
+- **Docker required locally**: Sandbox instances need Docker running. Without Docker, code generation works but preview/deployment features will not.
+- **First-time setup**: See `docs/setup.md` for the quick-start walkthrough if this guide is too detailed for getting started.
