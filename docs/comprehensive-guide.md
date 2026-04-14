@@ -949,3 +949,100 @@ Tool execution during generation causes duplicate AI messages. The backend skips
 | Frontend handler | `src/routes/chat/utils/handle-websocket-message.ts` |
 
 Modifying a WebSocket message type without updating all three layers will result in silent failures where either the backend sends a message the frontend ignores or the frontend expects a field that no longer exists.
+
+## 6. Frontend Architecture
+
+### 6.1 Tech Stack and Build
+
+- React 19, Vite (with Rolldown), TypeScript, TailwindCSS, Radix UI primitives
+
+| Command | Description |
+|---|---|
+| `bun run dev` | Start dev server (localhost:5173) |
+| `bun run build` | tsc + vite build (produces dist/) |
+| `bun run typecheck` | Type-check without emitting |
+
+### 6.2 Routing
+
+React Router v7. All routes defined in `src/routes.ts`.
+
+| Path | Component | Protected |
+|---|---|---|
+| `/` | Home | No |
+| `/chat/:chatId` | Chat | No |
+| `/profile` | Profile | Yes |
+| `/settings` | Settings | Yes |
+| `/apps` | AppsPage | Yes |
+| `/app/:id` | AppView | No |
+| `/discover` | DiscoverPage | No |
+
+### 6.3 Context Providers
+
+| Provider | File | Purpose |
+|---|---|---|
+| AuthContext | `src/contexts/auth-context.tsx` | User state, login/logout, token refresh, OAuth, intended URL management |
+| AppsDataContext | `src/contexts/apps-data-context.tsx` | User's app list, pagination, filtering, sorting |
+| VaultContext | `src/contexts/vault-context.tsx` | Secret vault management, encryption/decryption, master password |
+| ThemeContext | `src/contexts/theme-context.tsx` | Dark/light/system theme switching and persistence |
+| MobileViewContext | `src/contexts/mobile-view-context.tsx` | Responsive UI state management |
+
+### 6.4 API Client
+
+Singleton `apiClient` exported from `src/lib/api-client.ts`. Type-safe methods with TypeScript generics.
+
+- CSRF token management -- automatically fetches and attaches CSRF tokens, refreshes on 403
+- 401 interception -- triggers global auth modal via `setGlobalAuthModalTrigger()`
+- Anonymous session token tracking via localStorage
+
+| Domain | Methods |
+|---|---|
+| Auth | loginWithEmail, register, verifyEmail, getProfile, logout, getCsrfToken, initiateOAuth |
+| Apps | getUserApps, getPublicApps, createApp, updateApp, deleteApp, getAppDetails, toggleFavorite, toggleAppStar |
+| User | getUserAppsWithPagination, updateProfile |
+| Stats | getUserStats, getUserActivity |
+| Analytics | getUserAnalytics, getAgentAnalytics |
+| Model Config | getModelConfigs, updateModelConfig, testModelConfig, resetAllModelConfigs |
+| Model Providers | getModelProviders, createModelProvider, updateModelProvider, deleteModelProvider, testModelProvider |
+| Vault | getVaultStatus, getVaultConfig, setupVault, resetVault |
+| GitHub | initiateGitHubOAuth, initiateGitHubExport, checkRemoteStatus |
+| Agent | createAgentSession (streaming), connectToAgent, deployPreview |
+
+### 6.5 Type System
+
+- Single source of truth: `src/api-types.ts` re-exports types from worker code
+- Frontend always imports from `@/api-types`, never directly from worker
+
+| Category | Description |
+|---|---|
+| App | App entity, app metadata, app list pagination |
+| User | User profile, user stats, user activity |
+| Auth | Login, registration, token, OAuth |
+| Analytics | User analytics, agent analytics |
+| Model Config | Per-operation model configuration |
+| Model Provider | Provider definitions and credentials |
+| Agent/CodeGen | Code generation state, phases, blueprint |
+| WebSocket | All request and response message types |
+| Vault | Vault status, config, setup |
+| Image Attachment | File upload metadata |
+| Error | Typed API error responses |
+
+### 6.6 Chat Interface and WebSocket
+
+- Chat page (`/chat/:chatId`) establishes WebSocket to agent via PartySocket
+- Message handling in `src/routes/chat/utils/handle-websocket-message.ts`
+- Real-time updates: file content streams as it generates, phase progress tracking, preview URL iframe updates
+- Monaco Editor for viewing and editing generated code files
+- State restoration on page refresh via `agent_connected` WebSocket message (includes full state snapshot)
+
+### 6.7 Key Libraries
+
+| Library | Purpose |
+|---|---|
+| Monaco Editor | In-browser code editor for viewing/editing generated files |
+| Framer Motion | Animations and transitions |
+| Recharts | Analytics charts and graphs |
+| react-markdown | Rendering markdown content in chat and descriptions |
+| PartySocket | WebSocket client with automatic reconnection |
+| Sonner | Toast notifications |
+| Embla Carousel | Carousel components |
+| Lucide React | Icon library |
