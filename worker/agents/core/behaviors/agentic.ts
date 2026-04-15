@@ -83,7 +83,9 @@ export class AgenticCodingBehavior extends BaseCodingBehavior<AgenticState> impl
                 description: query,
                 colorPalette: ['#1e1e1e'],
                 frameworks: [],
-                plan: []
+                plan: [],
+                authRequired: false,
+                authRoles: ['admin', 'user'],
             },
             templateName: templateInfo?.templateDetails?.name || (this.projectType === 'general' ? 'scratch' : ''),
             sandboxInstanceId: undefined,

@@ -112,10 +112,14 @@ export const PhasicBlueprintSchema = SimpleBlueprintSchema.extend({
         description: z.string().describe('Concise and brief description of the phase'),
     })).describe('Rough roadmap of the project'),
     initialPhase: PhaseConceptSchema.describe('The first phase to be implemented, in **STRICT** accordance with <PHASE GENERATION STRATEGY>'),
+    authRequired: z.boolean().describe('Whether the application requires user authentication. True for apps with user-specific data, accounts, or admin panels (e-commerce, SaaS, dashboards, social platforms). False for games, calculators, landing pages, portfolios, static tools.').default(false),
+    authRoles: z.array(z.string()).describe('User roles for the application when auth is required. Use ["admin", "user"] as default.').default(['admin', 'user']),
 });
 
 export const AgenticBlueprintSchema = SimpleBlueprintSchema.extend({
     plan: z.array(z.string()).describe('Step by step plan for implementing the project'),
+    authRequired: z.boolean().describe('Whether the application requires user authentication. True for apps with user-specific data, accounts, or admin panels (e-commerce, SaaS, dashboards, social platforms). False for games, calculators, landing pages, portfolios, static tools.').default(false),
+    authRoles: z.array(z.string()).describe('User roles for the application when auth is required. Use ["admin", "user"] as default.').default(['admin', 'user']),
 });
 
 export const BlueprintSchemaLite = PhasicBlueprintSchema.omit({
