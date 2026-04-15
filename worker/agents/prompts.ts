@@ -1441,6 +1441,7 @@ const SAAS_LANDING_INSTRUCTIONS = (style: TemplateSelection['styleSelection']): 
 ** Use a clean, modern layout with generous white space and a clear visual hierarchy
 ** Show the magic live i.e if possible show a small demo of the product. Only if simple and feasible.
 ** Generate SVG illustrations where absolutely relevant.
+** Auth Roles: Admin manages workspace settings, billing, and team members. User accesses features and personal settings. Workspace management is admin-only.
 
 Use the following artistic style:
 ${getStyleInstructions(style)}
@@ -1452,6 +1453,7 @@ const ECOMM_INSTRUCTIONS = (): string => `
 ** Insert a product showcase section with high-quality images, descriptions, and prices.
 ** Provide a collapsible sidebar (desktop) or an expandable top bar (tablet/mobile) containing filters (category, price range slider, brand, color swatches), so users can refine results without leaving the page.
 ** Use a clean, modern layout with generous white space and a clear visual hierarchy
+** Auth Roles: Admin manages products, categories, orders, and inventory. User browses products, manages cart, places orders, views order history. Product management and order management pages are admin-only.
 `;
 
 const DASHBOARD_INSTRUCTIONS = (): string => `
@@ -1462,6 +1464,7 @@ const DASHBOARD_INSTRUCTIONS = (): string => `
 ** If applicable to user query make It Interactive and Contextual (Filters, Search, Pagination)
 ** If applicable to user query add a sidebar and or tabs
 ** Dashboard should be information dense.
+** Auth Roles: Admin manages data sources, settings, and user accounts. User views dashboards and reports. Settings and user management pages are admin-only.
 `;
 
 export const getUsecaseSpecificInstructions = (selectedTemplate: TemplateSelection): string => {
