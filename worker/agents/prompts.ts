@@ -980,7 +980,7 @@ export const STRATEGIES_UTILS = {
     - User account: user@example.com / user123 (role: "user", name: "Demo User")
     - Pre-fill the login form with user@example.com / user123 so the app works on first load
     - Seed via async initialization (hash passwords at runtime using Web Crypto, not pre-computed strings)
-    - **MANDATORY WIRING**: Seeding is USELESS unless actually executed. You MUST wire the seed function to run on first request via a one-shot Hono middleware (see template usage.md "Wire Seed Auth" pattern). Without this wiring, login with the demo credentials WILL FAIL and the app will not be demoable. Verify after implementation: POST /api/auth/login with user@example.com/user123 must return 200 with a token.
+    - **MANDATORY WIRING**: Seeding is USELESS unless actually executed. You MUST call \`await seedAuth(c.env)\` as the FIRST statement inside the \`/api/auth/login\` AND \`/api/auth/register\` route handlers. This is stateless and idempotent (see template usage.md "Wire Seed Auth" pattern). Do NOT use module-scope flags (e.g. \`let authSeeded = false\`) -- call seedAuth directly in the handlers. Without this, login with demo credentials WILL FAIL and the app will not be demoable. Verify after implementation: POST /api/auth/login with user@example.com/user123 must return 200 with a token.
 
     **Admin Role -- MUST Generate at Least One Admin-Only Route:**
     - The "admin" role is useless unless at least one route actually uses requireRole('admin')
