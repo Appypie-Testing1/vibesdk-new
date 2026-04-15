@@ -975,12 +975,20 @@ export const STRATEGIES_UTILS = {
     - Role-based UI: conditionally render admin features (e.g., product management, user list) only for admin role
     - Logout button that clears token from localStorage and context
 
-    **Seed Data (critical for demo -- app MUST be demoable on first load):**
-    - Admin account: admin@example.com / admin123 (role: "admin", name: "Admin")
-    - User account: user@example.com / user123 (role: "user", name: "Demo User")
-    - Pre-fill the login form with user@example.com / user123 so the app works on first load
-    - Seed via async initialization (hash passwords at runtime using Web Crypto, not pre-computed strings)
-    - **MANDATORY WIRING**: Seeding is USELESS unless actually executed. You MUST wire the seed function to run on first request via a one-shot Hono middleware (see template usage.md "Wire Seed Auth" pattern). Without this wiring, login with the demo credentials WILL FAIL and the app will not be demoable. Verify after implementation: POST /api/auth/login with user@example.com/user123 must return 200 with a token.
+    **First-User-Is-Admin Bootstrap (MANDATORY -- replaces seed-user pattern):**
+    - Do NOT create pre-seeded demo user accounts (admin@example.com, user@example.com). Seeding async-hashed passwords is fragile; omit it entirely.
+    - Instead, in the \`/api/auth/register\` handler, determine role based on whether ANY users exist yet. The first person to register becomes the admin:
+      \`\`\`ts
+      // Reuse the list you already fetched for duplicate email check:
+      const allUsers = await AuthUserEntity.list(c.env, null, 1000);
+      if (allUsers.items.some(u => u.email === email)) return bad(c, 'Email already registered');
+      const role: UserRole = allUsers.items.length === 0 ? 'admin' : 'user';
+      const user = await AuthUserEntity.create(c.env, { id, email, passwordHash, salt, role, name, createdAt: Date.now() });
+      return ok(c, { token, user: { id, email, name, role } });
+      \`\`\`
+    - **Login page MUST NOT show fake "Demo Accounts: admin@example.com/admin123" hint text** -- those accounts do not exist. Instead, show a notice like "Register now -- the first account becomes the admin."
+    - **Login form MUST NOT be pre-filled** with fake credentials that will fail. Leave email/password fields empty on initial render.
+    - This pattern is well-known (Ghost CMS, Discourse, WordPress bootstrap). It avoids the async-seeding pitfall while still delivering a demoable admin experience.
 
     **Admin Role -- MUST Generate at Least One Admin-Only Route:**
     - The "admin" role is useless unless at least one route actually uses requireRole('admin')
