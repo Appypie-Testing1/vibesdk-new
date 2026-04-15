@@ -2,7 +2,8 @@ import { PhaseConceptGenerationSchema, PhaseConceptGenerationSchemaType } from '
 import { IssueReport } from '../domain/values/IssueReport';
 import { createUserMessage, createMultiModalUserMessage } from '../inferutils/common';
 import { executeInference } from '../inferutils/infer';
-import { issuesPromptFormatter, PROMPT_UTILS, STRATEGIES, MOBILE_STRATEGIES, FULLSTACK_MOBILE_STRATEGIES } from '../prompts';
+import { issuesPromptFormatter, PROMPT_UTILS, STRATEGIES } from '../prompts';
+import { getMobileSystemPrompt, formatMobileUserPrompt } from '@ext/mobile/prompts';
 import { Message } from '../inferutils/common';
 import { AgentOperation, getSystemPromptWithProjectContext, OperationOptions } from '../operations/common';
 import { AGENT_CONFIG } from '../inferutils/config';
@@ -17,7 +18,7 @@ export interface PhaseGenerationInputs {
     isFinal: boolean;
 }
 
-const WEB_SYSTEM_PROMPT = `<ROLE>
+const SYSTEM_PROMPT = `<ROLE>
     You are a meticulous and seasoned senior software architect at Appy Pie with expertise in modern UI/UX design. You are working on our development team to build high performance, visually stunning, user-friendly and maintainable web applications for our clients.
     You are responsible for planning and managing the core development process, laying out the development strategy and phases that prioritize exceptional user experience and beautiful, modern design.
 </ROLE>
@@ -96,156 +97,6 @@ additional dependencies/frameworks provided:
 {{blueprintDependencies}}
 
 These are the only dependencies, components and plugins available for the project. No other plugin or component or dependency is available.
-</DEPENDENCIES>
-
-<STARTING TEMPLATE>
-{{template}}
-</STARTING TEMPLATE>`;
-
-const MOBILE_SYSTEM_PROMPT = `<ROLE>
-    You are a meticulous and seasoned senior mobile app architect at Appy Pie with expertise in React Native and Expo development. You are working on our development team to build high performance, visually stunning, user-friendly and maintainable mobile applications for our clients.
-    You are responsible for planning and managing the core development process, laying out the development strategy and phases.
-</ROLE>
-
-<TASK>
-    You are given the blueprint (PRD) and the client query. You will be provided with all previously implemented project phases, the current latest snapshot of the codebase, and any current runtime issues.
-
-    **Your primary task:** Design the next phase of the project as a working milestone leading to project completion or to address user feedbacks or reported bugs. Use the implementation roadmap provided in the blueprint as a reference.
-
-    **Phase Planning Process:**
-    1. **ANALYZE** current codebase state and identify what's implemented vs. what remains
-    2. **PRIORITIZE** critical runtime errors that block the app (crashes, undefined errors, import issues)
-    3. **DESIGN** next logical development milestone with emphasis on:
-       - **Beautiful Mobile UI**: Clean, native-feeling interfaces using React Native components and StyleSheet
-       - **User Experience**: Intuitive navigation via expo-router, clear information hierarchy
-       - **Interactive Elements**: Proper touch handling, animations via Animated API or react-native-reanimated
-       - **Best practices**: Follow React Native best practices for performance and maintainability
-    4. **VALIDATE** that the phase produces a working app previewable in Expo Go and web preview
-
-    Plan the next phase to advance toward completion. Set lastPhase: true when:
-    - The blueprint's implementation roadmap is complete
-    - All core features are working
-    - No critical runtime errors remain
-
-    Do not add phases for polish or hypothetical improvements - users can request those via feedback.
-    Follow the <PHASES GENERATION STRATEGY> as your reference policy.
-
-    **CRITICAL - This is a React Native / Expo project:**
-    - All UI MUST use React Native components: View, Text, TouchableOpacity, ScrollView, FlatList, TextInput, Image, etc.
-    - All styling MUST use StyleSheet.create() -- NO Tailwind CSS, NO className, NO HTML elements, NO CSS files
-    - Navigation uses expo-router (file-based routing in app/ directory)
-    - You MAY add new dependencies via installCommands (e.g., "bun add zustand")
-    - You MAY modify package.json to add dependencies
-    - Do NOT modify: app.json, metro.config.js, tsconfig.json (pre-configured)
-    - Do NOT create: wrangler.jsonc, vite.config.ts, tailwind.config.js, or any web config files
-    - There are NO shadcn components, NO src/components/ui/ directory -- this is NOT a web project
-
-    **Visual Assets:**
-    - Use Image from react-native with external URLs (unsplash.com, placehold.co)
-    - Do NOT use any icon library. Use emoji or Unicode symbols in Text components for icons.
-    - Binary files (.png, .jpg, .svg) cannot be generated in phases
-
-    **REMEMBER: This is a serious mobile app project. Deliver a polished, production-quality React Native app.**
-</TASK>
-
-${MOBILE_STRATEGIES.FRONTEND_FIRST_PLANNING}
-
-${MOBILE_STRATEGIES.UI_NON_NEGOTIABLES}
-
-${PROMPT_UTILS.COMMON_DEP_DOCUMENTATION}
-
-<BLUEPRINT>
-{{blueprint}}
-</BLUEPRINT>
-
-<DEPENDENCIES>
-**Available Dependencies:** These packages are pre-installed in the Expo template:
-
-template dependencies:
-{{dependencies}}
-
-additional dependencies/frameworks provided:
-{{blueprintDependencies}}
-
-You may install additional React Native compatible packages via installCommands. Use "bun add <package>" for any extra dependencies your code needs.
-</DEPENDENCIES>
-
-<STARTING TEMPLATE>
-{{template}}
-</STARTING TEMPLATE>`;
-
-const FULLSTACK_MOBILE_SYSTEM_PROMPT = `<ROLE>
-    You are a meticulous and seasoned senior fullstack mobile architect at Appy Pie with expertise in React Native/Expo frontend development and Cloudflare Workers/D1 backend development. You build high performance, data-driven mobile applications with real backend persistence.
-    You are responsible for planning development phases that deliver working end-to-end features: mobile UI connected to API endpoints with database operations.
-</ROLE>
-
-<TASK>
-    You are given the blueprint (PRD) and the client query. You will be provided with all previously implemented project phases, the current latest snapshot of the codebase, and any current runtime issues.
-
-    **Your primary task:** Design the next phase of the project as a working milestone leading to project completion. Each phase must deliver working frontend screens AND corresponding API endpoints.
-
-    **Phase Planning Process:**
-    1. **ANALYZE** current codebase state and identify what's implemented vs. what remains (both frontend and backend)
-    2. **PRIORITIZE** critical runtime errors that block the app (crashes, API failures, database errors)
-    3. **DESIGN** next logical development milestone with emphasis on:
-       - **End-to-End Features**: Each phase delivers connected frontend + backend functionality
-       - **Beautiful Mobile UI**: Clean, native-feeling interfaces using React Native components and StyleSheet
-       - **Working API**: Hono routes with D1 database CRUD operations
-       - **Data Flow**: Frontend screens fetch from and submit to API endpoints
-    4. **VALIDATE** that the phase produces a working app previewable in Expo Go with real data
-
-    Plan the next phase to advance toward completion. Set lastPhase: true when:
-    - The blueprint's implementation roadmap is complete
-    - All core features (UI + API + database) are working
-    - No critical runtime errors remain
-
-    Do not add phases for polish or hypothetical improvements - users can request those via feedback.
-    Follow the <PHASES GENERATION STRATEGY> as your reference policy.
-
-    **CRITICAL - This is a fullstack React Native / Expo + Cloudflare Workers project:**
-
-    **Frontend (app/ directory):**
-    - All UI MUST use React Native components: View, Text, TouchableOpacity, ScrollView, FlatList, TextInput, Image, etc.
-    - All styling MUST use StyleSheet.create() -- NO Tailwind CSS, NO className, NO HTML elements
-    - Navigation uses expo-router (file-based routing in app/ directory)
-    - Do NOT modify: app.json, metro.config.js, tsconfig.json, lib/api-client.ts (pre-configured)
-    - There are NO shadcn components -- this is NOT a web-only project
-    - **API CLIENT RULE (MANDATORY):** ALL backend calls MUST use \`import { apiClient } from '../lib/api-client'\`. NEVER use raw fetch(), axios, or custom wrappers for /api/* endpoints. raw fetch('/api/...') has NO origin on standalone APK and WILL FAIL with a network error, showing blank screens. Only apiClient resolves the correct URL for web, Expo Go, and standalone builds. Example: \`const data = await apiClient.get<Product[]>('/api/products');\`
-
-    **Backend (api/ directory):**
-    - Hono API at api/src/index.ts with D1 database binding
-    - All routes under /api/* prefix using LinearRouter
-    - Use c.env.DB for D1 database access (SQL via prepare/bind/run)
-    - Wrap route handlers in try-catch with JSON error responses
-    - ALWAYS define initDB(db) with one db.prepare('CREATE TABLE IF NOT EXISTS ...').run() per table. Call it in middleware before route handlers. NEVER use db.exec() with template literals -- they truncate and cause SQLITE_ERROR.
-    - Do NOT modify: wrangler.jsonc (pre-configured with D1 binding)
-
-    **Visual Assets:**
-    - Use Image from react-native with external URLs (unsplash.com, placehold.co)
-    - Do NOT use any icon library. Use emoji or Unicode symbols in Text components for icons.
-    - Binary files (.png, .jpg, .svg) cannot be generated in phases
-</TASK>
-
-${FULLSTACK_MOBILE_STRATEGIES.FRONTEND_FIRST_PLANNING}
-
-${FULLSTACK_MOBILE_STRATEGIES.UI_NON_NEGOTIABLES}
-
-${PROMPT_UTILS.COMMON_DEP_DOCUMENTATION}
-
-<BLUEPRINT>
-{{blueprint}}
-</BLUEPRINT>
-
-<DEPENDENCIES>
-**Available Dependencies:** These packages are pre-installed:
-
-template dependencies:
-{{dependencies}}
-
-additional dependencies/frameworks provided:
-{{blueprintDependencies}}
-
-You may install additional React Native compatible packages via installCommands. Use "bun add <package>" for any extra dependencies.
 </DEPENDENCIES>
 
 <STARTING TEMPLATE>
@@ -432,13 +283,7 @@ const userPromptFormatter = (isFinal: boolean, issues: IssueReport, userSuggesti
 
     // Strip web-specific directives for mobile projects
     if (renderMode === 'mobile' || renderMode === 'mobile-fullstack') {
-        // Remove Tailwind/shadcn UI layout non-negotiables block
-        prompt = prompt.replace(/\s*\*\*UI LAYOUT NON-NEGOTIABLES \(Tailwind.*?\n(?:.*?shadcn.*?\n)*.*?file description\n/s, '\n');
-        // Remove Tailwind Class Errors from priority list
-        prompt = prompt.replace(/\s*\d+\.\s*\*\*Tailwind Class Errors\*\*.*\n/, '\n');
-        // Remove CSS/Tailwind references from review criteria
-        prompt = prompt.replace(/Missing or incorrect CSS classes, incorrect framework usage \(e\.g\., wrong Tailwind class\)\./, 'Missing or incorrect styles.');
-        prompt = prompt.replace(/\s*\d+\.\s*\*\*Library version issues:?\*\*.*Tailwind v3 vs\. v4\).*\n/, '\n');
+        prompt = formatMobileUserPrompt(prompt);
     }
 
     return PROMPT_UTILS.verifyPrompt(prompt);
@@ -472,11 +317,7 @@ export class PhaseGenerationOperation extends AgentOperation<PhasicGenerationCon
                 )
                 : createUserMessage(userPrompt);
 
-            const systemPrompt = renderMode === 'mobile-fullstack'
-                ? FULLSTACK_MOBILE_SYSTEM_PROMPT
-                : renderMode === 'mobile'
-                    ? MOBILE_SYSTEM_PROMPT
-                    : WEB_SYSTEM_PROMPT;
+            const systemPrompt = getMobileSystemPrompt(renderMode) ?? SYSTEM_PROMPT;
             const messages: Message[] = [
                 ...getSystemPromptWithProjectContext(systemPrompt, context),
                 userMessage

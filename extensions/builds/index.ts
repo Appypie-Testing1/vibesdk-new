@@ -1,0 +1,1 @@
+export { BuildsController } from './controller';

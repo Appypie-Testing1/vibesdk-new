@@ -4,8 +4,8 @@ import type { AppDetailsData, FileType } from '@/api-types';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { appEvents } from '@/lib/app-events';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { MobileViewProvider, useMobileView } from '@/contexts/mobile-view-context';
-import { MobileWebSwitcher } from '@/components/mobile-web-switcher';
+import { MobileViewProvider, useMobileView } from '@ext/ui/contexts/mobile-view-context';
+import { MobileWebSwitcher } from '@ext/ui/components/mobile-web-switcher';
 import {
 	Star,
 	Eye,
@@ -51,7 +51,7 @@ import { GitCloneModal } from '@/components/shared/GitCloneModal';
 import { GitCloneCommand, GitClonePrivatePrompt } from '@/components/shared/GitCloneInline';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { PreviewIframe } from '../chat/components/preview-iframe';
-import { MobilePreviewWrapper } from '@/components/mobile-preview-wrapper';
+import { MobilePreviewWrapper } from '@ext/ui/components/mobile-preview-wrapper';
 
 // Use proper types from API types
 type AppDetails = AppDetailsData;

@@ -12,7 +12,7 @@ import { ViewHeader } from './view-header';
 import { PreviewHeaderActions } from './preview-header-actions';
 import { EditorHeaderActions } from './editor-header-actions';
 import { Copy } from './copy';
-import { MobilePreviewWrapper } from '@/components/mobile-preview-wrapper';
+import { MobilePreviewWrapper } from '@ext/ui/components/mobile-preview-wrapper';
 import { featureRegistry } from '@/features';
 import type { FileType, BlueprintType, BehaviorType, ModelConfigsInfo, TemplateDetails, ProjectType } from '@/api-types';
 import type { ContentDetectionResult } from '../utils/content-detector';

@@ -43,6 +43,7 @@ export default defineConfig({
 			'@': path.resolve(__dirname, './src'),
 			'shared': path.resolve(__dirname, './shared'),
 			'worker': path.resolve(__dirname, './worker'),
+			'@ext': path.resolve(__dirname, './extensions'),
 		},
 	},
 

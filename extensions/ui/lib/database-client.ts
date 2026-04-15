@@ -1,4 +1,4 @@
-import { detectAppId, getCurrentAppId } from './app-id-detector';
+import { detectAppId, getCurrentAppId } from '@ext/ui/lib/app-id-detector';
 
 export interface AppMetadata {
 	id: string;

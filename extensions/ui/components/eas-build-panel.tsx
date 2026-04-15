@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from '../../../components/primitives/button';
+import { Button } from '@/components/primitives/button';
 import { Loader, Download, Smartphone, AlertCircle } from 'lucide-react';
 import clsx from 'clsx';
 import type { EasBuildPlatform, EasBuildStatus } from '@/api-types';

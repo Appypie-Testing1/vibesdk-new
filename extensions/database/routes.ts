@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { AppEnv } from '../../types/appenv';
+import { AppEnv } from '../../worker/types/appenv';
 
 export function setupDatabaseRoutes(app: Hono<AppEnv>): void {
 	// Initialize database

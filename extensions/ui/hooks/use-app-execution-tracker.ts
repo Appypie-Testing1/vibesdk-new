@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { databaseClient } from '@/lib/database-client';
+import { databaseClient } from '@ext/ui/lib/database-client';
 
 /**
  * Hook that automatically tracks and saves app execution data

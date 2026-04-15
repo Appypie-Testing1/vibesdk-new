@@ -33,8 +33,11 @@
           ],
           "worker/*": [
             "./worker/*"
+          ],
+          "@ext/*": [
+            "./extensions/*"
           ]
 		}
 	},
-	"include": ["src", "shared"],
+	"include": ["src", "shared", "extensions/ui"],
 }

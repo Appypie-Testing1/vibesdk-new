@@ -8,7 +8,7 @@
 
 import { forwardRef, useState, useEffect, useCallback, useRef } from 'react';
 import { PreviewIframe } from '@/routes/chat/components/preview-iframe';
-import { useMobileView } from '@/contexts/mobile-view-context';
+import { useMobileView } from '@ext/ui/contexts/mobile-view-context';
 import { QRCodeSVG } from 'qrcode.react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { Smartphone, Copy, Check, RefreshCw, Monitor } from 'lucide-react';

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { ViewModeSwitch } from './view-mode-switch';
-import { MobileWebSwitcher } from '@/components/mobile-web-switcher';
-import { useMobileView } from '@/contexts/mobile-view-context';
+import { MobileWebSwitcher } from '@ext/ui/components/mobile-web-switcher';
+import { useMobileView } from '@ext/ui/contexts/mobile-view-context';
 import { HEADER_STYLES } from './view-header-styles';
 import type { ProjectType } from '@/api-types';
 

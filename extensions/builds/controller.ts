@@ -1,7 +1,7 @@
-import { BaseController } from '../baseController';
-import type { ControllerResponse, ApiResponse } from '../types';
-import type { RouteContext } from '../../types/route-context';
-import { createLogger } from '../../../logger';
+import { BaseController } from 'worker/api/controllers/baseController';
+import type { ControllerResponse, ApiResponse } from 'worker/api/controllers/types';
+import type { RouteContext } from 'worker/api/types/route-context';
+import { createLogger } from 'worker/logger';
 
 export class BuildsController extends BaseController {
     static logger = createLogger('BuildsController');

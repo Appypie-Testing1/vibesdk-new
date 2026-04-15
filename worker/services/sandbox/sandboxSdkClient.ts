@@ -26,6 +26,7 @@ import {
     InstanceCreationRequest,
 } from './sandboxTypes';
 
+import { EXPO_READINESS_PATTERNS } from '@ext/mobile/sandbox';
 import { createObjectLogger } from '../../logger';
 import { env } from 'cloudflare:workers'
 import { BaseSandboxService } from './BaseSandboxService';
@@ -581,9 +582,7 @@ export class SandboxSdkClient extends BaseSandboxService {
         // Patterns that indicate the server is ready
         const readinessPatterns = [
             /http:\/\/[^\s]+/,           // Any HTTP URL (most reliable)
-            /exp:\/\/[^\s]+/,            // Expo deep link URL (Metro outputs exp://host:port)
-            /Metro waiting on/i,         // Expo Metro "Metro waiting on exp://..."
-            /Starting Metro/i,           // Expo Metro startup message
+            ...EXPO_READINESS_PATTERNS,
             /ready in \d+/i,             // Vite "ready in X ms"
             /Local:\s+http/i,            // Vite local server line
             /Network:\s+http/i,          // Vite network server line

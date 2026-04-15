@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { appEvents } from '@/lib/app-events';
-import { databaseClient } from '@/lib/database-client';
+import { databaseClient } from '@ext/ui/lib/database-client';
 import { useAuth } from '@/contexts/auth-context';
 
 /**

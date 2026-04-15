@@ -1,5 +1,5 @@
 import { CodingAgentController } from '../controllers/agent/controller';
-import { BuildsController } from '../controllers/builds/controller';
+import { BuildsController } from '@ext/builds';
 import { AppEnv } from '../../types/appenv';
 import { Hono } from 'hono';
 import { AuthConfig, setAuthLevel } from '../../middleware/auth/routeAuth';

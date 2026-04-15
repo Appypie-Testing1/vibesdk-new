@@ -29,6 +29,8 @@ import { ProjectObjective } from "./objectives/base";
 import { FileOutputType } from "../schemas";
 import { SecretsClient, type UserSecretsStoreStub } from '../../services/secrets/SecretsClient';
 import { StateMigration } from './stateMigration';
+import { EasBuildManager } from '@ext/mobile/deployment';
+import { resumeEasBuildPolling } from '@ext/mobile/behavior';
 
 const DEFAULT_CONVERSATION_SESSION_ID = 'default';
 
@@ -220,11 +222,7 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         });
 
         // Resume EAS build polling if a build is stuck in active state
-        const easBuild = this.state.easBuild;
-        if (easBuild && (easBuild.status === 'pending' || easBuild.status === 'in-progress')) {
-            this.logger().info('Resuming EAS build polling on reconnect', { buildId: easBuild.buildId, status: easBuild.status });
-            this.scheduleEasBuildPoll(5_000);
-        }
+        resumeEasBuildPolling(this);
     }
 
     private initLogger(agentId: string, userId: string, sessionId?: string) {
@@ -587,10 +585,13 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
      * get overwritten by the framework's _scheduleNextAlarm().
      */
     scheduleEasBuildPoll(delayMs: number): void {
-        const delaySeconds = Math.ceil(delayMs / 1000);
-        this.schedule(delaySeconds, 'onEasBuildPoll').catch(err => {
-            this.logger().error('Failed to schedule EAS build poll', err);
-        });
+        EasBuildManager.scheduleEasBuildPoll(
+            async (delaySeconds: number, handler: string) => {
+                await this.schedule(delaySeconds, handler as keyof this);
+            },
+            this.logger(),
+            delayMs
+        );
     }
 
     /**
@@ -598,59 +599,44 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
      * Called by the Agent framework's schedule system.
      */
     async onEasBuildPoll(): Promise<void> {
-        const easBuild = this.state.easBuild;
-        if (!easBuild || (easBuild.status !== 'pending' && easBuild.status !== 'in-progress')) {
-            return;
-        }
-
-        this.logger().info('EAS build poll triggered', { buildId: easBuild.buildId });
-
-        // Retrieve EXPO_TOKEN: try vault first, fall back to sandbox-persisted token
-        // (vault session may expire after DO hibernation between poll intervals)
-        let expoToken = await this.getDecryptedSecret({ envVarName: 'EXPO_TOKEN' });
-        if (!expoToken) {
-            this.logger().info('Vault token unavailable during poll, trying sandbox fallback');
-            expoToken = await this.deploymentManager.getExpoTokenFromSandbox();
-        }
-        if (!expoToken) {
-            this.logger().error('EXPO_TOKEN not found during EAS poll (vault + sandbox fallback)');
-            const errorBuild = { ...easBuild, status: 'errored' as const, error: 'EXPO_TOKEN not available' };
-            this.setState({ ...this.state, easBuild: errorBuild });
-            this.broadcast(WebSocketMessageResponses.EAS_BUILD_ERROR, {
-                buildId: easBuild.buildId,
-                platform: easBuild.platform,
-                error: 'EXPO_TOKEN not available. Please unlock your vault or reconfigure your Expo token.',
-            });
-            return;
-        }
-
-        await this.deploymentManager.pollEasBuildStatus(expoToken, {
-            onStatus: (build) => {
-                this.broadcast(WebSocketMessageResponses.EAS_BUILD_STATUS, {
-                    buildId: build.buildId,
-                    platform: build.platform,
-                    status: build.status,
-                });
-            },
-            onComplete: (build) => {
-                this.broadcast(WebSocketMessageResponses.EAS_BUILD_COMPLETE, {
-                    buildId: build.buildId,
-                    platform: build.platform,
-                    artifactUrl: build.artifactUrl || build.easArtifactUrl || '',
-                    downloadUrl: build.artifactUrl
-                        ? `/api/agent/${this.getAgentId()}/builds/${build.buildId}/download`
-                        : '',
-                });
-            },
-            onError: (buildId, platform, error) => {
-                this.broadcast(WebSocketMessageResponses.EAS_BUILD_ERROR, {
-                    buildId,
-                    platform,
-                    error,
-                });
-            },
-            scheduleAlarm: (delayMs) => this.scheduleEasBuildPoll(delayMs),
-        });
+        const deps = {
+            stateManager: { getState: () => this.state, setState: (s: typeof this.state) => this.setState(s) },
+            getClient: () => this.deploymentManager.getClient(),
+            getLogger: () => this.logger(),
+            getAgentId: () => this.getAgentId(),
+            env: this.env,
+        };
+        await EasBuildManager.onEasBuildPoll(
+            deps,
+            (query) => this.getDecryptedSecret(query),
+            {
+                onStatus: (build) => {
+                    this.broadcast(WebSocketMessageResponses.EAS_BUILD_STATUS, {
+                        buildId: build.buildId,
+                        platform: build.platform,
+                        status: build.status,
+                    });
+                },
+                onComplete: (build) => {
+                    this.broadcast(WebSocketMessageResponses.EAS_BUILD_COMPLETE, {
+                        buildId: build.buildId,
+                        platform: build.platform,
+                        artifactUrl: build.artifactUrl || build.easArtifactUrl || '',
+                        downloadUrl: build.artifactUrl
+                            ? `/api/agent/${this.getAgentId()}/builds/${build.buildId}/download`
+                            : '',
+                    });
+                },
+                onError: (buildId, platform, error) => {
+                    this.broadcast(WebSocketMessageResponses.EAS_BUILD_ERROR, {
+                        buildId,
+                        platform,
+                        error,
+                    });
+                },
+                scheduleAlarm: (delayMs) => this.scheduleEasBuildPoll(delayMs),
+            }
+        );
     }
 
     // ==========================================

@@ -2,13 +2,13 @@ import { Outlet } from 'react-router';
 import { AuthProvider } from './contexts/auth-context';
 import { AuthModalProvider } from './components/auth/AuthModalProvider';
 import { ThemeProvider } from './contexts/theme-context';
-import { MobileViewProvider } from './contexts/mobile-view-context';
+import { MobileViewProvider } from '@ext/ui/contexts/mobile-view-context';
 import { VaultProvider } from './contexts/vault-context';
 import { Toaster } from './components/ui/sonner';
 import { AppLayout } from './components/layout/app-layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FeatureProvider } from './features';
-import { useAppDatabaseInit } from './hooks/use-app-database-init';
+import { useAppDatabaseInit } from '@ext/ui/hooks/use-app-database-init';
 
 function AppContent() {
   // Initialize database when apps are created

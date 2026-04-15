@@ -14,7 +14,7 @@ import { UserMessage, AIMessage } from './components/messages';
 import { PhaseTimeline } from './components/phase-timeline';
 import { type DebugMessage } from './components/debug-panel';
 import { DeploymentControls } from './components/deployment-controls';
-import { EasBuildPanel } from './components/eas-build-panel';
+import { EasBuildPanel } from '@ext/ui/components/eas-build-panel';
 import { useChat } from './hooks/use-chat';
 import { type ModelConfigsInfo, type BlueprintType, type PhasicBlueprint, SUPPORTED_IMAGE_MIME_TYPES, type ProjectType, type FileType } from '@/api-types';
 import { featureRegistry } from '@/features';

@@ -1,6 +1,6 @@
 import { Monitor, Smartphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import './mobile-preview.css';
+import '@ext/ui/styles/mobile-preview.css';
 
 type ViewMode = 'web' | 'mobile';
 
@@ -13,7 +13,7 @@ interface MobileWebSwitcherProps {
 export function MobileWebSwitcher({ viewMode, onViewModeChange, className }: MobileWebSwitcherProps) {
   const handleModeChange = (mode: ViewMode) => {
     onViewModeChange(mode);
-    
+
     // Update viewport meta tag for mobile preview
     const viewport = document.querySelector('meta[name="viewport"]') as HTMLMetaElement;
     if (viewport) {
@@ -23,7 +23,7 @@ export function MobileWebSwitcher({ viewMode, onViewModeChange, className }: Mob
         viewport.content = 'width=device-width, initial-scale=1.0';
       }
     }
-    
+
     // Add custom class to body for mobile preview styling
     if (mode === 'mobile') {
       document.body.classList.add('mobile-preview');
@@ -42,13 +42,13 @@ export function MobileWebSwitcher({ viewMode, onViewModeChange, className }: Mob
   return (
     <div className={cn("relative flex items-center bg-gray-100 dark:bg-gray-800 rounded-full p-1 shadow-inner", className)}>
       {/* Sliding indicator */}
-      <div 
+      <div
         className={cn(
           "absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white dark:bg-gray-700 rounded-full shadow-sm transition-all duration-300 ease-out",
           viewMode === 'web' ? 'left-1' : 'left-[calc(50%+1px)]'
         )}
       />
-      
+
       <button
         onClick={() => handleModeChange('web')}
         className={cn(
@@ -62,7 +62,7 @@ export function MobileWebSwitcher({ viewMode, onViewModeChange, className }: Mob
         <Monitor className="w-4 h-4 flex-shrink-0" />
         <span className="hidden sm:inline truncate">Web</span>
       </button>
-      
+
       <button
         onClick={() => handleModeChange('mobile')}
         className={cn(

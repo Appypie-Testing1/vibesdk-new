@@ -2,7 +2,8 @@ import { TemplateRegistry } from '../../inferutils/schemaFormatters';
 import { PhaseConceptSchema, type PhaseConceptType } from '../../schemas';
 import type { IssueReport } from '../../domain/values/IssueReport';
 import type { UserContext } from '../../core/types';
-import { issuesPromptFormatter, PROMPT_UTILS, MOBILE_STRATEGIES, FULLSTACK_MOBILE_STRATEGIES } from '../../prompts';
+import { issuesPromptFormatter, PROMPT_UTILS } from '../../prompts';
+import { MOBILE_STRATEGIES, FULLSTACK_MOBILE_STRATEGIES } from '@ext/mobile/prompts';
 
 export const PHASE_IMPLEMENTATION_SYSTEM_PROMPT = `You are implementing a phase in a React + TypeScript codebase with a Cloudflare Workers backend (Hono + D1 database).
 

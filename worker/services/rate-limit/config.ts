@@ -1,3 +1,5 @@
+import { RATE_LIMIT_OVERRIDES } from '@ext/config';
+
 export enum RateLimitStore {
 	KV = 'kv',
 	RATE_LIMITER = 'rate_limiter',
@@ -72,9 +74,9 @@ export const DEFAULT_RATE_LIMIT_SETTINGS: RateLimitSettings = {
 	appCreation: {
 		enabled: true,
 		store: RateLimitStore.DURABLE_OBJECT,
-		limit: 50,
-        dailyLimit: 50,
-		period: 4 * 60 * 60, // 4 hour
+		limit: RATE_LIMIT_OVERRIDES.appCreation.limit,
+		dailyLimit: RATE_LIMIT_OVERRIDES.appCreation.dailyLimit,
+		period: RATE_LIMIT_OVERRIDES.appCreation.period,
 	},
 	llmCalls: {
 		enabled: true,

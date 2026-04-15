@@ -16,7 +16,8 @@ import { FileRegenerationOperation } from '../../operations/FileRegeneration';
 // Database schema imports removed - using zero-storage OAuth flow
 import { BaseSandboxService } from '../../../services/sandbox/BaseSandboxService';
 import { getTemplateImportantFiles } from '../../../services/sandbox/utils';
-import { createScratchTemplateDetails, createExpoScratchTemplateDetails, createExpoFullstackTemplateDetails } from '../../utils/templates';
+import { createScratchTemplateDetails } from '../../utils/templates';
+import { MobileBehavior, computeExpoDeepLink } from '@ext/mobile/behavior';
 import { WebSocketMessageData, WebSocketMessageType } from '../../../api/websocketTypes';
 import { AgentActionKey, InferenceContext, InferenceRuntimeOverrides, ModelConfig } from '../../inferutils/config.types';
 import { ModelConfigService } from '../../../database/services/ModelConfigService';
@@ -138,9 +139,6 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 await this.executeCommands(setupCommands.commands);
                 this.logger.info("Initial commands executed successfully");
 
-            // For fullstack mobile: CF Workers deploy is deferred until all code
-            // generation phases complete (see post-generation auto-deploy below).
-            // Deploying the empty template here causes a 404 and wastes build time.
         } catch (error) {
             this.logger.error("Error during async initialization:", error);
             // throw error;
@@ -149,7 +147,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     onStateUpdate(_state: TState, _source: "server" | Connection) {}
 
     private isScratchTemplate(): boolean {
-        return this.state.templateName === 'scratch' || this.state.templateName === 'expo-scratch';
+        return this.state.templateName === 'scratch' || MobileBehavior.isMobileTemplate(this.state.templateName);
     }
 
     async ensureTemplateDetails() {
@@ -209,26 +207,12 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 this.templateDetailsCache = createScratchTemplateDetails();
                 return this.templateDetailsCache;
             }
-            if (this.state.templateName === 'expo-scratch') {
-                this.templateDetailsCache = createExpoScratchTemplateDetails();
-                // Persist mobile template metadata to state if not already set
-                if (!this.state.templateRenderMode) {
-                    this.setState({
-                        ...this.state,
-                        templateRenderMode: 'mobile',
-                        templateInitCommand: this.templateDetailsCache.initCommand,
-                    });
-                }
-                return this.templateDetailsCache;
-            }
-            if (this.state.templateName === 'expo-fullstack') {
-                this.templateDetailsCache = createExpoFullstackTemplateDetails();
-                if (!this.state.templateRenderMode) {
-                    this.setState({
-                        ...this.state,
-                        templateRenderMode: 'mobile-fullstack',
-                        templateInitCommand: this.templateDetailsCache.initCommand,
-                    });
+            const mobileDetails = MobileBehavior.getTemplateDetails(this.state.templateName);
+            if (mobileDetails) {
+                this.templateDetailsCache = mobileDetails;
+                const overrides = MobileBehavior.getTemplateStateOverrides(this.state.templateName);
+                if (overrides && !this.state.templateRenderMode) {
+                    this.setState({ ...this.state, ...overrides });
                 }
                 return this.templateDetailsCache;
             }
@@ -239,12 +223,8 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     protected isPreviewable(): boolean {
-        // Mobile (Expo) projects are previewable if they have package.json and app.json or app.config.ts
-        if (this.state.templateRenderMode === 'mobile' || this.state.templateRenderMode === 'mobile-fullstack') {
-            return this.fileManager.fileExists('package.json') && (
-                this.fileManager.fileExists('app.json') || this.fileManager.fileExists('app.config.ts')
-            );
-        }
+        const mobilePreviewable = MobileBehavior.isPreviewable(this.state, this.fileManager);
+        if (mobilePreviewable !== null) return mobilePreviewable;
         // Standard web projects require package.json + wrangler config
         return this.fileManager.fileExists('package.json') && (this.fileManager.fileExists('wrangler.jsonc') || this.fileManager.fileExists('wrangler.toml'));
     }
@@ -509,24 +489,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 instanceId: this.state.sandboxInstanceId,
             });
 
-            // For fullstack mobile projects, ensure .api-url exists so the proxy
-            // is ready when the user deploys manually via the Deploy button.
-            // No auto CF deploy — user controls when to deploy.
-            if ((this.state.templateRenderMode === 'mobile-fullstack' || this.state.templateName === 'expo-fullstack') && this.state.sandboxInstanceId) {
-                const previewDomain = getPreviewDomain(this.env);
-                const protocol = getProtocolForHost(previewDomain);
-                const expectedUrl = `${protocol}://${this.state.projectName}.${previewDomain}`;
-                const client = this.deploymentManager.getClient();
-                const sandboxId = this.state.sandboxInstanceId;
-
-                client.writeFiles(sandboxId, [
-                    { filePath: '.api-url', fileContents: expectedUrl }
-                ]).then(() => {
-                    this.logger.info('Ensured .api-url via writeFiles', { expectedUrl });
-                }).catch((err) => {
-                    this.logger.warn('Failed to write .api-url via writeFiles', err);
-                });
-            }
+            await MobileBehavior.onGenerationComplete(this.state, this.env, this.deploymentManager);
         }
     }
     
@@ -1175,19 +1138,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         }
 
         // Compute expo deep link transformer for mobile templates
-        // Uses exps:// for HTTPS sandbox URLs, exp:// for HTTP
-        const computeExpoDeepLink = (this.state.templateRenderMode === 'mobile' || this.state.templateRenderMode === 'mobile-fullstack')
-            ? (previewURL: string): string | undefined => {
-                try {
-                    const url = new URL(previewURL);
-                    // Use original protocol (https://) directly — Expo Go SDK 54
-                    // handles HTTPS URLs natively without needing exps:// scheme
-                    return `${url.protocol}//${url.hostname}`;
-                } catch {
-                    return undefined;
-                }
-            }
-            : undefined;
+        const expoDeepLinkFn = computeExpoDeepLink(this.state);
             
         // Invalidate static analysis cache
         this.staticAnalysisCache = null;
@@ -1205,7 +1156,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
                 onCompleted: (data) => {
                     const broadcastData = {
                         ...data,
-                        ...(computeExpoDeepLink && data.previewURL ? { expoDeepLink: computeExpoDeepLink(data.previewURL) } : {}),
+                        ...(expoDeepLinkFn && data.previewURL ? { expoDeepLink: expoDeepLinkFn(data.previewURL) } : {}),
                         ...(skipScreenshot ? { skipScreenshot: true } : {}),
                     };
                     this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, broadcastData);

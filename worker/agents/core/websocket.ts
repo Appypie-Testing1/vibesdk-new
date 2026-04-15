@@ -5,6 +5,7 @@ import { WebSocketMessage, WebSocketMessageData, WebSocketMessageType } from '..
 import { MAX_IMAGES_PER_MESSAGE, MAX_IMAGE_SIZE_BYTES } from '../../types/image-attachment';
 import { credentialsToRuntimeOverrides, type CredentialsPayload } from '../inferutils/config.types';
 import type { CodeGeneratorAgent } from './codingAgent';
+import { handleEasBuildTrigger, handleEasBuildCheck, resumeEasBuildPolling } from '@ext/mobile/behavior';
 
 const logger = createLogger('CodeGeneratorWebSocket');
 
@@ -201,106 +202,19 @@ export function handleWebSocketMessage(
                         deepDebugSession: debugState
                     });
                     // Resume EAS build polling if a build is stuck in active state
-                    const easBuildState = agent.state.easBuild;
-                    if (easBuildState && (easBuildState.status === 'pending' || easBuildState.status === 'in-progress')) {
-                        logger.info('Resuming stuck EAS build polling', { buildId: easBuildState.buildId, status: easBuildState.status });
-                        agent.scheduleEasBuildPoll(5_000);
-                    }
+                    resumeEasBuildPolling(agent);
                 } catch (error) {
                     logger.error('Error fetching conversation state:', error);
                     sendError(connection, `Error fetching conversation state: ${error instanceof Error ? error.message : String(error)}`);
                 }
                 break;
             case 'eas_build_check': {
-                // Manual check/recovery for stuck EAS builds
-                const easBuild = agent.state.easBuild;
-                if (easBuild && (easBuild.status === 'pending' || easBuild.status === 'in-progress')) {
-                    logger.info('Manual EAS build check requested, resuming polling', { buildId: easBuild.buildId });
-                    agent.scheduleEasBuildPoll(3_000);
-                    sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_STATUS, {
-                        buildId: easBuild.buildId,
-                        platform: easBuild.platform,
-                        status: easBuild.status,
-                    });
-                } else if (easBuild) {
-                    // Build already finished/errored, resend the final status
-                    if (easBuild.status === 'finished') {
-                        sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_COMPLETE, {
-                            buildId: easBuild.buildId,
-                            platform: easBuild.platform,
-                            artifactUrl: easBuild.artifactUrl || easBuild.easArtifactUrl || '',
-                            downloadUrl: easBuild.artifactUrl
-                                ? `/api/agent/${agent.getAgentId()}/builds/${easBuild.buildId}/download`
-                                : '',
-                        });
-                    } else if (easBuild.status === 'errored' || easBuild.status === 'cancelled') {
-                        sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_ERROR, {
-                            buildId: easBuild.buildId,
-                            platform: easBuild.platform,
-                            error: easBuild.error || 'Build failed',
-                        });
-                    }
-                }
+                handleEasBuildCheck(agent, connection);
                 break;
             }
             case WebSocketMessageRequests.EAS_BUILD_TRIGGER: {
-                const platform = parsedMessage.platform as string;
-                if (platform !== 'ios' && platform !== 'android') {
-                    sendError(connection, 'Invalid platform. Must be "ios" or "android".');
-                    break;
-                }
-
-                logger.info('EAS build trigger received', { platform });
-
-                agent.getDecryptedSecret({ envVarName: 'EXPO_TOKEN' }).then((expoToken) => {
-                    if (!expoToken) {
-                        sendToConnection(connection, WebSocketMessageResponses.VAULT_REQUIRED, {
-                            reason: 'EXPO_TOKEN is required to build native apps with EAS. Create one at https://expo.dev/accounts/[username]/settings/access-tokens',
-                            provider: 'expo',
-                            envVarName: 'EXPO_TOKEN',
-                        });
-                        // Also send build error so frontend clears the pending state
-                        sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_ERROR, {
-                            buildId: '',
-                            platform: platform as 'ios' | 'android',
-                            error: 'EXPO_TOKEN is required. Please add your Expo access token first.',
-                        });
-                        return;
-                    }
-
-                    return agent.deploymentManager.triggerEasBuild(platform as 'ios' | 'android', expoToken, {
-                        onStatus: (build) => {
-                            broadcastToConnections(agent, WebSocketMessageResponses.EAS_BUILD_STATUS, {
-                                buildId: build.buildId,
-                                platform: build.platform,
-                                status: build.status,
-                            });
-                        },
-                        onProgress: (message) => {
-                            // Send intermediate progress so user sees what's happening
-                            sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_STATUS, {
-                                buildId: '',
-                                platform: platform as 'ios' | 'android',
-                                status: 'pending',
-                                progress: message,
-                            });
-                        },
-                        onError: (error) => {
-                            sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_ERROR, {
-                                buildId: '',
-                                platform: platform as 'ios' | 'android',
-                                error,
-                            });
-                        },
-                        scheduleAlarm: (delayMs) => agent.scheduleEasBuildPoll(delayMs),
-                    });
-                }).catch((error: unknown) => {
+                handleEasBuildTrigger(agent, connection, { platform: parsedMessage.platform as string }).catch((error: unknown) => {
                     logger.error('Error triggering EAS build:', error);
-                    sendToConnection(connection, WebSocketMessageResponses.EAS_BUILD_ERROR, {
-                        buildId: '',
-                        platform: platform as 'ios' | 'android',
-                        error: error instanceof Error ? error.message : String(error),
-                    });
                 });
                 break;
             }
