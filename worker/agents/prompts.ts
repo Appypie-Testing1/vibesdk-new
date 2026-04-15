@@ -975,16 +975,34 @@ export const STRATEGIES_UTILS = {
     - Role-based UI: conditionally render admin features (e.g., product management, user list) only for admin role
     - Logout button that clears token from localStorage and context
 
-    **Seed Data (critical for demo):**
+    **Seed Data (critical for demo -- app MUST be demoable on first load):**
     - Admin account: admin@example.com / admin123 (role: "admin", name: "Admin")
     - User account: user@example.com / user123 (role: "user", name: "Demo User")
     - Pre-fill the login form with user@example.com / user123 so the app works on first load
     - Seed via async initialization (hash passwords at runtime using Web Crypto, not pre-computed strings)
+    - **MANDATORY WIRING**: Seeding is USELESS unless actually executed. You MUST wire the seed function to run on first request via a one-shot Hono middleware (see template usage.md "Wire Seed Auth" pattern). Without this wiring, login with the demo credentials WILL FAIL and the app will not be demoable. Verify after implementation: POST /api/auth/login with user@example.com/user123 must return 200 with a token.
+
+    **Admin Role -- MUST Generate at Least One Admin-Only Route:**
+    - The "admin" role is useless unless at least one route actually uses requireRole('admin')
+    - For e-commerce: generate POST/PUT/DELETE /api/admin/products (admin manages catalog)
+    - For dashboards: generate GET /api/admin/users or POST /api/admin/settings (admin manages configuration)
+    - For SaaS: generate POST /api/admin/workspace or GET /api/admin/billing (admin manages workspace)
+    - These routes MUST use the requireRole('admin') middleware from the template
+    - The frontend MUST have at least one admin-only page/section that conditionally renders only for role === 'admin'
+    - Without admin routes, role-based access control is not actually demonstrated
 
     **Phase Strategy:**
     - Auth MUST be part of the first phase -- it is foundational, other features depend on knowing who the user is
-    - First phase includes: auth entities, password utils, auth routes, auth middleware, login/register pages, auth context, protected route wrapper
+    - First phase includes: auth entities, password utils, auth routes, auth middleware, seed function wired to app init, at least one admin-only route, login/register pages, auth context, protected route wrapper
     - Subsequent phases build on the auth context (e.g., "current user's orders", "admin product management")
+
+    **Completion Checklist -- verify before phase ends:**
+    - [ ] seedAuth wired to run on first request (NOT just defined)
+    - [ ] Login with user@example.com/user123 returns 200 with token
+    - [ ] Login with admin@example.com/admin123 returns 200 with token
+    - [ ] At least one admin-only route exists and returns 403 when called with user token
+    - [ ] Login form pre-filled with demo credentials
+    - [ ] Frontend has admin-only UI section that only renders for role === 'admin'
     </AUTH IMPLEMENTATION REQUIREMENTS>`,
 }
 
