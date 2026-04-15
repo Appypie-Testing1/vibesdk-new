@@ -974,6 +974,11 @@ export const STRATEGIES_UTILS = {
     - ProtectedRoute wrapper component that redirects to /login when unauthenticated
     - Role-based UI: conditionally render admin features (e.g., product management, user list) only for admin role
     - Logout button that clears token from localStorage and context
+    - **Persistent header/navigation bar on EVERY page (MANDATORY):**
+      - When logged out: a "Sign In" link to /login AND a "Register" or "Sign Up" link to /register. These MUST be visible in the header.
+      - When logged in: a user dropdown/menu showing the current user's name or email, with a "Logout" option. NOT just a logout button -- a proper menu.
+      - When logged in AS ADMIN (role === 'admin'): an "Admin Dashboard" link to /admin MUST also be visible in the header (can be in the user menu or as a separate header link).
+      - Without this header, logged-out users have no discoverable way to reach /login, and admins cannot find /admin. The app is functional but unusable.
 
     **First-User-Is-Admin Bootstrap (MANDATORY -- replaces seed-user pattern):**
     - Do NOT create pre-seeded demo user accounts (admin@example.com, user@example.com). Seeding async-hashed passwords is fragile; omit it entirely.
@@ -986,9 +991,14 @@ export const STRATEGIES_UTILS = {
       const user = await AuthUserEntity.create(c.env, { id, email, passwordHash, salt, role, name, createdAt: Date.now() });
       return ok(c, { token, user: { id, email, name, role } });
       \`\`\`
-    - **Login page MUST NOT show fake "Demo Accounts: admin@example.com/admin123" hint text** -- those accounts do not exist. Instead, show a notice like "Register now -- the first account becomes the admin."
-    - **Login form MUST NOT be pre-filled** with fake credentials that will fail. Leave email/password fields empty on initial render.
-    - This pattern is well-known (Ghost CMS, Discourse, WordPress bootstrap). It avoids the async-seeding pitfall while still delivering a demoable admin experience.
+    - **Login page -- STRICT content rules (the LLM has consistently ignored these; they are now explicit):**
+      - The JSX of the login page MUST NOT contain the literal strings "admin@example.com" OR "user@example.com" OR "admin123" OR "user123" anywhere. Do not include them in hint text, placeholder text, or comments visible to users.
+      - The login page MUST NOT include a "Demo Accounts:" section or similar hint panel listing credentials. Those credentials do NOT exist because we no longer seed demo users.
+      - Instead, include a small helper line (ONCE, near the form) such as: "First time? Register -- the first account becomes the admin." Nothing more.
+    - **Login form -- STRICT state rules:**
+      - The \`useState\` for form fields MUST initialize to empty strings: \`useState({ email: '', password: '' })\`. Do NOT initialize with any example/demo email or password.
+      - Input \`placeholder\` attributes should be generic hints like \`name@example.com\` or \`Your email\`, NOT actual demo credentials like \`user@example.com\`.
+    - This First-User-Is-Admin pattern is well-known (Ghost CMS, Discourse, WordPress bootstrap). It avoids the async-seeding pitfall while still delivering a demoable admin experience.
 
     **Admin Role -- MUST Generate at Least One Admin-Only Route:**
     - The "admin" role is useless unless at least one route actually uses requireRole('admin')
@@ -1001,16 +1011,17 @@ export const STRATEGIES_UTILS = {
 
     **Phase Strategy:**
     - Auth MUST be part of the first phase -- it is foundational, other features depend on knowing who the user is
-    - First phase includes: auth entities, password utils, auth routes, auth middleware, seed function wired to app init, at least one admin-only route, login/register pages, auth context, protected route wrapper
+    - First phase includes: auth entities, password utils, auth routes (with first-user-is-admin logic in register), auth middleware, at least one admin-only route, login/register pages, auth context, protected route wrapper, persistent header nav with Sign In / user menu / admin link
     - Subsequent phases build on the auth context (e.g., "current user's orders", "admin product management")
 
     **Completion Checklist -- verify before phase ends:**
-    - [ ] seedAuth wired to run on first request (NOT just defined)
-    - [ ] Login with user@example.com/user123 returns 200 with token
-    - [ ] Login with admin@example.com/admin123 returns 200 with token
-    - [ ] At least one admin-only route exists and returns 403 when called with user token
-    - [ ] Login form pre-filled with demo credentials
-    - [ ] Frontend has admin-only UI section that only renders for role === 'admin'
+    - [ ] First call to POST /api/auth/register returns user with role === 'admin'
+    - [ ] Second call to POST /api/auth/register returns user with role === 'user'
+    - [ ] At least one admin-only route exists and returns 403 when called with user token, 200 with admin token
+    - [ ] Login page JSX contains NO text matching "admin@example.com", "user@example.com", "admin123", or "user123"
+    - [ ] Login form fields initialize to empty strings (not pre-filled)
+    - [ ] Persistent header nav exists on every page with Sign In link (when logged out) / user menu + Logout (when logged in) / Admin Dashboard link (when role === 'admin')
+    - [ ] Frontend has admin-only UI section (e.g., /admin dashboard) that only renders for role === 'admin'
     </AUTH IMPLEMENTATION REQUIREMENTS>`,
 }
 
