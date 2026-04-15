@@ -62,6 +62,9 @@ const SIMPLE_SYSTEM_PROMPT = `<ROLE>
     • Each step should be a clear, achievable milestone
     • Order steps by dependency and priority
     • Keep descriptions brief but actionable
+
+    ## Authentication
+    Set \`authRequired: true\` if the application needs user accounts, login, or role-based access AND the template has a persistence layer. Set \`authRoles\` to \`["admin", "user"]\` when auth is required. Default to \`false\` for games, tools, landing pages, or templates without persistence.
 </INSTRUCTIONS>
 
 <STARTING TEMPLATE>
@@ -150,6 +153,32 @@ const PHASIC_SYSTEM_PROMPT = `<ROLE>
         
     ## Important use case specific instructions:
     {{usecaseSpecificInstructions}}
+
+    ## Authentication Decision
+    Determine whether the application needs user authentication based on the user's request and the template's capabilities.
+
+    **Set \`authRequired: true\` when ALL of these conditions are met:**
+    1. The template has a persistence layer (Durable Objects, KV, or D1 -- check the template details)
+    2. The application involves ANY of:
+       - User accounts, profiles, or personal data (e-commerce, SaaS, social platforms)
+       - Admin panels or management interfaces
+       - User-specific content (orders, dashboards, settings, saved items)
+       - Multi-user access with different permission levels
+       - Any feature where "who is using it" matters
+
+    **Set \`authRequired: false\` when:**
+    - The template has NO persistence layer
+    - The application is a single-player game, calculator, converter, or utility tool
+    - The application is a landing page, portfolio, or static content site
+    - The application has no concept of user identity or personal data
+    - Data visualizations or tools where all users see the same content
+
+    **When \`authRequired: true\`:**
+    - Set \`authRoles\` to \`["admin", "user"]\`
+    - Include login and register views in the \`views\` array
+    - Account for auth in the \`userJourney\` (user starts at login, registers, then accesses the app)
+    - Plan auth implementation in the first phase of the \`implementationRoadmap\`
+    - Include auth-related pitfalls (token expiry handling, password validation, protected route redirects)
 
     ## Algorithm & Logic Specification (for complex applications):
     • **Game Logic Requirements:** For games, specify exact rules, win/lose conditions, scoring systems, and state transitions. Detail how user inputs map to game actions.
