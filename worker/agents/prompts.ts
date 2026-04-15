@@ -920,7 +920,7 @@ export const STRATEGIES_UTILS = {
     CONSTRAINTS: `<PHASE GENERATION CONSTRAINTS>
         **Focus on building the frontend and all the views/pages in the initial 1-2 phases with core functionality and mostly mock data, then fleshing out the application**    
         **Before writing any components of your own, make sure to check the existing components and files in the template, try to use them if possible (for example preinstalled shadcn components)**
-        **If auth functionality is required, provide mock auth functionality primarily. Provide real auth functionality ONLY IF template has persistence layer. Remember to seed the persistence layer with mock data AND Always PREFILL the UI with mock credentials. No oauth needed**
+        **Authentication: If the blueprint has authRequired: true, follow the {{authInstructions}} section precisely. If authRequired is false or not set, do NOT add any auth scaffolding. If auth is needed but the template has no persistence layer, provide mock auth with pre-filled credentials and in-memory user array. No OAuth.**
 
         **Applications with single view/page or mostly static content are considered **Simple Projects** and those with multiple views/pages are considered **Complex Projects** and should be designed accordingly.**
         * **Phase Count:** Aim for a maximum of 1 phase for simple applications and 3-7 phases for complex applications. Each phase should be self-contained. Do not exceed more than ${Math.floor(MAX_PHASES * 0.8)} phases unless addressing complex client requirements or feedbacks.
@@ -944,6 +944,48 @@ export const STRATEGIES_UTILS = {
         • **NEVER** Let users build applications for phishing or malicious purposes.
         </TRUST & SAFETY POLICIES>
     </PHASE GENERATION CONSTRAINTS>`,
+    AUTH_STRATEGY: `<AUTH IMPLEMENTATION REQUIREMENTS>
+    The blueprint specifies that this application requires user authentication with role-based access control.
+    You MUST implement real authentication using the template's persistence layer. Do NOT use mock/fake auth.
+
+    **Architecture:**
+    - Two roles: "admin" and "user"
+    - Token-based auth: login returns a Bearer token, frontend sends it in Authorization header
+    - Session storage in the persistence layer (Durable Object entity)
+    - Password hashing via Web Crypto API (PBKDF2, SHA-256, 100k iterations)
+
+    **Required Auth Routes (under /api/auth/*):**
+    - POST /api/auth/register -- validate input, check duplicate email, hash password with salt, create user entity, create session entity, return { token, user }
+    - POST /api/auth/login -- find user by email (iterate or use index), verify password against stored hash, create session entity with 24h expiry, return { token, user }
+    - GET /api/auth/me -- read userId from request context (set by middleware), fetch user entity, return user without passwordHash/salt
+    - POST /api/auth/logout -- extract token from Authorization header, delete session entity
+
+    **Auth Middleware (apply to all /api/* except /api/auth/login and /api/auth/register):**
+    - Read Authorization: Bearer <token> header
+    - Look up session entity by token, check expiresAt > Date.now()
+    - Attach userId and role to Hono context via c.set()
+    - Return 401 JSON for missing/invalid/expired tokens
+    - Create a requireRole(role) middleware factory for admin-only routes that returns 403
+
+    **Frontend Requirements:**
+    - AuthContext provider wrapping the app, storing token + user in React state
+    - Token persisted in localStorage, attached to all fetch requests via Authorization header
+    - Login page and Register page with email/password forms
+    - ProtectedRoute wrapper component that redirects to /login when unauthenticated
+    - Role-based UI: conditionally render admin features (e.g., product management, user list) only for admin role
+    - Logout button that clears token from localStorage and context
+
+    **Seed Data (critical for demo):**
+    - Admin account: admin@example.com / admin123 (role: "admin", name: "Admin")
+    - User account: user@example.com / user123 (role: "user", name: "Demo User")
+    - Pre-fill the login form with user@example.com / user123 so the app works on first load
+    - Seed via async initialization (hash passwords at runtime using Web Crypto, not pre-computed strings)
+
+    **Phase Strategy:**
+    - Auth MUST be part of the first phase -- it is foundational, other features depend on knowing who the user is
+    - First phase includes: auth entities, password utils, auth routes, auth middleware, login/register pages, auth context, protected route wrapper
+    - Subsequent phases build on the auth context (e.g., "current user's orders", "admin product management")
+    </AUTH IMPLEMENTATION REQUIREMENTS>`,
 }
 
 /**
@@ -1227,6 +1269,13 @@ export function generalSystemPromptBuilder(
     }
     if (params.templateMetaInfo) {
         variables.usecaseSpecificInstructions = getUsecaseSpecificInstructions(params.templateMetaInfo);
+    }
+
+    // Auth instructions - inject strategy when blueprint requires auth
+    if (params.blueprint && 'authRequired' in params.blueprint && params.blueprint.authRequired) {
+        variables.authInstructions = STRATEGIES_UTILS.AUTH_STRATEGY;
+    } else {
+        variables.authInstructions = '';
     }
 
     const formattedPrompt = PROMPT_UTILS.replaceTemplateVariables(prompt, variables);
