@@ -145,11 +145,17 @@ const DEFAULT_AGENT_CONFIG: AgentConfig = {
     },
     firstPhaseImplementation: {
         name: AIModels.GEMINI_3_FLASH_PREVIEW,
-        ...SHARED_IMPLEMENTATION_CONFIG,
+        reasoning_effort: 'high' as const,
+        max_tokens: 48000,
+        temperature: 1,
+        fallbackModel: AIModels.GEMINI_2_5_PRO,
     },
     phaseImplementation: {
         name: AIModels.GEMINI_3_FLASH_PREVIEW,
-        ...SHARED_IMPLEMENTATION_CONFIG,
+        reasoning_effort: 'high' as const,
+        max_tokens: 48000,
+        temperature: 1,
+        fallbackModel: AIModels.GEMINI_2_5_PRO,
     },
     conversationalResponse: {
         name: AIModels.GEMINI_2_5_FLASH,
