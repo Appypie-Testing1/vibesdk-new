@@ -19,7 +19,11 @@
 	},
 	"observability": {
 		"enabled": true,
-		"head_sampling_rate": 1
+		"head_sampling_rate": 1,
+		"traces": {
+			"enabled": true,
+			"head_sampling_rate": 1
+		}
 	},
 	"unsafe": {
 		"bindings": [
@@ -95,12 +99,12 @@
 	"r2_buckets": [
 		{
 			"binding": "TEMPLATES_BUCKET",
-			"bucket_name": "vibesdk-templates",
+			"bucket_name": "vibesdk-templates-staging",
 			"remote": true
 		},
 		{
 			"binding": "R2_BUCKET",
-			"bucket_name": "appypievibe",
+			"bucket_name": "appypievibe-staging",
 			"remote": true
 		}
 	],
@@ -140,6 +144,17 @@
 			"tag": "v4"
 		}
 	],
+	"routes": [
+		{
+			"pattern": "vibestaging.appypie.com",
+			"custom_domain": true
+		},
+		{
+			"pattern": "*vibestaging.appypie.com/*",
+			"custom_domain": false,
+			"zone_id": "7662520cb743a30c63d76c24bcb0e9c6"
+		}
+	],
 	"vars": {
 		"TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
 		"DISPATCH_NAMESPACE": "orange-build-default-namespace",
@@ -151,19 +166,19 @@
 					"enabled": true
 				},
 				"presentation": {
-					"enabled": false
+					"enabled": true
 				},
 				"general": {
-					"enabled": false
+					"enabled": true
 				}
 			},
 			"version": "1.0.0"
 		},
-		"CUSTOM_DOMAIN": "vibesdk-staging.appypie.workers.dev",
+		"CUSTOM_DOMAIN": "vibestaging.appypie.com",
 		"MAX_SANDBOX_INSTANCES": "10",
 		"SANDBOX_INSTANCE_TYPE": "standard-3"
 	},
-	// Staging uses workers.dev URL (no custom domain)
+	// Staging uses custom domain vibestaging.appypie.com; workers.dev kept on for quick testing
 	"workers_dev": true,
 	"preview_urls": true
 }

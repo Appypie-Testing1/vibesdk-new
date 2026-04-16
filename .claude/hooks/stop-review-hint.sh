@@ -4,6 +4,10 @@
 
 set -euo pipefail
 
+# Resolve project root from this script's location
+PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$PROJECT_ROOT"
+
 CHANGED=$(git diff --name-only HEAD 2>/dev/null || true)
 if [ -z "$CHANGED" ]; then
   exit 0

@@ -480,9 +480,15 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
                 
                 const errorMsg = error instanceof Error ? error.message : String(error);
 
+                // Containers not enabled — bail out immediately, no point retrying
+                if (errorMsg.includes('Containers have not been enabled')) {
+                    logger.warn('Containers not enabled for this environment, skipping sandbox deployment');
+                    return { runId: '', previewURL: '', tunnelURL: '' };
+                }
+
                 // Handle specific errors that require session reset
-                if (errorMsg.includes('Network connection lost') || 
-                    errorMsg.includes('Container service disconnected') || 
+                if (errorMsg.includes('Network connection lost') ||
+                    errorMsg.includes('Container service disconnected') ||
                     errorMsg.includes('Internal error in Durable Object storage')) {
                     logger.warn('Session-level error detected, resetting sessionId');
                     this.resetSessionId();

@@ -290,24 +290,30 @@ export async function getConfigurationForModel(
     baseURL: string,
     apiKey: string,
     defaultHeaders?: Record<string, string>,
+    stripProviderPrefix?: boolean,
 }> {
     let providerForcedOverride: AIGatewayProviders | undefined;
-    if (modelConfig.directOverride) {
+    // Use direct provider URLs when directOverride is set OR when no AI Gateway is configured
+    const useDirectMode = modelConfig.directOverride || !env.CLOUDFLARE_AI_GATEWAY_TOKEN;
+    if (useDirectMode) {
         switch(modelConfig.provider) {
             case 'openrouter':
                 return {
                     baseURL: 'https://openrouter.ai/api/v1',
                     apiKey: env.OPENROUTER_API_KEY,
+                    stripProviderPrefix: true,
                 };
             case 'google-ai-studio':
                 return {
                     baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
                     apiKey: env.GOOGLE_AI_STUDIO_API_KEY,
+                    stripProviderPrefix: true,
                 };
             case 'anthropic':
                 return {
                     baseURL: 'https://api.anthropic.com/v1/',
                     apiKey: env.ANTHROPIC_API_KEY,
+                    stripProviderPrefix: true,
                 };
             default:
                 providerForcedOverride = modelConfig.provider as AIGatewayProviders;
@@ -560,16 +566,20 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
         await RateLimitService.enforceLLMCallsRateLimit(env, userConfig.security.rateLimit, metadata.userId, modelName)
         const modelConfig = AI_MODEL_CONFIG[modelName as AIModels];
 
-        const { apiKey, baseURL, defaultHeaders } = await getConfigurationForModel(
+        const { apiKey, baseURL, defaultHeaders, stripProviderPrefix } = await getConfigurationForModel(
             modelConfig,
             env,
             metadata.userId,
             runtimeOverrides,
         );
-        console.log(`baseUrl: ${baseURL}, modelName: ${modelName}`);
 
         // Remove [*.] from model name
         modelName = modelName.replace(/\[.*?\]/, '');
+        // Strip provider prefix (e.g. "google-ai-studio/gemini-2.5-flash" -> "gemini-2.5-flash") when calling providers directly
+        if (stripProviderPrefix && modelName.includes('/')) {
+            modelName = modelName.split('/').slice(1).join('/');
+        }
+        console.log(`baseUrl: ${baseURL}, modelName: ${modelName}`);
 
         const client = new OpenAI({ apiKey, baseURL: baseURL, defaultHeaders });
         const schemaObj =
