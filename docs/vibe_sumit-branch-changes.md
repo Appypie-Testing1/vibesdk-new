@@ -46,7 +46,7 @@ This document covers every code and configuration change made on the `vibe_sumit
 
 **Files:** `worker/agents/inferutils/core.ts` (lines ~730-840)
 
-### 1b. Direct Provider Mode / Strip Provider Prefix (`worker/agents/inferutils/core.ts`) [UNCOMMITTED]
+### 1b. Direct Provider Mode / Strip Provider Prefix (`worker/agents/inferutils/core.ts`)
 
 **Problem:** When no AI Gateway is configured (`CLOUDFLARE_AI_GATEWAY_TOKEN` is unset), model names like `google-ai-studio/gemini-2.5-flash` are sent to the provider's API directly, which doesn't understand the prefix.
 
@@ -276,12 +276,12 @@ Complete wrangler configuration for a staging environment (`vibesdk-staging`). K
 
 - **Worker name:** `vibesdk-staging`
 - **D1 database:** `vibesdk-db-staging` (ID: `49f69793-2185-4c3e-9f64-47b74dd89316`)
-- **R2 buckets:** `vibesdk-templates-staging`, `appypievibe-staging` [uncommitted fix]
+- **R2 buckets:** `vibesdk-templates-staging`, `appypievibe-staging`
 - **KV namespace:** `VibecoderStore-staging` (ID: `d7de28ced65f4559b988fa2507a560cb`)
-- **Custom domain:** `vibestaging.appypie.com` [uncommitted addition]
-- **Routes:** pattern-based routing for the custom domain [uncommitted]
-- **Observability:** traces enabled with full sampling [uncommitted]
-- **PLATFORM_CAPABILITIES:** all features enabled (app, presentation, general) [uncommitted]
+- **Custom domain:** `vibestaging.appypie.com`
+- **Routes:** pattern-based routing for the custom domain
+- **Observability:** traces enabled with full sampling
+- **PLATFORM_CAPABILITIES:** all features enabled (app, presentation, general)
 - **Max sandbox instances:** 10
 - **workers_dev:** true (for quick testing alongside custom domain)
 
@@ -296,7 +296,7 @@ Complete wrangler configuration for a staging environment (`vibesdk-staging`). K
   }),
 ```
 
-### 6c. Wrangler Dev Config (`wrangler.jsonc`) [UNCOMMITTED]
+### 6c. Wrangler Dev Config (`wrangler.jsonc`)
 
 **Change:** Disabled containers in local dev to avoid errors when containers aren't available:
 
@@ -308,7 +308,7 @@ Complete wrangler configuration for a staging environment (`vibesdk-staging`). K
 
 ---
 
-## 7. DeploymentManager Container Error Handling [UNCOMMITTED]
+## 7. DeploymentManager Container Error Handling
 
 **File:** `worker/agents/services/implementations/DeploymentManager.ts`
 
@@ -439,12 +439,12 @@ For implementing on another branch, prioritize these (in dependency order):
 5. **Phase context improvement** (`worker/agents/prompts.ts`) -- older phases include file paths
 6. **Agentic default fields** (`worker/agents/core/behaviors/agentic.ts`) -- authRequired/authRoles defaults
 7. **Inference truncation detection** (`worker/agents/inferutils/core.ts`) -- finish_reason tracking
-8. **Direct provider mode** (`worker/agents/inferutils/core.ts`) -- stripProviderPrefix logic [uncommitted]
+8. **Direct provider mode** (`worker/agents/inferutils/core.ts`) -- stripProviderPrefix logic
 9. **Reasoning effort bump** (`worker/agents/inferutils/config.ts`) -- high for phase implementation
 10. **Codebase context optimization** (`worker/agents/utils/codebaseContext.ts`) -- config redaction + truncation
 11. **Build loop guard** (`worker/agents/core/behaviors/agentic.ts`) -- MAX_BUILD_ATTEMPTS=5
 12. **Phase recharge** (`worker/agents/core/behaviors/phasic.ts`) -- 3 -> 6
 13. **Exec output limit** (`worker/agents/tools/toolkit/exec-commands.ts`) -- 1000 -> 2500
 14. **Staging environment** (`wrangler.staging.jsonc`, `vite.config.ts`, `package.json`)
-15. **Container error handling** (`worker/agents/services/implementations/DeploymentManager.ts`) [uncommitted]
-16. **Dev containers disabled** (`wrangler.jsonc`) [uncommitted]
+15. **Container error handling** (`worker/agents/services/implementations/DeploymentManager.ts`)
+16. **Dev containers disabled** (`wrangler.jsonc`)
