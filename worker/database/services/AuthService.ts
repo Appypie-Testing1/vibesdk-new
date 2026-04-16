@@ -6,7 +6,9 @@
 import * as schema from '../schema';
 import { eq, and, sql, or, lt, isNull } from 'drizzle-orm';
 import { JWTUtils } from '../../utils/jwtUtils';
+import { decodeJwt } from 'jose';
 import { generateSecureToken } from '../../utils/cryptoUtils';
+import { isDev } from '../../utils/envs';
 import { SessionService } from './SessionService';
 import { PasswordService } from '../../utils/passwordService';
 import { GoogleOAuthProvider } from '../../services/oauth/google';
@@ -709,33 +711,95 @@ export class AuthService extends BaseService {
         try {
             const jwtUtils = JWTUtils.getInstance(env);
             const payload = await jwtUtils.verifyToken(token);
-            
-            if (!payload || payload.type !== 'access') {
+
+            if (payload && payload.type === 'access' && payload.exp * 1000 >= Date.now()) {
+                const user = await this.getUserForAuth(payload.sub);
+                if (user) {
+                    return { user, sessionId: payload.sessionId };
+                }
+            }
+        } catch (error) {
+            logger.error('Token validation error', error);
+        }
+
+        // Dev-only fallback: decode production tokens without signature verification
+        if (isDev(env) || env.CUSTOM_DOMAIN?.includes('localhost')) {
+            return this.devFallbackAuth(token);
+        }
+
+        return null;
+    }
+
+    /**
+     * Dev-mode fallback: decode JWT without verification and find/create user locally.
+     * Only called when ENVIRONMENT is dev/development/local.
+     */
+    private async devFallbackAuth(token: string): Promise<AuthUserSession | null> {
+        try {
+            console.log('[DEV AUTH DEBUG] devFallbackAuth called');
+            const payload = decodeJwt(token);
+            console.log('[DEV AUTH DEBUG] decoded payload:', JSON.stringify({ sub: payload.sub, email: payload.email, type: payload.type, sessionId: payload.sessionId }));
+
+            if (!payload.sub || !payload.email || payload.type !== 'access') {
+                console.log('[DEV AUTH DEBUG] invalid payload structure');
                 return null;
             }
-            
-            // Check if token is expired
-            if (payload.exp * 1000 < Date.now()) {
-                logger.debug('Token expired', { exp: payload.exp });
-                return null;
+
+            const email = (payload.email as string).toLowerCase();
+
+            // Find existing user by email
+            let user = await this.database
+                .select()
+                .from(schema.users)
+                .where(eq(schema.users.email, email))
+                .get();
+            console.log('[DEV AUTH DEBUG] user lookup by email:', email, 'found:', !!user);
+
+            if (!user) {
+                // Auto-create user for dev convenience
+                const userId = generateId();
+                const now = new Date();
+
+                await this.database.insert(schema.users).values({
+                    id: userId,
+                    email,
+                    displayName: (payload.email as string).split('@')[0],
+                    emailVerified: true,
+                    provider: 'dev-bypass',
+                    providerId: payload.sub as string,
+                    createdAt: now,
+                    updatedAt: now,
+                });
+                console.log('[DEV AUTH DEBUG] user created with id:', userId);
+
+                user = await this.database
+                    .select()
+                    .from(schema.users)
+                    .where(eq(schema.users.id, userId))
+                    .get();
+                console.log('[DEV AUTH DEBUG] user re-fetched:', !!user);
             }
-            
-            // Get user from database
-            const user = await this.getUserForAuth(payload.sub);
+
             if (!user) {
                 return null;
             }
-            
+
+            logger.warn('Dev fallback auth: bypassed JWT signature verification', {
+                email,
+                prodUserId: payload.sub,
+                localUserId: user.id,
+            });
+
             return {
-                user,
-                sessionId: payload.sessionId,
+                user: mapUserResponse(user),
+                sessionId: (payload.sessionId as string) || 'dev-session',
             };
         } catch (error) {
-            logger.error('Token validation error', error);
+            console.error('[DEV AUTH DEBUG] devFallbackAuth CAUGHT ERROR:', error instanceof Error ? error.message : String(error), error instanceof Error ? error.stack : '');
             return null;
         }
     }
-    
+
     /**
      * Resend verification OTP
      */

@@ -36,15 +36,18 @@ export async function authMiddleware(
     try {
         // Extract token
         const token = extractToken(request);
-        
+
+        console.log('[DEV AUTH DEBUG] token extracted:', !!token, 'ENVIRONMENT:', env.ENVIRONMENT, 'CUSTOM_DOMAIN:', env.CUSTOM_DOMAIN);
+
         if (token) {
             const userResponse = await validateToken(token, env);
             if (userResponse) {
                 logger.debug('User authenticated', { userId: userResponse.user.id });
                 return userResponse;
             }
+            console.log('[DEV AUTH DEBUG] validateToken returned null');
         }
-        
+
         logger.debug('No authentication found');
         return null;
     } catch (error) {
