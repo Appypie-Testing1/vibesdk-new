@@ -353,7 +353,7 @@ dist/
                 'react-native-safe-area-context': '~5.6.0',
                 'react-native-screens': '~4.16.0',
                 'react-native-web': '~0.21.0',
-                'react-native-worklets': '0.5.1',
+                'react-native-worklets': '0.8.1',
                 '@react-native-async-storage/async-storage': '1.23.1',
                 'hono': '^4.11.0',
                 'drizzle-orm': '^0.39.0',

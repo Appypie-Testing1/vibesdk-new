@@ -139,7 +139,7 @@ const EXPO_TEMPLATE_DEPS: Record<string, string> = {
     'react-native-safe-area-context': '~5.6.0',
     'react-native-screens': '~4.11.0',
     'react-native-web': '~0.21.0',
-    'react-native-worklets': '~0.5.0',
+    'react-native-worklets': '~0.8.1',
 };
 const EXPO_TEMPLATE_DEV_DEPS: Record<string, string> = {
     '@babel/core': '^7.25.0',
