@@ -72,31 +72,6 @@ export async function cloneAgent(env: Env, agentId: string) : Promise<{newAgentI
     return {newAgentId, newAgent};
 }
 
-export async function getTemplateForQuery(
-    env: Env,
-    inferenceContext: InferenceContext,
-    query: string,
-    projectType: ProjectType | 'auto',
-    images: ImageAttachment[] | undefined,
-    logger: StructuredLogger,
-) : Promise<{templateDetails: TemplateDetails, selection: TemplateSelection, projectType: ProjectType}> {
-    // In 'general' mode, we intentionally start from scratch without a real template
-    if (projectType === 'general') {
-        const scratch: TemplateDetails = createScratchTemplateDetails();
-        const selection: TemplateSelection = {
-            selectedTemplateName: null,
-            reasoning: 'General (from-scratch) mode: no template selected',
-            useCase: 'General',
-            complexity: 'moderate',
-            styleSelection: 'Custom',
-            projectType: 'general',
-        } as TemplateSelection; // satisfies schema shape
-        return { templateDetails: scratch, selection, projectType: 'general' };
-    }
-    const mobileResult = detectMobileTemplate(query, logger);
-    if (mobileResult) return mobileResult;
-
-    // Fetch available templates
 type TemplateQueryResult = { templateDetails: TemplateDetails; selection: TemplateSelection; projectType: ProjectType };
 
 type TemplateQueryArgs = {
@@ -127,7 +102,7 @@ async function handleUserSelectedTemplate(
     logger: StructuredLogger
 ): Promise<TemplateQueryResult> {
     logger.info('Using user-specified template, bypassing AI selection', { selectedTemplate: templateName });
-    
+
     const templatesResponse = await SandboxSdkClient.listTemplates();
     if (!templatesResponse?.success) {
         throw new Error(`Failed to fetch templates from sandbox service, ${templatesResponse.error}`);
@@ -168,8 +143,6 @@ async function handleAITemplateSelection(args: Omit<TemplateQueryArgs, 'selected
     }
 
     const aiSelection = await selectTemplate({
-
-    const analyzeQueryResponse = await selectTemplate({
         env,
         inferenceContext,
         query,
@@ -181,11 +154,6 @@ async function handleAITemplateSelection(args: Omit<TemplateQueryArgs, 'selected
     logger.info('AI selected template', { selection: aiSelection });
 
     if (!aiSelection.selectedTemplateName) {
-
-    logger.info('Selected template', { selectedTemplate: analyzeQueryResponse });
-
-    if (!analyzeQueryResponse.selectedTemplateName) {
-        // For non-general requests when no template is selected, fall back to web scratch
         logger.warn('No suitable template found; falling back to scratch');
         const scratch = createScratchTemplateDetails();
         return { templateDetails: scratch, selection: aiSelection, projectType: aiSelection.projectType };
@@ -193,9 +161,6 @@ async function handleAITemplateSelection(args: Omit<TemplateQueryArgs, 'selected
 
     const matchedTemplate = templatesResponse.templates.find(t => t.name === aiSelection.selectedTemplateName);
     if (!matchedTemplate) {
-
-    const selectedTemplate = templatesResponse.templates.find(template => template.name === analyzeQueryResponse.selectedTemplateName);
-    if (!selectedTemplate) {
         logger.error('Selected template not found');
         throw new Error('Selected template not found');
     }
@@ -205,9 +170,6 @@ async function handleAITemplateSelection(args: Omit<TemplateQueryArgs, 'selected
         logger.error('Failed to fetch files', { templateDetailsResponse });
         throw new Error('Failed to fetch files');
     }
-
-    const templateDetails = templateDetailsResponse.templateDetails;
-    return { templateDetails, selection: analyzeQueryResponse, projectType: analyzeQueryResponse.projectType };
 
     return {
         templateDetails: templateDetailsResponse.templateDetails,
@@ -225,10 +187,14 @@ export async function getTemplateForQuery(
     logger: StructuredLogger,
     selectedTemplate?: string,
 ): Promise<TemplateQueryResult> {
-    // Flow 1: General type - start from scratch
+    // Flow 0: General type - start from scratch
     if (projectType === 'general') {
         return handleGeneralType();
     }
+
+    // Flow 1: Mobile detection (fast regex check before LLM)
+    const mobileResult = detectMobileTemplate(query, logger);
+    if (mobileResult) return mobileResult;
 
     // Flow 2: User-specified template - bypass AI selection
     if (selectedTemplate && selectedTemplate !== 'auto') {
