@@ -2,11 +2,12 @@ import { BaseController } from '../baseController';
 import type { ControllerResponse, ApiResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
 import { createLogger } from '../../../logger';
+import { ScreenshotSecurity } from '../../../utils/screenshot-security';
 
 // -------------------------
 // Helpers
 // -------------------------
-function isValidSessionId(id: string): boolean {
+function isValidAppId(id: string): boolean {
     // Allow alphanumeric, underscore, dash. Prevent dots and slashes.
     // Length 1-128.
     return /^[A-Za-z0-9_-]{1,128}$/.test(id);
@@ -62,7 +63,7 @@ export class ScreenshotsController extends BaseController {
         if (!id || !file) {
             return ScreenshotsController.createErrorResponse('Missing path parameters', 400);
         }
-        if (!isValidSessionId(id)) {
+        if (!isValidAppId(id)) {
             return ScreenshotsController.createErrorResponse('Invalid id', 400);
         }
         const validatedFile = validateFileName(file);
@@ -85,13 +86,34 @@ export class ScreenshotsController extends BaseController {
     }
 
     static async serveScreenshot(
-        _request: Request,
+        request: Request,
         env: Env,
         _ctx: ExecutionContext,
         context: RouteContext,
     ): Promise<ControllerResponse<ApiResponse<never>>> {
         try {
-            return await ScreenshotsController.serveFromR2(env, 'screenshots', context.pathParams.id, context.pathParams.file, 'Screenshot not found');
+            const appId = context.pathParams.id;
+            const file = context.pathParams.file;
+
+            if (!appId || !file) {
+                return ScreenshotsController.createErrorResponse('Missing path parameters', 400);
+            }
+
+            // Verify screenshot access token (upstream security)
+            const url = new URL(request.url);
+            const token = url.searchParams.get('token');
+
+            if (!token) {
+                return ScreenshotsController.createErrorResponse('Screenshot not found', 404);
+            }
+
+            const security = new ScreenshotSecurity(env);
+            const isValidToken = await security.verifyToken(token, appId);
+            if (!isValidToken) {
+                return ScreenshotsController.createErrorResponse('Screenshot not found', 404);
+            }
+
+            return await ScreenshotsController.serveFromR2(env, 'screenshots', appId, file, 'Screenshot not found');
         } catch (error) {
             ScreenshotsController.logger.error('Error serving screenshot', { error });
             return ScreenshotsController.createErrorResponse('Internal server error', 500);

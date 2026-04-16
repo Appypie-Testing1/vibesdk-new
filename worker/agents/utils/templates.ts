@@ -37,7 +37,6 @@ const emitLog = (level: "info" | "warn" | "error", rawMessage: string) => {
   }
 };
 
-// 3. Create the custom logger for Vite
 const customLogger = {
   warnOnce: (msg: string) => emitLog("warn", msg),
 
@@ -97,28 +96,72 @@ export default ({ mode }: { mode: string }) => {
 
 `;
 
+const SCRATCH_PACKAGE_JSON = `{
+  "name": "scratch-project",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port \${PORT:-8001}",
+    "build": "vite build",
+    "lint": "eslint --cache -f json --quiet .",
+    "preview": "bun run build && vite preview --host 0.0.0.0 --port \${PORT:-8001}",
+    "deploy": "bun run build && wrangler deploy",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "hono": "^4.8.5",
+    "lucide-react": "^0.525.0",
+    "pino": "^9.11.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "6.30.0",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.9.4",
+    "@cloudflare/workers-types": "^4.20250807.0",
+    "@types/node": "^22.15.3",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "5.8",
+    "vite": "^6.3.1"
+  }
+}
+`;
+
+const SCRATCH_WRANGLER_JSONC = `{
+  "name": "scratch-project",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true,
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
+`;
+
 const SCRATCH_TEMPLATE_INSTRUCTIONS = `
 To build a valid, previewable and deployable project, it is essential to follow few important rules:
 
-1. The package.json **MUST** be of the following form:
-\`\`\`
-...
-	"scripts": {
-		"dev": "vite --host 0.0.0.0 --port \${PORT:-8001}",
-		"build": "vite build",
-		"lint": "eslint --cache -f json --quiet .",
-		"preview": "bun run build && vite preview --host 0.0.0.0 --port \${PORT:-8001}",
-		"deploy": "bun run build && wrangler deploy",
-		"cf-typegen": "wrangler types"
-	}
-...
-\`\`\`
-
-Failure to have a compatible package.json would result in the app un-previewable and un-deployable.
+1. A baseline \`package.json\` is already provided with required scripts and core dependencies. You may modify it to add additional dependencies your code needs.
 
 2. The project **MUST** be a valid Appy Pie worker + Vite + bun project.
 
-3. It must have a valid wrangler.jsonc and a vite.config.ts file.
+3. A \`wrangler.jsonc\` is already provided and **MUST NOT be modified**. It is preconfigured for the deployment environment.
 
 4. The vite config file MUST have the following minimal config:
 \`\`\`ts
@@ -137,320 +180,20 @@ ${VITE_CONFIG_MINIMAL}
  * Used when starting from-scratch (general mode) or when no template fits.
  */
 export function createScratchTemplateDetails(): TemplateDetails {
-    const enhancedFiles: Record<string, string> = {
-        'src/index.ts': `
-import { Hono } from 'hono';
-import { LinearRouter } from 'hono/router/linear-router';
-import { cors } from 'hono/cors';
-
-type Bindings = {
-  DB: D1Database;
-};
-
-const app = new Hono<{ Bindings: Bindings }>({ router: new LinearRouter() });
-
-// Global error handler - catches unhandled exceptions in any route
-app.onError((err, c) => {
-  console.error('Unhandled error:', err.message);
-  return c.json({ error: err.message || 'Internal Server Error' }, 500);
-});
-
-// CORS middleware - scoped to API routes only
-app.use('/api/*', cors({
-  origin: '*',
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
-}));
-
-// Database initialization - one prepare().run() call per table (never use exec() with multi-statement strings)
-async function initDB(db: D1Database) {
-  await db.prepare('CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime(\\'now\\')))').run();
-}
-let dbInitialized = false;
-app.use('/api/*', async (c, next) => {
-  if (!dbInitialized && c.env.DB) {
-    try {
-      await initDB(c.env.DB);
-      dbInitialized = true;
-    } catch (err) {
-      console.error('DB init error:', err);
-    }
-  }
-  await next();
-});
-
-// Health check — MUST be under /api/ to match run_worker_first routing
-app.get('/api/health', (c) => {
-  return c.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Example: List items from D1 database
-app.get('/api/items', async (c) => {
-  try {
-    const result = await c.env.DB.prepare('SELECT * FROM items ORDER BY created_at DESC').all();
-    return c.json({ items: result.results });
-  } catch (err) {
-    return c.json({ items: [], error: 'Failed to load items' }, 500);
-  }
-});
-
-// Example: Create item
-app.post('/api/items', async (c) => {
-  try {
-    const body = await c.req.json();
-    const id = crypto.randomUUID();
-    const name = body.name || 'Untitled';
-    await c.env.DB.prepare('INSERT INTO items (id, name, created_at) VALUES (?, ?, ?)')
-      .bind(id, name, new Date().toISOString())
-      .run();
-    return c.json({ id, name, created_at: new Date().toISOString() }, 201);
-  } catch (err) {
-    return c.json({ error: 'Failed to create item' }, 400);
-  }
-});
-
-// Example: Delete item
-app.delete('/api/items/:id', async (c) => {
-  try {
-    const id = c.req.param('id');
-    await c.env.DB.prepare('DELETE FROM items WHERE id = ?').bind(id).run();
-    return c.json({ success: true });
-  } catch (err) {
-    return c.json({ error: 'Failed to delete item' }, 400);
-  }
-});
-
-// Static assets and SPA fallback are handled by wrangler.jsonc asset config.
-// Do NOT add serveStatic or app.get('*', ...) — they are unnecessary and break routing.
-
-export default app;
-`,
-        'src/main.tsx': `
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-import './index.css';
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
-`,
-        'src/App.tsx': `
-import { useState, useEffect } from 'react';
-
-function App() {
-  const [message, setMessage] = useState('Loading...');
-  const [apiData, setApiData] = useState(null);
-
-  useEffect(() => {
-    // Test health endpoint
-    fetch('/api/health')
-      .then(res => res.json())
-      .then(data => setMessage(data.status))
-      .catch(() => setMessage('Error'));
-
-    // Test API endpoint (D1 database)
-    fetch('/api/items')
-      .then(res => res.json())
-      .then(data => setApiData(data))
-      .catch(() => setApiData({ error: 'API Error' }));
-  }, []);
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center max-w-md mx-auto p-6">
-        <h1 className="text-4xl font-bold mb-4 text-gray-900">Enhanced App</h1>
-        <p className="text-lg text-gray-600 mb-2">
-          Generated with database, routing, and API scaffolding
-        </p>
-        <div className="space-y-4">
-          <div className="p-4 bg-green-50 rounded-lg">
-            <p className="text-sm font-medium text-green-800">
-              API Status: {message}
-            </p>
-          </div>
-          <div className="p-4 bg-blue-50 rounded-lg">
-            <p className="text-sm font-medium text-blue-800">
-              API Data: {JSON.stringify(apiData)}
-            </p>
-          </div>
-          <div className="text-sm text-gray-500">
-            <p>✅ Database scaffolding ready</p>
-            <p>✅ API endpoints configured</p>
-            <p>✅ Deployment ready</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default App;
-`,
-        'src/index.css': `
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-`,
-        'package.json': JSON.stringify({
-            name: 'enhanced-scratch-app',
-            version: '1.0.0',
-            type: 'module',
-            scripts: {
-                dev: "vite --host 0.0.0.0 --port ${PORT:-8001}",
-                build: "vite build",
-                lint: "eslint --cache -f json --quiet .",
-                preview: "bun run build && vite preview --host 0.0.0.0 --port ${PORT:-8001}",
-                deploy: "bun run build && wrangler deploy",
-                "cf-typegen": "wrangler types"
-            },
-            dependencies: {
-                'react': '^19.0.0',
-                'react-dom': '^19.0.0',
-                'typescript': '^5.0.0',
-                '@types/react': '^19.0.0',
-                '@types/react-dom': '^19.0.0',
-                'tailwindcss': '^4.1.18',
-                '@tailwindcss/vite': '^4.1.18',
-                'hono': '^4.11.0'
-            },
-            devDependencies: {
-                '@cloudflare/vite-plugin': '^1.0.12',
-                '@vitejs/plugin-react': '^4.5.0',
-                '@cloudflare/workers-types': '^4.20251213.0',
-                'vite': '^6.3.0',
-                'wrangler': '^4.14.0'
-            }
-        }, null, 2),
-        'vite.config.ts': `
-import { defineConfig } from "vite";
-import path from "path";
-import react from "@vitejs/plugin-react";
-import { cloudflare } from "@cloudflare/vite-plugin";
-
-export default ({ mode }: { mode: string }) => {
-  return defineConfig({
-    plugins: [react(), cloudflare()],
-    build: {
-      minify: true,
-      sourcemap: "inline",
-    },
-    server: {
-      allowedHosts: true,
-      strictPort: true,
-      port: 8001,
-      host: true,
-    },
-    resolve: {
-      alias: {
-        "@": path.resolve(__dirname, "./src"),
-      },
-    },
-  });
-};
-`,
-        'tailwind.config.js': `
-/** @type {import('tailwindcss').Config} */
-export default {
-  content: [
-    './src/**/*.{js,ts,jsx,tsx}',
-  ],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-}
-`,
-        'wrangler.jsonc': JSON.stringify({
-            "$schema": "node_modules/wrangler/config-schema.json",
-            "name": "enhanced-scratch-app",
-            "main": "src/index.ts",
-            "compatibility_date": "2025-01-15",
-            "compatibility_flags": ["nodejs_compat"],
-            "assets": {
-                "directory": "dist",
-                "not_found_handling": "single-page-application",
-                "run_worker_first": ["/api/*"],
-                "binding": "ASSETS"
-            },
-            "d1_databases": [{
-                "binding": "DB",
-                "database_name": "app-db",
-                "database_id": "{{D1_ID}}"
-            }],
-            "vars": {
-                "ENVIRONMENT": "production"
-            },
-            "workers_dev": false,
-            "preview_urls": false
-        }, null, 2),
-        'README.md': `
-# Enhanced Scratch App
-
-This application was generated with enhanced scaffolding including:
-
-- ✅ **API Endpoints**: Health check and data endpoints
-- ✅ **Modern UI**: React with Tailwind CSS
-- ✅ **Deployment Ready**: Optimized for serverless deployment
-- ✅ **TypeScript**: Full type safety
-
-## Development
-
-\`\`\`bash
-bun install
-bun run dev
-\`\`\`
-
-## Deploy
-
-\`\`\`bash
-bun run deploy
-\`\`\`
-
-## API Endpoints
-
-- \`GET /api/health\` - Health check
-- \`GET /api/items\` - List items (D1 database)
-- \`POST /api/items\` - Create item
-- \`DELETE /api/items/:id\` - Delete item
-`
-    };
-
     return {
         name: 'scratch',
-        description: { 
-            selection: 'enhanced-scratch-template', 
-            usage: `Enhanced scratch template with database, routing, and API scaffolding. **IT IS RECOMMENDED THAT YOU CHOOSE A VALID PRECONFIGURED TEMPLATE IF POSSIBLE** ${SCRATCH_TEMPLATE_INSTRUCTIONS}` 
+        description: { selection: 'from-scratch baseline', usage: `No template. Agent will scaffold as needed. **IT IS RECOMMENDED THAT YOU CHOOSE A VALID PRECONFIGURED TEMPLATE IF POSSIBLE** ${SCRATCH_TEMPLATE_INSTRUCTIONS}` },
+        fileTree: { path: '/', type: 'directory', children: [] },
+        allFiles: {
+            'package.json': SCRATCH_PACKAGE_JSON,
+            'vite.config.ts': VITE_CONFIG_MINIMAL,
+            'wrangler.jsonc': SCRATCH_WRANGLER_JSONC,
         },
-        fileTree: { 
-            path: '/', 
-            type: 'directory', 
-            children: [
-                { path: 'src', type: 'directory', children: [] },
-                { path: 'package.json', type: 'file' },
-                { path: 'vite.config.ts', type: 'file' },
-                { path: 'tailwind.config.js', type: 'file' },
-                { path: 'wrangler.jsonc', type: 'file' },
-                { path: 'README.md', type: 'file' }
-            ]
-        },
-        allFiles: enhancedFiles,
         language: 'typescript',
         deps: { 'hono': '^4.11.0', 'react': '^19.0.0' },
         projectType: 'general',
-        frameworks: ['react', 'typescript', 'tailwindcss', 'hono'],
-        importantFiles: ['src/App.tsx', 'src/index.ts', 'package.json', 'wrangler.jsonc'],
+        frameworks: [],
+        importantFiles: [],
         dontTouchFiles: ['wrangler.jsonc'],
         redactedFiles: [],
         disabled: false,

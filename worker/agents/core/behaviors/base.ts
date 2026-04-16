@@ -30,6 +30,7 @@ import { RateLimitExceededError } from 'shared/types/errors';
 import { ImageAttachment, type ProcessedImageAttachment } from '../../../types/image-attachment';
 import { OperationOptions } from '../../operations/common';
 import { ImageType, uploadImage, detectBlankScreenshot } from 'worker/utils/images';
+import { ScreenshotSecurity } from 'worker/utils/screenshot-security';
 import { DeepDebugResult } from '../types';
 import { updatePackageJson } from '../../utils/packageSyncer';
 import { ICodingAgent } from '../../services/interfaces/ICodingAgent';
@@ -42,6 +43,7 @@ import type { DeepDebuggerInputs } from '../../operations/DeepDebugger';
 import { generatePortToken } from 'worker/utils/cryptoUtils';
 import { getPreviewDomain, getProtocolForHost } from 'worker/utils/urls';
 import { isDev } from 'worker/utils/envs';
+import { InMemoryAnalyzer } from '../../../services/static-analysis';
 
 // Screenshot capture configuration
 const SCREENSHOT_CONFIG = {
@@ -80,6 +82,9 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
     protected staticAnalysisCache: StaticAnalysisResponse | null = null;
 
+    private sandboxReadyPromise: Promise<void>;
+    private resolveSandboxReady!: () => void;
+
     protected userModelConfigs?: Record<AgentActionKey, ModelConfig>;
     protected runtimeOverrides?: InferenceRuntimeOverrides;
     
@@ -101,11 +106,27 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     constructor(infrastructure: AgentInfrastructure<TState>, protected projectType: ProjectType) {
         super(infrastructure);
 
+        this.sandboxReadyPromise = new Promise(resolve => { this.resolveSandboxReady = resolve; });
+        if (this.state.sandboxInstanceId) {
+            this.resolveSandboxReady();
+        }
+
         this.setState({
             ...this.state,
             behaviorType: this.getBehavior(),
             projectType: this.projectType,
         });
+    }
+
+    protected async waitForSandboxReady(timeoutMs: number = 5000): Promise<boolean> {
+        const ready = await Promise.race([
+            this.sandboxReadyPromise.then(() => true),
+            new Promise<false>(resolve => setTimeout(() => resolve(false), timeoutMs))
+        ]);
+        if (!ready) {
+            this.logger.warn(`Sandbox not ready after ${timeoutMs}ms`);
+        }
+        return ready;
     }
 
     public async initialize(
@@ -616,13 +637,25 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
      */
     async runStaticAnalysisCode(files?: string[]): Promise<StaticAnalysisResponse> {
         try {
-            // Check if we have cached static analysis
-            if (this.staticAnalysisCache) {
+            // Only use cache for full (unscoped) analysis
+            if (!files && this.staticAnalysisCache) {
                 return this.staticAnalysisCache;
             }
-            
-            const analysisResponse = await this.deploymentManager.runStaticAnalysis(files);
-            this.staticAnalysisCache = analysisResponse;
+
+            // Use in-memory analysis for browser-rendered projects (no sandbox)
+            const templateDetails = this.getTemplateDetails();
+            let analysisResponse: StaticAnalysisResponse;
+
+            if (templateDetails?.renderMode === 'browser') {
+                analysisResponse = await this.runInMemoryAnalysis(files);
+            } else {
+                analysisResponse = await this.deploymentManager.runStaticAnalysis(files);
+            }
+
+            // Only cache full (unscoped) analysis results
+            if (!files) {
+                this.staticAnalysisCache = analysisResponse;
+            }
 
             const { lint, typecheck } = analysisResponse;
             this.broadcast(WebSocketMessageResponses.STATIC_ANALYSIS_RESULTS, {
@@ -635,6 +668,26 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             this.broadcastError("Failed to lint code", error);
             return { success: false, lint: { issues: [], }, typecheck: { issues: [], } };
         }
+    }
+
+    /**
+     * Run in-memory static analysis for browser-rendered projects
+     * Performs static analysis directly in the worker without using the sandbox
+     */
+    private async runInMemoryAnalysis(filePaths?: string[]): Promise<StaticAnalysisResponse> {
+        const allFiles = this.fileManager.getAllFiles();
+        const filePathSet = filePaths ? new Set(filePaths) : null;
+        const filesToAnalyze = filePathSet
+            ? allFiles.filter((f) => filePathSet.has(f.filePath))
+            : allFiles;
+
+        const fileInputs = filesToAnalyze.map((f) => ({
+            path: f.filePath,
+            content: f.fileContents,
+        }));
+
+        const analyzer = new InMemoryAnalyzer();
+        return analyzer.analyze(fileInputs);
     }
 
     /**
@@ -712,8 +765,17 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     async fetchAllIssues(resetIssues: boolean = false): Promise<AllIssues> {
-        if (!this.state.sandboxInstanceId) {
-            return { runtimeErrors: [], staticAnalysis: { success: false, lint: { issues: [], }, typecheck: { issues: [], } } };
+        const templateDetails = this.getTemplateDetails();
+        const isBrowserOnly = templateDetails?.renderMode === 'browser';
+
+        // For browser-rendered projects (no sandbox), only run static analysis
+        if (isBrowserOnly) {
+            const staticAnalysis = await this.runStaticAnalysisCode();
+            this.logger.info("Fetched issues (browser-rendered):", JSON.stringify({ runtimeErrors: [], staticAnalysis }));
+            return { runtimeErrors: [], staticAnalysis };
+        }
+        if (!await this.waitForSandboxReady()) {
+            return { runtimeErrors: [], staticAnalysis: { success: false, lint: { issues: [] }, typecheck: { issues: [] } } };
         }
         const [runtimeErrors, staticAnalysis] = await Promise.all([
             this.fetchRuntimeErrors(resetIssues),
@@ -1171,6 +1233,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             }
         );
 
+        this.resolveSandboxReady();
         return result;
     }
     
@@ -1879,15 +1942,20 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             length: base64Screenshot.length
         });
 
+        // Sign the URL if it points to our internal screenshot endpoint
+        const security = new ScreenshotSecurity(this.env);
+        const signedUrl = await security.signUrl(uploadedImage.publicUrl, this.getAgentId());
+
         // Notify successful screenshot capture
         this.broadcast(WebSocketMessageResponses.SCREENSHOT_CAPTURE_SUCCESS, {
             message: `Successfully captured screenshot of ${url}`,
             url,
             viewport,
             screenshotSize: base64Screenshot.length,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            screenshotUrl: signedUrl,
         });
 
-        return uploadedImage.publicUrl;
+        return signedUrl;
     }
 }

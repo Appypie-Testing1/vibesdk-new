@@ -267,6 +267,7 @@ type ScreenshotCaptureSuccessMessage = {
 	viewport: { width: number; height: number };
 	screenshotSize: number;
 	timestamp: string;
+	screenshotUrl?: string;
 };
 
 type ScreenshotCaptureErrorMessage = {
